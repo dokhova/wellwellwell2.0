@@ -27,7 +27,9 @@ import {
   MessageCircle,
   Check,
   ChevronRight,
+  ChevronsUpDown,
   Eye,
+  Filter,
   Lock,
   Share2,
   Construction,
@@ -324,45 +326,427 @@ function ArticleCard({
   );
 }
 
-function HomeScreen({
-  onNavigate,
-  onArticle,
+type FeedPeriod = "week" | "month" | "all";
+type FeedFilter = "all" | "events" | "challenges" | "private";
+
+interface HomeFeedEvent {
+  id: number;
+  period: FeedPeriod[];
+  title: string;
+  coverUrl?: string;
+  gradient?: string;
+  tags: { label: string; locked?: boolean }[];
+  participantAvatars: string[];
+  participantLabel: string;
+  timeDate: string;
+  address?: string;
+  author: {
+    name: string;
+    avatarUrl: string;
+    verified?: boolean;
+  };
+  shareUrl: string;
+  invite?: boolean;
+}
+
+const homeFeedEvents: HomeFeedEvent[] = [
+  {
+    id: 2,
+    period: ["week", "month", "all"],
+    title: "Утренний бег в парке",
+    coverUrl: cover1 as unknown as string,
+    tags: [{ label: "Бег" }],
+    participantAvatars: [P_AVATARS.w1, P_AVATARS.m1, P_AVATARS.w2],
+    participantLabel: "100+ чел.",
+    timeDate: "09:45—11:00 · Ср, 1 июля",
+    address: "Парк Горького, Москва, главная аллея",
+    author: {
+      name: "Мария Кузнецова",
+      avatarUrl: UNSPLASH.avatarMaria,
+      verified: true,
+    },
+    shareUrl: "https://wellwellwell.app/events/2",
+  },
+  {
+    id: 5,
+    period: ["week", "all"],
+    title: "Вечерний цифровой детокс",
+    coverUrl: challengeImg as unknown as string,
+    tags: [{ label: "Челлендж" }],
+    participantAvatars: [],
+    participantLabel: "Будь первым",
+    timeDate: "с 22:00 · Ежедневно",
+    author: {
+      name: "Гена Лохтин",
+      avatarUrl: UNSPLASH.avatarGena,
+      verified: true,
+    },
+    shareUrl: "https://wellwellwell.app/events/5",
+  },
+  {
+    id: 3,
+    period: ["week", "month", "all"],
+    title: "Закрытый челлендж без сахара",
+    gradient: "linear-gradient(135deg, #0F766E 0%, #1F2937 48%, #111827 100%)",
+    tags: [{ label: "Закрытый", locked: true }, { label: "Челлендж" }],
+    participantAvatars: [P_AVATARS.m2, P_AVATARS.w2, P_AVATARS.m3],
+    participantLabel: "4 чел.",
+    timeDate: "до 25 июля",
+    author: {
+      name: "Well Well Well",
+      avatarUrl: avatarBrand as unknown as string,
+      verified: true,
+    },
+    shareUrl: "https://wellwellwell.app/events/3",
+    invite: true,
+  },
+];
+
+function HomeSheet({
+  title,
+  children,
+  onClose,
 }: {
-  onNavigate: (s: Screen, from?: Screen) => void;
-  onArticle: (a: Article) => void;
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
 }) {
   return (
-    <div className="flex flex-col h-full" style={{ backgroundColor: "#F0F1F3" }}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-3 bg-white">
-        <button
-          onClick={() => onNavigate("create", "home")}
-          className="w-9 h-9 rounded-full border border-gray-200 bg-white flex items-center justify-center"
-          style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.10)" }}
-        >
-          <Plus size={18} strokeWidth={2.2} />
-        </button>
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => onNavigate("search")}
-            className="w-9 h-9 flex items-center justify-center"
-          >
-            <Search size={20} strokeWidth={1.8} color="#374151" />
+    <div className="absolute inset-0 z-30 flex items-end bg-black/30" onClick={onClose}>
+      <div
+        className="w-full rounded-t-3xl bg-white px-4 pt-4 pb-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-gray-300" />
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-[17px] font-semibold text-gray-900">{title}</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+            <X size={16} strokeWidth={2} color="#6B7280" />
           </button>
-          <img src={UNSPLASH.userAvatar} alt="Профиль" className="w-9 h-9 rounded-full object-cover" />
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function FeedAvatarStack({ avatars, label }: { avatars: string[]; label: string }) {
+  const visible = avatars.slice(0, 3);
+
+  return (
+    <div className="flex flex-col items-center">
+      <div className="flex -space-x-2.5">
+        {visible.length > 0 ? (
+          visible.map((url, index) => (
+            <img
+              key={`${url}-${index}`}
+              src={url}
+              alt=""
+              className="w-9 h-9 rounded-full border-2 border-white object-cover"
+            />
+          ))
+        ) : (
+          <div className="w-9 h-9 rounded-full border-2 border-white bg-white/25 flex items-center justify-center">
+            <Users size={17} strokeWidth={1.8} color="#fff" />
+          </div>
+        )}
+      </div>
+      <span className="mt-1.5 text-[13px] font-medium text-white">{label}</span>
+    </div>
+  );
+}
+
+function FeedEventCard({
+  event,
+  accepted,
+  onOpen,
+  onAuthor,
+  onShare,
+  onAuthorMenu,
+  onAccept,
+}: {
+  event: HomeFeedEvent;
+  accepted: boolean;
+  onOpen: () => void;
+  onAuthor: () => void;
+  onShare: () => void;
+  onAuthorMenu: () => void;
+  onAccept: () => void;
+}) {
+  return (
+    <article>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onOpen}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpen();
+          }
+        }}
+        className="relative w-full aspect-[4/5] overflow-hidden rounded-[20px] text-left active:opacity-95"
+        style={{ background: event.gradient ?? "#D1D5DB" }}
+      >
+        {event.coverUrl && (
+          <img src={event.coverUrl} alt={event.title} className="absolute inset-0 h-full w-full object-cover" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/10 to-black/75" />
+
+        <div className="absolute left-4 right-4 top-4 flex items-start justify-between gap-3">
+          <div className="flex flex-wrap gap-2">
+            {event.tags.map((tag) => (
+              <span
+                key={tag.label}
+                className="inline-flex items-center rounded-full bg-black/50 px-3.5 py-1.5 text-[13px] font-medium text-white"
+              >
+                {tag.locked && <Lock size={14} strokeWidth={2} className="mr-1.5" />}
+                {tag.label}
+              </span>
+            ))}
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onShare();
+            }}
+            className="w-9 h-9 rounded-full bg-black/50 flex items-center justify-center flex-shrink-0"
+          >
+            <Share2 size={18} strokeWidth={2} color="#fff" />
+          </button>
+        </div>
+
+        <div className="absolute left-1/2 top-[58%] -translate-x-1/2 -translate-y-1/2">
+          <FeedAvatarStack avatars={event.participantAvatars} label={event.participantLabel} />
+        </div>
+
+        <div className="absolute bottom-4 left-4 right-4">
+          <h2
+            className="text-[30px] font-bold leading-[1.1] text-white"
+            style={{
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
+            {event.title}
+          </h2>
+          <p className="mt-2 truncate text-[15px] text-white/85">{event.timeDate}</p>
+          {event.address && (
+            <p className="mt-1 truncate text-[14px] text-white/75">{event.address}</p>
+          )}
+          {event.invite && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onAccept();
+              }}
+              className="mt-4 h-11 w-full rounded-xl bg-white/20 text-[15px] font-medium text-white flex items-center justify-center gap-2"
+            >
+              <Check size={18} strokeWidth={2.2} />
+              {accepted ? "Приглашение принято" : "Принять приглашение"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="h-14 px-4 flex items-center border-b border-gray-200/70">
+        <button
+          onClick={onAuthor}
+          className="flex min-w-0 flex-1 items-center text-left"
+        >
+          <img src={event.author.avatarUrl} alt={event.author.name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+          <span className="ml-2.5 truncate text-[15px] font-medium text-gray-900">{event.author.name}</span>
+          {event.author.verified && <span className="ml-1"><BlueBadge /></span>}
+        </button>
+        <button onClick={onAuthorMenu} className="w-8 h-8 flex items-center justify-end text-gray-400">
+          <MoreVertical size={20} strokeWidth={1.9} />
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function HomeScreen({
+  onNavigate,
+  onBack,
+  onPlanOpen,
+}: {
+  onNavigate: (s: Screen, from?: Screen) => void;
+  onBack: () => void;
+  onPlanOpen: (id: number, from?: Screen) => void;
+}) {
+  const [period, setPeriod] = useState<FeedPeriod>("week");
+  const [filter, setFilter] = useState<FeedFilter>("all");
+  const [sheet, setSheet] = useState<"header" | "period" | "filter" | "share" | "author" | null>(null);
+  const [activeEvent, setActiveEvent] = useState<HomeFeedEvent | null>(null);
+  const [acceptedInvites, setAcceptedInvites] = useState<number[]>([]);
+  const [copied, setCopied] = useState(false);
+
+  const periodLabel = period === "week" ? "Неделя" : period === "month" ? "Месяц" : "Все";
+  const visibleEvents = homeFeedEvents.filter((event) => {
+    const matchesPeriod = event.period.includes(period);
+    const hasChallenge = event.tags.some((tag) => tag.label === "Челлендж");
+    const isPrivate = event.tags.some((tag) => tag.locked);
+    const matchesFilter =
+      filter === "all" ||
+      (filter === "events" && !hasChallenge) ||
+      (filter === "challenges" && hasChallenge) ||
+      (filter === "private" && isPrivate);
+
+    return matchesPeriod && matchesFilter;
+  });
+
+  const openShare = (event: HomeFeedEvent) => {
+    setActiveEvent(event);
+    setCopied(false);
+    setSheet("share");
+  };
+
+  const copyActiveEvent = async () => {
+    if (!activeEvent) return;
+    await navigator.clipboard?.writeText(activeEvent.shareUrl);
+    setCopied(true);
+  };
+
+  const openAuthorMenu = (event: HomeFeedEvent) => {
+    setActiveEvent(event);
+    setSheet("author");
+  };
+
+  return (
+    <div className="relative flex flex-col h-full" style={{ backgroundColor: "#F0F1F3" }}>
+      {/* Header */}
+      <div className="h-14 flex items-center justify-between px-4">
+        <button
+          onClick={onBack}
+          className="w-10 h-10 rounded-full bg-white/80 flex items-center justify-center"
+        >
+          <ArrowLeft size={20} strokeWidth={2.1} color="#111827" />
+        </button>
+        <div className="text-center leading-none">
+          <p className="text-[17px] font-semibold text-gray-900">WellWellWell</p>
+          <p className="mt-0.5 text-[12px] text-gray-400">mini app</p>
+        </div>
+        <button
+          onClick={() => setSheet("header")}
+          className="w-10 h-10 rounded-full bg-white/80 flex items-center justify-center"
+        >
+          <MoreVertical size={20} strokeWidth={2} color="#111827" />
+        </button>
+      </div>
+
+      {/* Filter row */}
+      <div className="h-12 px-4 flex items-center justify-between">
+        <button onClick={() => setSheet("period")} className="flex items-center gap-1">
+          <span className="text-[22px] font-bold text-gray-900">{periodLabel}</span>
+          <ChevronsUpDown size={16} strokeWidth={2} color="#111827" />
+        </button>
+        <div className="flex items-center gap-4">
+          <button onClick={() => setSheet("filter")} className="w-6 h-6 flex items-center justify-center">
+            <Filter size={24} strokeWidth={1.9} color="#111827" />
+          </button>
+          <button onClick={() => onNavigate("search", "home")} className="w-6 h-6 flex items-center justify-center">
+            <Search size={24} strokeWidth={1.9} color="#111827" />
+          </button>
         </div>
       </div>
 
       {/* Feed */}
-      <div className="flex-1 overflow-y-auto py-4 space-y-3">
-        {articles.map((article) => (
-          <ArticleCard
-            key={article.id}
-            article={article}
-            onPress={() => article.id === 3 ? onNavigate("detail", "home") : onArticle(article)}
+      <div className="flex-1 overflow-y-auto px-4 pt-2 pb-6 space-y-6">
+        {visibleEvents.map((event) => (
+          <FeedEventCard
+            key={event.id}
+            event={event}
+            accepted={acceptedInvites.includes(event.id)}
+            onOpen={() => onPlanOpen(event.id, "home")}
+            onAuthor={() => onNavigate("profile")}
+            onShare={() => openShare(event)}
+            onAuthorMenu={() => openAuthorMenu(event)}
+            onAccept={() => setAcceptedInvites((prev) => prev.includes(event.id) ? prev : [...prev, event.id])}
           />
         ))}
       </div>
+
+      {sheet === "header" && (
+        <HomeSheet title="Меню" onClose={() => setSheet(null)}>
+          <div className="space-y-2">
+            <button onClick={() => { setSheet(null); onNavigate("create", "home"); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Создать событие</button>
+            <button onClick={() => { setSheet(null); onNavigate("profile"); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Профиль</button>
+          </div>
+        </HomeSheet>
+      )}
+
+      {sheet === "period" && (
+        <HomeSheet title="Период" onClose={() => setSheet(null)}>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { value: "week" as const, label: "Неделя" },
+              { value: "month" as const, label: "Месяц" },
+              { value: "all" as const, label: "Все" },
+            ].map((item) => (
+              <button
+                key={item.value}
+                onClick={() => { setPeriod(item.value); setSheet(null); }}
+                className="h-11 rounded-xl text-[14px] font-semibold"
+                style={period === item.value ? { backgroundColor: GREEN, color: "#fff" } : { backgroundColor: "#F3F4F6", color: "#374151" }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </HomeSheet>
+      )}
+
+      {sheet === "filter" && (
+        <HomeSheet title="Фильтры" onClose={() => setSheet(null)}>
+          <div className="space-y-2">
+            {[
+              { value: "all" as const, label: "Все" },
+              { value: "events" as const, label: "События" },
+              { value: "challenges" as const, label: "Челленджи" },
+              { value: "private" as const, label: "Закрытые" },
+            ].map((item) => (
+              <button
+                key={item.value}
+                onClick={() => {
+                  setFilter(item.value);
+                  setSheet(null);
+                }}
+                className="w-full rounded-2xl px-4 py-3 text-left text-[15px] font-medium flex items-center justify-between"
+                style={filter === item.value ? { backgroundColor: GREEN_LIGHT, color: GREEN } : { backgroundColor: "#F3F4F6", color: "#111827" }}
+              >
+                {item.label}
+                {filter === item.value && <Check size={16} strokeWidth={2.4} />}
+              </button>
+            ))}
+          </div>
+        </HomeSheet>
+      )}
+
+      {sheet === "share" && activeEvent && (
+        <HomeSheet title="Поделиться" onClose={() => setSheet(null)}>
+          <p className="mb-3 truncate text-[14px] text-gray-500">{activeEvent.title}</p>
+          <button
+            onClick={copyActiveEvent}
+            className="h-12 w-full rounded-2xl text-[15px] font-semibold text-white flex items-center justify-center gap-2"
+            style={{ backgroundColor: GREEN }}
+          >
+            <Copy size={17} strokeWidth={2.2} />
+            {copied ? "Ссылка скопирована" : "Скопировать ссылку"}
+          </button>
+        </HomeSheet>
+      )}
+
+      {sheet === "author" && activeEvent && (
+        <HomeSheet title={activeEvent.author.name} onClose={() => setSheet(null)}>
+          <div className="space-y-2">
+            <button onClick={() => { setSheet(null); onNavigate("profile"); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Открыть профиль</button>
+            <button onClick={() => setSheet(null)} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Пожаловаться</button>
+          </div>
+        </HomeSheet>
+      )}
     </div>
   );
 }
@@ -2104,10 +2488,13 @@ export default function App() {
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
   const [articleOrigin, setArticleOrigin] = useState<Screen>("home");
   const [activePlanId, setActivePlanId] = useState<number>(1);
+  const [planEventOrigin, setPlanEventOrigin] = useState<Screen>("plans");
+  const [previousScreen, setPreviousScreen] = useState<Screen>("plans");
 
   const navigate = (s: Screen, from?: Screen) => {
     if (s === "detail" && from) setDetailOrigin(from);
     if (s === "create" && from) setCreateOrigin(from);
+    setPreviousScreen(screen);
     setScreen(s);
   };
 
@@ -2117,15 +2504,17 @@ export default function App() {
     setScreen("article");
   };
 
-  const openPlanEvent = (id: number) => {
+  const openPlanEvent = (id: number, from: Screen = "plans") => {
     setActivePlanId(id);
+    setPlanEventOrigin(from);
+    setPreviousScreen(screen);
     setScreen("planEvent");
   };
 
   const renderScreen = () => {
     switch (screen) {
       case "home":
-        return <HomeScreen onNavigate={navigate} onArticle={a => openArticle(a, "home")} />;
+        return <HomeScreen onNavigate={navigate} onBack={() => setScreen(previousScreen)} onPlanOpen={openPlanEvent} />;
       case "plans":
         return <PlansScreen onNavigate={navigate} onPlanOpen={openPlanEvent} />;
       case "create":
@@ -2157,7 +2546,7 @@ export default function App() {
             badgeDate={ev.badgeDate}
             paragraphs={ev.paragraphs}
             meta={ev.meta}
-            onBack={() => setScreen("plans")}
+            onBack={() => setScreen(planEventOrigin)}
             initiallyJoined={true}
           />
         ) : null;
