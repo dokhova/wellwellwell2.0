@@ -36,7 +36,7 @@ import {
   Video,
   Clock,
   Repeat2,
-  Flame,
+  Activity,
   MessageCircle,
   Check,
   ChevronRight,
@@ -1130,37 +1130,6 @@ function AnalyticsScreenOld() {
 
 // ─── Screen: Plans ────────────────────────────────────────────────────────────
 
-function PlanAvatarStack({ urls }: { urls: string[] }) {
-  return (
-    <div className="flex -space-x-2 flex-shrink-0">
-      {urls.map((url, i) => (
-        <img
-          key={i}
-          src={url}
-          alt=""
-          className="rounded-full border-2 border-white object-cover"
-          style={{ width: 30, height: 30 }}
-        />
-      ))}
-    </div>
-  );
-}
-
-const DAY_PROGRESS_COPY = {
-  empty: {
-    title: "С чего начнём?",
-    subtitle: (count: number) => `${count} ${count === 1 ? "план" : count < 5 ? "плана" : "планов"} на сегодня`,
-  },
-  partial: {
-    title: "Хорошо идёшь",
-    subtitle: (left: number) => `Осталось ${left}`,
-  },
-  done: {
-    title: "День закрыт",
-    subtitle: () => "Все планы выполнены",
-  },
-};
-
 const PLAN_CATEGORY_GRADIENTS: Record<string, string> = {
   "Бег": "linear-gradient(135deg, var(--brand-bright) 0%, var(--accent) 100%)",
   "Восстановление": "linear-gradient(135deg, var(--primary) 0%, var(--muted-foreground) 100%)",
@@ -1169,9 +1138,9 @@ const PLAN_CATEGORY_GRADIENTS: Record<string, string> = {
 };
 
 function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen, from?: Screen) => void; onPlanOpen: (id: number) => void }) {
-  const [activeDay, setActiveDay] = useState(2);
+  void onNavigate;
+  const [activeTab, setActiveTab] = useState<"plans" | "analytics">("plans");
   const [checkedItems, setCheckedItems] = useState<number[]>([]);
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
 
   const toggleCheck = (id: number) => {
     setCheckedItems((prev) =>
@@ -1180,125 +1149,113 @@ function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen, from?
   };
 
   const todayIndex = 2;
-  const selectedDayPlans = plans.filter(plan => (plan.dayIndexes ?? [todayIndex]).includes(activeDay));
-  const completedCount = selectedDayPlans.filter((plan) => checkedItems.includes(plan.id)).length;
-  const totalCount = selectedDayPlans.length;
-  const leftCount = Math.max(totalCount - completedCount, 0);
-  const progress = totalCount > 0 ? completedCount / totalCount : 0;
-  const progressPercent = Math.round(progress * 100);
-  const progressCopy =
-    completedCount === 0
-      ? DAY_PROGRESS_COPY.empty
-      : completedCount === totalCount
-        ? DAY_PROGRESS_COPY.done
-        : DAY_PROGRESS_COPY.partial;
-  const progressSubtitle =
-    completedCount === 0
-      ? DAY_PROGRESS_COPY.empty.subtitle(totalCount)
-      : completedCount === totalCount
-        ? DAY_PROGRESS_COPY.done.subtitle()
-        : DAY_PROGRESS_COPY.partial.subtitle(leftCount);
-  const streakDays = weekDays.reduce((count, _day, dayIndex) => {
-    const dayPlans = plans.filter((plan) => (plan.dayIndexes ?? [todayIndex]).includes(dayIndex));
-    return dayPlans.some((plan) => checkedItems.includes(plan.id)) ? count + 1 : count;
-  }, 0);
-
-  const moveDay = (direction: -1 | 1) => {
-    setActiveDay((day) => Math.min(6, Math.max(0, day + direction)));
+  const monthShort = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
+  const monthNumberByName: Record<string, number> = {
+    января: 0,
+    февраля: 1,
+    марта: 2,
+    апреля: 3,
+    мая: 4,
+    июня: 5,
+    июля: 6,
+    августа: 7,
+    сентября: 8,
+    октября: 9,
+    ноября: 10,
+    декабря: 11,
   };
 
-  const handleTouchEnd = (x: number) => {
-    if (touchStartX === null) return;
-    const delta = x - touchStartX;
-    if (Math.abs(delta) > 40) {
-      moveDay(delta < 0 ? 1 : -1);
-    }
-    setTouchStartX(null);
+  const planItems = plans
+    .flatMap((plan) => (plan.dayIndexes ?? [todayIndex]).map((dayIndex) => ({
+      plan,
+      dayIndex,
+      dayNumber: weekDates[dayIndex],
+      monthName: weekDateMonths[dayIndex],
+      sortKey: dayIndex,
+    })))
+    .sort((a, b) => a.sortKey - b.sortKey || a.plan.time.localeCompare(b.plan.time));
+  const nextItem = planItems.find((item) => item.dayIndex >= todayIndex) ?? planItems[0];
+
+  const getStatus = (planId: number, dayIndex: number) => {
+    if (checkedItems.includes(planId)) return "Выполнено";
+    if (dayIndex < todayIndex) return "Пропущено";
+    return "Запланировано";
   };
+
+  const getGradient = (plan: Plan) =>
+    plan.gradient ?? PLAN_CATEGORY_GRADIENTS[plan.category ?? "Другое"] ?? PLAN_CATEGORY_GRADIENTS["Другое"];
 
   return (
-    <div
-      className="flex flex-col h-full bg-surface"
-      onTouchStart={(event) => setTouchStartX(event.touches[0]?.clientX ?? null)}
-      onTouchEnd={(event) => handleTouchEnd(event.changedTouches[0]?.clientX ?? 0)}
-    >
-      {/* Week calendar */}
-      <div className="px-3 pt-4 pb-[14px]">
-        <div className="grid grid-cols-7 gap-[5px]">
-          {weekDays.map((day, i) => {
-            const isActive = activeDay === i;
-            const isPast = i < todayIndex;
-            return (
-              <button
-                key={day}
-                onClick={() => setActiveDay(i)}
-                className="rounded-xl p-[9px] flex flex-col items-center gap-[5px] transition-colors"
-                style={isActive ? { backgroundColor: GREEN } : undefined}
-              >
-                <span
-                  className="text-[11px] leading-3"
-                  style={{ color: isActive ? "rgba(255,255,255,0.8)" : "var(--muted-foreground)" }}
-                >
-                  {day}
-                </span>
-                <span
-                  className="text-[15px] leading-5"
-                  style={{
-                    color: isActive ? "#fff" : isPast ? "var(--muted-foreground)" : "var(--foreground)",
-                    fontWeight: isActive ? 600 : 400,
-                  }}
-                >
-                  {weekDates[i]}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+    <div className="flex h-full flex-col bg-surface">
+      <div className="flex flex-shrink-0 border-b border-border px-4">
+        {[
+          { id: "plans" as const, label: "Планы" },
+          { id: "analytics" as const, label: "Аналитика" },
+        ].map((tab) => {
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className="relative h-12 flex-1 text-[17px] font-semibold"
+              style={{ color: active ? "var(--foreground)" : "var(--muted-foreground)" }}
+            >
+              {tab.label}
+              {active && <span className="absolute bottom-0 left-1/2 h-0.5 w-16 -translate-x-1/2 rounded-full" style={{ backgroundColor: GREEN }} />}
+            </button>
+          );
+        })}
       </div>
 
-      {totalCount > 0 && (
-        <div className="px-4 pb-[18px]">
-          <div className="rounded-[16px] p-4" style={{ background: "linear-gradient(135deg, var(--brand-bright) 0%, var(--accent) 100%)" }}>
-            <div className="flex items-center gap-4">
-              <div
-                className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full"
-                style={{ background: `conic-gradient(#fff ${progressPercent}%, rgba(255,255,255,0.3) 0)` }}
-              >
-                <div className="flex h-[50px] w-[50px] items-center justify-center rounded-full" style={{ backgroundColor: GREEN }}>
-                  <span className="text-[15px] font-bold text-white">{completedCount}/{totalCount}</span>
-                </div>
-              </div>
-              <div className="min-w-0 flex-1 text-white">
-                <h2 className="text-[16px] font-semibold leading-6">{progressCopy.title}</h2>
-                <p className="mt-0.5 text-[13px] leading-4 text-white/90">{progressSubtitle}</p>
-                {streakDays > 0 && (
-                  <p className="mt-2 flex items-center gap-1 text-[12px] leading-4 text-white/90">
-                    <Flame size={15} strokeWidth={2} color="#fff" />
-                    {streakDays} дней подряд
-                  </p>
-                )}
-              </div>
-            </div>
+      {activeTab === "analytics" ? (
+        <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
+          <div className="mb-4 flex h-[60px] w-[60px] items-center justify-center rounded-full bg-card">
+            <Activity size={28} strokeWidth={1.8} color={GREEN} />
           </div>
+          <p className="text-[16px] font-semibold text-foreground">В работе</p>
+          <p className="mt-1 text-[14px] leading-5 text-muted-foreground">Аналитика появится здесь скоро</p>
         </div>
-      )}
+      ) : (
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          {nextItem && (
+            <button
+              onClick={() => onPlanOpen(nextItem.plan.id)}
+              className="mb-4 flex w-full items-center gap-3 rounded-[16px] p-3.5 text-left active:opacity-90"
+              style={{ backgroundColor: "var(--brand-dark)" }}
+            >
+              <div className="h-[46px] w-[46px] flex-shrink-0 overflow-hidden rounded-lg" style={{ background: getGradient(nextItem.plan) }}>
+                {nextItem.plan.coverUrl && <img src={nextItem.plan.coverUrl} alt={nextItem.plan.title} className="h-full w-full object-cover" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[12px] leading-4 text-white/60">
+                  {nextItem.dayIndex === todayIndex ? "Сегодня" : "Скоро"} · {nextItem.dayNumber} {nextItem.monthName}
+                </p>
+                <h3 className="mt-0.5 truncate text-[15px] font-semibold leading-5 text-white">{nextItem.plan.title}</h3>
+              </div>
+              <ChevronRight size={18} strokeWidth={2} color="rgba(255,255,255,0.7)" />
+            </button>
+          )}
 
-      <div className="flex-1 overflow-y-auto px-4 pb-6">
-        {selectedDayPlans.length > 0 ? (
           <div className="space-y-2.5">
-            {selectedDayPlans.map((plan) => {
+            {planItems.map((item) => {
+              const { plan, dayIndex, dayNumber, monthName } = item;
               const done = checkedItems.includes(plan.id);
-              const planTime = plan.time.includes("–") ? plan.time.split(" ")[0] : plan.time;
-              const meta = `${planTime} · ${plan.category ?? "Другое"}${plan.place ? ` · ${plan.place}` : ""}`;
-              const gradient = plan.gradient ?? PLAN_CATEGORY_GRADIENTS[plan.category ?? "Другое"] ?? PLAN_CATEGORY_GRADIENTS["Другое"];
+              const status = getStatus(plan.id, dayIndex);
+              const monthIndex = monthNumberByName[monthName] ?? 0;
+              const gradient = getGradient(plan);
               return (
                 <button
-                  key={plan.id}
+                  key={`${plan.id}-${dayIndex}`}
                   onClick={() => onPlanOpen(plan.id)}
-                  className="flex w-full items-center gap-3 rounded-xl bg-card p-2.5 text-left active:opacity-90"
+                  className="flex w-full items-center gap-3 rounded-[16px] bg-card px-3.5 py-3 text-left active:opacity-90"
                   style={{ opacity: done ? 0.65 : 1 }}
                 >
-                  <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg" style={{ background: gradient }}>
+                  <div className="flex w-[42px] flex-shrink-0 flex-col items-center justify-center">
+                    <span className="text-[12px] leading-4 text-muted-foreground">{monthShort[monthIndex]}</span>
+                    <span className="text-[20px] font-semibold leading-7 text-muted-foreground">{dayNumber}</span>
+                  </div>
+                  <div className="h-[38px] w-px flex-shrink-0 bg-border" />
+                  <div className="h-[50px] w-[50px] flex-shrink-0 overflow-hidden rounded-xl" style={{ background: gradient }}>
                     {plan.coverUrl && <img src={plan.coverUrl} alt={plan.title} className="h-full w-full object-cover" />}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -1311,11 +1268,11 @@ function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen, from?
                     >
                       {plan.title}
                     </h3>
-                    <p className="mt-0.5 truncate text-[12px] leading-4 text-muted-foreground">{meta}</p>
+                    <p className="mt-0.5 truncate text-[13px] leading-4 text-muted-foreground">{status}</p>
                   </div>
                   <span
                     onClick={(e) => { e.stopPropagation(); toggleCheck(plan.id); }}
-                    className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border"
+                    className="flex h-[26px] w-[26px] flex-shrink-0 items-center justify-center rounded-full border"
                     style={{
                       borderColor: done ? GREEN : "var(--border)",
                       backgroundColor: done ? GREEN : "transparent",
@@ -1327,175 +1284,8 @@ function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen, from?
               );
             })}
           </div>
-        ) : (
-          <div className="pt-10 flex flex-col items-center text-center">
-            <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: GREEN_LIGHT }}>
-              <Calendar size={24} strokeWidth={1.8} color={GREEN} />
-            </div>
-            <p className="text-[14px] text-muted-foreground">На этот день планов нет</p>
-            <button
-              onClick={() => onNavigate("home")}
-              className="mt-3 text-[13px] font-semibold"
-              style={{ color: GREEN }}
-            >
-              Посмотреть каталог
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PlansScreenOld({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen, from?: Screen) => void; onPlanOpen: (id: number) => void }) {
-  const [activeTab, setActiveTab] = useState(0);
-  const [activeDay, setActiveDay] = useState(5);
-  const [checkedItems, setCheckedItems] = useState<number[]>([]);
-
-  const toggleCheck = (id: number) => {
-    setCheckedItems((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  };
-
-  return (
-    <div className="flex flex-col h-full" style={{ backgroundColor: "#F0F1F3" }}>
-      {/* Header */}
-      <div className="bg-white px-4 pt-3">
-        {/* Tabs */}
-        <div className="flex border-b border-gray-200">
-          {["Планы", "Аналитика"].map((tab, i) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(i)}
-              className="flex-1 py-2.5 text-sm font-semibold text-center"
-              style={{
-                color: i === activeTab ? GREEN : "#9CA3AF",
-                borderBottom: i === activeTab ? `2px solid ${GREEN}` : "2px solid transparent",
-              }}
-            >
-              {tab}
-            </button>
-          ))}
         </div>
-
-        {/* Week calendar */}
-        <div className="flex justify-between py-3" style={{ display: activeTab === 1 ? "none" : undefined }}>
-          {weekDays.map((day, i) => {
-            const isActive = activeDay === i;
-            return (
-              <button
-                key={day}
-                onClick={() => setActiveDay(i)}
-                className="flex flex-col items-center gap-1"
-              >
-                <span
-                  className="text-[11px] font-medium"
-                  style={{ color: isActive ? GREEN : "#9CA3AF" }}
-                >
-                  {day}
-                </span>
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-[14px] font-semibold"
-                  style={
-                    isActive
-                      ? { backgroundColor: "#D4F0EE", color: "#00665E" }
-                      : { color: "#1a1a1a" }
-                  }
-                >
-                  {weekDates[i]}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {activeTab === 1 && <AnalyticsScreen />}
-
-      {/* Plan cards */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3" style={{ display: activeTab === 1 ? "none" : undefined }}>
-        {plans.map((plan) => {
-          const done = checkedItems.includes(plan.id);
-          return (
-            <div
-              key={plan.id}
-              onClick={() => onPlanOpen(plan.id)}
-              className="bg-white rounded-2xl overflow-hidden shadow-sm flex cursor-pointer active:opacity-90"
-            >
-              {/* Left accent bar */}
-              <div
-                className="w-1 flex-shrink-0 rounded-l-2xl"
-                style={{ backgroundColor: done ? "#D1D5DB" : GREEN }}
-              />
-
-              {/* Card content */}
-              <div className="flex-1 px-4 py-4">
-                {/* Title + checkbox */}
-                <div className="flex items-start justify-between gap-2 mb-1">
-                  <h4
-                    className="text-[15px] font-semibold leading-snug flex-1"
-                    style={{
-                      color: done ? "#9CA3AF" : GREEN,
-                      textDecoration: done ? "line-through" : "none",
-                    }}
-                  >
-                    {plan.title}
-                  </h4>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); toggleCheck(plan.id); }}
-                    className="flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center"
-                    style={{
-                      borderColor: done ? GREEN : "#D1D5DB",
-                      backgroundColor: done ? GREEN : "transparent",
-                    }}
-                  >
-                    {done && <Check size={12} strokeWidth={3} color="#fff" />}
-                  </button>
-                </div>
-
-                {/* Description */}
-                <p className="text-[12px] text-gray-400 leading-snug mb-3 truncate">
-                  {plan.description}
-                </p>
-
-                {/* Divider */}
-                <div className="border-t border-gray-100 mb-3" />
-
-                {/* Time row + avatars */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[12px] text-gray-400">Сегодня</span>
-                    <span className="text-[12px] font-semibold" style={{ color: GREEN }}>
-                      {plan.time}
-                    </span>
-                  </div>
-                  {plan.avatarUrls && plan.avatarUrls.length > 0 && (
-                    <PlanAvatarStack urls={plan.avatarUrls} />
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* FAB */}
-      <div className="relative h-0" style={{ display: activeTab === 1 ? "none" : undefined }}>
-        <button
-          onClick={() => onNavigate("create")}
-          className="absolute w-14 h-14 rounded-full flex items-center justify-center z-10"
-          style={{
-            backgroundColor: GREEN,
-            bottom: 16,
-            right: 16,
-            boxShadow: "0 6px 20px rgba(0,136,127,0.45)",
-          }}
-        >
-          <Plus size={26} strokeWidth={2.5} color="#fff" />
-        </button>
-      </div>
-
+      )}
     </div>
   );
 }
@@ -2232,18 +2022,26 @@ function CommentsBlock({
   const canSend = comment.trim().length > 0;
 
   return (
-    <div className="border-t border-border bg-surface px-4 pt-[18px] pb-6">
-      <h3 className="mb-3.5 flex items-center gap-2 text-[15px] font-semibold text-foreground">
-        Комментарии <span className="text-[15px] font-normal text-muted-foreground">{comments.length}</span>
+    <div
+      className="mx-4 mb-6 rounded-[18px] border px-4 pt-[18px] pb-6 text-white"
+      style={{
+        backgroundColor: "rgba(255,255,255,0.13)",
+        borderColor: "rgba(255,255,255,0.16)",
+        backdropFilter: "blur(18px)",
+        WebkitBackdropFilter: "blur(18px)",
+      }}
+    >
+      <h3 className="mb-3.5 flex items-center gap-2 text-[15px] font-semibold text-white">
+        Комментарии <span className="text-[15px] font-normal text-white/65">{comments.length}</span>
       </h3>
       <div className="mb-[18px] flex items-center gap-2.5">
         <img src={UNSPLASH.userAvatar} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-        <div className="flex-1 bg-input rounded-full px-3.5 py-[9px] flex items-center gap-2">
+        <div className="flex-1 rounded-full px-3.5 py-[9px] flex items-center gap-2" style={{ backgroundColor: "rgba(255,255,255,0.18)" }}>
           <input
             value={comment}
             onChange={e => setComment(e.target.value)}
             placeholder="Напишите комментарий..."
-            className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground outline-none"
+            className="flex-1 bg-transparent text-[13px] text-white placeholder:text-white/55 outline-none"
           />
           <button
             onClick={onSend}
@@ -2265,17 +2063,17 @@ function CommentsBlock({
               <img src={item.avatarUrl} alt="" className="h-8 w-8 flex-shrink-0 rounded-full object-cover" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
-                  <p className="truncate text-[14px] font-medium text-foreground">{item.author}</p>
-                  <span className="text-[12px] text-muted-foreground">{item.time}</span>
+                  <p className="truncate text-[14px] font-medium text-white">{item.author}</p>
+                  <span className="text-[12px] text-white/55">{item.time}</span>
                 </div>
-                <p className="mt-0.5 text-[14px] leading-5 text-foreground">{item.text}</p>
+                <p className="mt-0.5 text-[14px] leading-5 text-white/90">{item.text}</p>
               </div>
             </div>
           ))}
         </div>
       ) : (
         <div className="flex justify-center py-8">
-          <p className="text-[13px] text-muted-foreground">Пока нет комментариев</p>
+          <p className="text-[13px] text-white/60">Пока нет комментариев</p>
         </div>
       )}
     </div>
@@ -2449,43 +2247,58 @@ function EventDetailScreen({
   };
 
   return (
-    <div className="relative flex h-full flex-col bg-surface">
+    <div className="relative h-full overflow-hidden bg-black">
+      <div className="absolute inset-0">
+        {coverSrc ? (
+          <img src={coverSrc} alt="" className="h-full min-h-[100dvh] w-full object-cover" />
+        ) : (
+          <div className="h-full min-h-[100dvh] w-full" style={{ background: backgroundGradient ?? PLAN_TAG_GRADIENTS.other }} />
+        )}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(0,0,0,0.28) 0%, rgba(0,0,0,0.08) 24%, rgba(0,0,0,0.34) 58%, rgba(0,0,0,0.68) 100%)",
+          }}
+        />
+      </div>
+
       {toast && (
         <div
-          className="absolute left-1/2 z-30 -translate-x-1/2 rounded-full px-4 py-2 text-[14px] font-medium text-white shadow-lg"
+          className="absolute left-1/2 z-40 -translate-x-1/2 rounded-full px-4 py-2 text-[14px] font-medium text-white shadow-lg"
           style={{ top: "calc(env(safe-area-inset-top) + 14px)", backgroundColor: GREEN }}
         >
           {toast}
         </div>
       )}
 
-      <div className="flex h-14 flex-shrink-0 items-center px-4">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[15px] font-medium text-foreground">
-          <ArrowLeft size={20} strokeWidth={2} />
-          <span>Назад</span>
-        </button>
+      <button
+        onClick={onBack}
+        className="absolute left-4 z-30 flex h-10 w-10 items-center justify-center rounded-full bg-black/35 active:opacity-85"
+        style={{ top: "calc(env(safe-area-inset-top) + 12px)" }}
+      >
+        <ArrowLeft size={20} strokeWidth={2.1} color="#fff" />
+      </button>
+      <button
+        onClick={() => {
+          setCopied(false);
+          setSheet("share");
+        }}
+        className="absolute right-4 z-30 flex h-10 w-10 items-center justify-center rounded-full bg-black/35 active:opacity-85"
+        style={{ top: "calc(env(safe-area-inset-top) + 12px)" }}
+      >
+        <Share2 size={18} strokeWidth={2} color="#fff" />
+      </button>
+      <div
+        className="absolute left-4 z-30 rounded-full bg-black/50 px-3 py-1.5 text-[13px] font-medium text-white"
+        style={{ top: "calc(env(safe-area-inset-top) + 62px)" }}
+      >
+        {tagLabel}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="px-4">
-          <div className="relative aspect-[4/5] overflow-hidden rounded-xl" style={{ background: backgroundGradient ?? PLAN_TAG_GRADIENTS.other }}>
-            {coverSrc && (
-              <img src={coverSrc} alt={title} className="absolute inset-0 h-full w-full object-cover" />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/55" />
-            <div className="absolute left-4 top-4 rounded-full bg-black/50 px-3 py-1.5 text-[13px] font-medium text-white">
-              {tagLabel}
-            </div>
-            <button
-              onClick={() => {
-                setCopied(false);
-                setSheet("share");
-              }}
-              className="absolute right-4 top-4 flex h-[34px] w-[34px] items-center justify-center rounded-full bg-black/50"
-            >
-              <Share2 size={16} strokeWidth={2} color="#fff" />
-            </button>
-            <div className="absolute inset-x-4 bottom-[18px] flex flex-col items-center text-center">
+      <div className="relative z-10 h-full overflow-y-auto">
+        <div className="flex min-h-[100dvh] flex-col justify-end px-4 pb-5 pt-[138px]">
+          <div className="flex flex-col items-center text-center">
               <div className="flex -space-x-2">
                 {participantAvatars.slice(0, 3).map((url, i) => (
                   <img key={i} src={url} alt="" className="h-[30px] w-[30px] rounded-full border-2 border-white object-cover" />
@@ -2493,7 +2306,7 @@ function EventDetailScreen({
               </div>
               <p className="mt-1.5 text-[12px] text-white/85">{participantCountLabel}</p>
               <h1
-                className="mt-2 max-w-full text-[28px] font-bold leading-[34px] text-white"
+                className="mt-2 max-w-full text-[30px] font-bold leading-9 text-white"
                 style={{
                   display: "-webkit-box",
                   WebkitLineClamp: 2,
@@ -2504,33 +2317,40 @@ function EventDetailScreen({
                 {title}
               </h1>
             </div>
-          </div>
 
           <button
             onClick={toggleJoin}
-            className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl border text-[15px]"
-            style={joined ? { backgroundColor: "var(--surface)", borderColor: "var(--border)", color: "var(--foreground)", fontWeight: 500 } : { backgroundColor: GREEN, borderColor: GREEN, color: "#fff", fontWeight: 600 }}
+            className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/75 bg-white text-[15px] active:opacity-90"
+            style={{ color: GREEN, fontWeight: joined ? 500 : 600 }}
           >
-            {joined ? <Check size={18} strokeWidth={2.4} color={GREEN} /> : <Plus size={18} strokeWidth={2.3} color="#fff" />}
+            {joined ? <Check size={18} strokeWidth={2.4} color={GREEN} /> : <Plus size={18} strokeWidth={2.3} color={GREEN} />}
             {joined ? "Вы участвуете" : "Присоединиться"}
           </button>
 
-          <div className="mt-4 border-t border-border pt-4">
+          <div
+            className="mt-4 rounded-[18px] border px-4 py-4 text-white"
+            style={{
+              backgroundColor: "rgba(255,255,255,0.13)",
+              borderColor: "rgba(255,255,255,0.16)",
+              backdropFilter: "blur(18px)",
+              WebkitBackdropFilter: "blur(18px)",
+            }}
+          >
             <div className="mb-4 flex items-center justify-between gap-3">
               <button onClick={organizerAction} className="flex min-w-0 items-center gap-2.5 text-left active:opacity-80">
                 <img src={authorAvatarUrl} alt={authorName} className="h-9 w-9 flex-shrink-0 rounded-full object-cover" />
-                <span className="truncate text-[15px] font-medium text-foreground">{authorName}</span>
+                <span className="truncate text-[15px] font-medium text-white">{authorName}</span>
               </button>
               <button
                 onClick={() => setSubscribed((value) => !value)}
-                className="flex-shrink-0 rounded-full border px-3 py-1.5 text-[12px] font-semibold"
-                style={{ borderColor: GREEN, color: GREEN }}
+                className="flex-shrink-0 rounded-full border px-3 py-1.5 text-[12px] font-semibold text-white"
+                style={{ borderColor: "rgba(255,255,255,0.52)" }}
               >
                 {subscribed ? "Подписан" : "Подписаться"}
               </button>
             </div>
 
-            <div className="mb-4 text-[14px] leading-[1.5] text-muted-foreground">
+            <div className="mb-4 text-[14px] leading-[1.5] text-white/90">
               <p
                 style={!descriptionExpanded && needsDescriptionClamp ? {
                   display: "-webkit-box",
@@ -2552,29 +2372,31 @@ function EventDetailScreen({
               )}
             </div>
 
+            <div className="mb-4 h-px bg-white/15" />
+
             <div className="space-y-3.5 pb-5">
               <div className="flex items-start gap-3">
-                <Calendar size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
+                <Calendar size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-white/70" />
                 <div>
-                  <p className="text-[14px] leading-5 text-foreground">{schedulePrimary}</p>
-                  {scheduleSecondary && <p className="text-[13px] leading-4 text-muted-foreground">{scheduleSecondary}</p>}
+                  <p className="text-[14px] leading-5 text-white">{schedulePrimary}</p>
+                  {scheduleSecondary && <p className="text-[13px] leading-4 text-white/65">{scheduleSecondary}</p>}
                 </div>
               </div>
 
               {meta.location && (
                 <div className="flex items-start gap-3">
-                  <MapPin size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
+                  <MapPin size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-white/70" />
                   <div>
-                    <p className="text-[14px] leading-5 text-foreground">{meta.location}</p>
-                    {meta.locationSub && <p className="text-[13px] leading-4 text-muted-foreground">{meta.locationSub}</p>}
+                    <p className="text-[14px] leading-5 text-white">{meta.location}</p>
+                    {meta.locationSub && <p className="text-[13px] leading-4 text-white/65">{meta.locationSub}</p>}
                   </div>
                 </div>
               )}
 
               <div className="flex items-start gap-3">
-                <Video size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
+                <Video size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-white/70" />
                 <div>
-                  <p className="text-[14px] leading-5 text-foreground">{formatLabel}</p>
+                  <p className="text-[14px] leading-5 text-white">{formatLabel}</p>
                 </div>
               </div>
 
@@ -2583,24 +2405,24 @@ function EventDetailScreen({
                 className="flex w-full items-center justify-between gap-3 text-left active:opacity-85"
               >
                 <div className="flex items-center gap-3">
-                  <Users size={20} strokeWidth={1.8} className="flex-shrink-0 text-muted-foreground" />
-                  <span className="text-[14px] text-foreground">{meta.participants} участников</span>
+                  <Users size={20} strokeWidth={1.8} className="flex-shrink-0 text-white/70" />
+                  <span className="text-[14px] text-white">{meta.participants} участников</span>
                 </div>
                 <div className="flex -space-x-2">
                   {participantAvatars.slice(0, 3).map((url, i) => (
-                    <img key={i} src={url} alt="" className="h-7 w-7 rounded-full border object-cover" style={{ borderColor: "var(--surface)" }} />
+                    <img key={i} src={url} alt="" className="h-7 w-7 rounded-full border object-cover" style={{ borderColor: "rgba(255,255,255,0.45)" }} />
                   ))}
                   {overflowLabel && (
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted">
-                      <span className="text-[10px] font-bold text-foreground">{overflowLabel}</span>
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20">
+                      <span className="text-[10px] font-bold text-white">{overflowLabel}</span>
                     </div>
                   )}
                 </div>
               </button>
             </div>
           </div>
-        </div>
 
+        </div>
         <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} />
       </div>
 
