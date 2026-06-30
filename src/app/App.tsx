@@ -4,6 +4,16 @@ import cover1 from "@/imports/cover1-opt.jpg";
 import cover2 from "@/imports/cover2-opt.jpg";
 import cover3 from "@/imports/cover3-opt.jpg";
 import cover4 from "@/imports/cover4-opt.jpg";
+import planSeed1 from "@/imports/plan-seed-1.png";
+import planSeed2 from "@/imports/plan-seed-2.png";
+import planSeed3 from "@/imports/plan-seed-3.png";
+import planSeed4 from "@/imports/plan-seed-4.png";
+import planSeed5 from "@/imports/plan-seed-5.png";
+import planSeed6 from "@/imports/plan-seed-6.png";
+import planSeed7 from "@/imports/plan-seed-7.png";
+import planSeed8 from "@/imports/plan-seed-8.png";
+import planSeed9 from "@/imports/plan-seed-9.png";
+import planSeed10 from "@/imports/plan-seed-10.png";
 import avatarManBlack from "@/imports/avatarManBlack-opt.jpg";
 import avatarGirl from "@/imports/avatarGirl-opt.jpg";
 import avatarDmitry from "@/imports/avatarDmitry-opt.jpg";
@@ -350,8 +360,14 @@ type TagFilter = PlanTag | "all";
 interface HomeFeedPlan {
   id: number;
   tag?: PlanTag;
+  format?: "online" | "offline";
+  duration?: string;
   title: string;
   description: string;
+  habit?: {
+    title: string;
+    durationMin: number;
+  };
   coverUrl?: string;
   gradient?: string;
   schedule: Schedule;
@@ -374,88 +390,189 @@ const PLAN_TAG_LABELS: Record<PlanTag, string> = {
   other: "Другое",
 };
 
+const DEFAULT_PLAN_AUTHOR = {
+  name: "Гена Лохтин",
+  avatarUrl: UNSPLASH.avatarGena,
+};
+
+const PLAN_TAG_GRADIENTS: Record<PlanTag, string> = {
+  running: "linear-gradient(135deg, var(--accent) 0%, var(--primary) 100%)",
+  cycling: "linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)",
+  yoga: "linear-gradient(135deg, var(--secondary) 0%, var(--accent) 100%)",
+  recovery: "linear-gradient(135deg, var(--muted-foreground) 0%, var(--primary) 100%)",
+  other: "linear-gradient(135deg, var(--accent) 0%, var(--muted-foreground) 100%)",
+};
+
 const homeFeedPlans: HomeFeedPlan[] = [
   {
     id: 1,
     tag: "running",
-    title: "Бег с нуля",
-    description: "Чередуешь бег и ходьбу, чтобы сердце и связки привыкали постепенно. 3 раза в неделю, старт с 1 минуты бега на 2 минуты шага, доля бега растёт каждую неделю. К концу бежишь полчаса без остановки.",
-    coverUrl: cover1 as unknown as string,
-    schedule: { timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], end: { type: "weeks", weeks: 8 } },
-    participants: [P_AVATARS.w1, P_AVATARS.m1, P_AVATARS.w2],
-    participantsLabel: "100+ чел.",
-    timeDate: "Утро · 8 недель",
-    address: "3 раза в неделю",
-    author: {
-      name: "Мария Кузнецова",
-      avatarUrl: UNSPLASH.avatarMaria,
-    },
+    format: "offline",
+    duration: "21 день",
+    title: "21 день бега",
+    description: "21 день подряд выходишь на пробежку, минимум 10 минут. Цель не результат, а закрепить привычку бегать. Пропустил день — счёт с начала.",
+    habit: { title: "Ежедневная пробежка", durationMin: 15 },
+    coverUrl: planSeed1 as unknown as string,
+    gradient: PLAN_TAG_GRADIENTS.running,
+    schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 2, 3, 4, 5, 6, 7], repeat: "daily" },
+    participants: [],
+    participantsLabel: "Будь первым",
+    timeDate: "Утро · 21 день",
+    author: DEFAULT_PLAN_AUTHOR,
     shareUrl: "https://wellwellwell.app/plans/1",
   },
   {
     id: 2,
-    tag: "cycling",
-    title: "Вкат в сезон",
-    description: "Низкая интенсивность набирает базу выносливости без перегруза суставов. 3 выезда в неделю по 40-60 минут в темпе, на котором можешь спокойно говорить. Через месяц длинные дистанции даются легче.",
-    coverUrl: cover3 as unknown as string,
-    schedule: { timeMode: "exact", time: "10:00-11:00", partOfDay: null, weekdays: [2, 4, 6], end: { type: "weeks", weeks: 4 } },
-    participants: [P_AVATARS.m1, P_AVATARS.m2],
-    participantsLabel: "2 чел.",
-    timeDate: "40—60 мин · 4 недели",
-    address: "3 выезда в неделю",
-    author: {
-      name: "Дмитрий Орлов",
-      avatarUrl: UNSPLASH.avatarDmitry,
-    },
+    tag: "recovery",
+    format: "online",
+    duration: "14 дней",
+    title: "14 дней без смартфона перед сном",
+    description: "14 вечеров убираешь телефон за час до сна. Экран вечером бьёт по мелатонину и сдвигает засыпание. Отбой для гаджетов в 21:00.",
+    habit: { title: "Отбой для гаджетов", durationMin: 60 },
+    coverUrl: planSeed2 as unknown as string,
+    gradient: PLAN_TAG_GRADIENTS.recovery,
+    schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "evening", weekdays: [1, 2, 3, 4, 5, 6, 7], repeat: "daily" },
+    participants: [],
+    participantsLabel: "Будь первым",
+    timeDate: "Вечер · 14 дней",
+    author: DEFAULT_PLAN_AUTHOR,
     shareUrl: "https://wellwellwell.app/plans/2",
   },
   {
     id: 3,
-    tag: "yoga",
-    title: "Мобилизация по утрам",
-    description: "10 минут суставной гимнастики после подъёма разгоняют кровоток и снимают скованность. Комплекс из 8 движений на таз, грудной отдел и голеностоп.",
-    coverUrl: cover2 as unknown as string,
-    schedule: { timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 2, 3, 4, 5, 6, 7], end: { type: "never" } },
-    participants: [P_AVATARS.w2, P_AVATARS.w1, P_AVATARS.m3],
-    participantsLabel: "4 чел.",
-    timeDate: "Утро · Каждый день",
-    author: {
-      name: "Анна Соколова",
-      avatarUrl: P_AVATARS.w2,
-    },
+    tag: "running",
+    format: "offline",
+    duration: "8 недель",
+    title: "5 км с нуля",
+    description: "8 недель, 3 пробежки в неделю. Старт с лёгкого бега 2,4 км в разговорном темпе, каждую неделю дистанция растёт. К 7 неделе бежишь 4,8 км, на 8 неделе контрольный забег 5 км. Между пробежками дни восстановления и ходьба.",
+    habit: { title: "Беговая тренировка", durationMin: 30 },
+    coverUrl: planSeed3 as unknown as string,
+    gradient: PLAN_TAG_GRADIENTS.running,
+    schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: "weekly" },
+    participants: [],
+    participantsLabel: "Будь первым",
+    timeDate: "Утро · 8 недель",
+    author: DEFAULT_PLAN_AUTHOR,
     shareUrl: "https://wellwellwell.app/plans/3",
   },
   {
-    id: 5,
-    tag: "recovery",
-    title: "Без смартфона перед сном",
-    description: "Экран перед сном бьёт по мелатонину и сдвигает засыпание. Убираешь телефон за час до сна, в 22:00 отбой для гаджетов.",
-    coverUrl: challengeImg as unknown as string,
-    schedule: { timeMode: "exact", time: "22:00-23:00", partOfDay: null, weekdays: [1, 2, 3, 4, 5, 6, 7], end: { type: "weeks", weeks: 2 } },
+    id: 4,
+    tag: "running",
+    format: "offline",
+    duration: "8 недель",
+    title: "8 км",
+    description: "8 недель, 3 беговых дня плюс короткая силовая. Лёгкий бег, силовая и длительный бег, который растёт с 3,2 км до 7,3 км. На 8 неделе забег 8 км.",
+    habit: { title: "Беговая тренировка + силовая", durationMin: 40 },
+    coverUrl: planSeed4 as unknown as string,
+    gradient: PLAN_TAG_GRADIENTS.running,
+    schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: "weekly" },
     participants: [],
     participantsLabel: "Будь первым",
-    timeDate: "с 22:00 · 14 дней",
-    author: {
-      name: "Гена Лохтин",
-      avatarUrl: UNSPLASH.avatarGena,
-    },
+    timeDate: "Утро · 8 недель",
+    author: DEFAULT_PLAN_AUTHOR,
+    shareUrl: "https://wellwellwell.app/plans/4",
+  },
+  {
+    id: 5,
+    tag: "running",
+    format: "offline",
+    duration: "8 недель",
+    title: "10 км",
+    description: "8 недель, 3 пробежки в неделю: две лёгкие и одна длительная. Длительный бег растёт с 4,8 км до 8,9 км, на 8 неделе забег 10 км.",
+    habit: { title: "Беговая тренировка", durationMin: 45 },
+    coverUrl: planSeed5 as unknown as string,
+    gradient: PLAN_TAG_GRADIENTS.running,
+    schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: "weekly" },
+    participants: [],
+    participantsLabel: "Будь первым",
+    timeDate: "Утро · 8 недель",
+    author: DEFAULT_PLAN_AUTHOR,
     shareUrl: "https://wellwellwell.app/plans/5",
   },
   {
-    id: 4,
-    tag: "other",
-    title: "Стакан воды с утра",
-    description: "За ночь теряешь жидкость, утренний стакан возвращает баланс и запускает обмен. 250-300 мл сразу после пробуждения, до кофе.",
-    gradient: "linear-gradient(135deg, #00887F 0%, #2563EB 100%)",
-    schedule: { timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 2, 3, 4, 5, 6, 7], end: { type: "never" } },
-    participants: [P_AVATARS.m2],
-    participantsLabel: "1 чел.",
-    timeDate: "Утро · Каждый день",
-    author: {
-      name: "Well Well Well",
-      avatarUrl: avatarBrand as unknown as string,
-    },
-    shareUrl: "https://wellwellwell.app/plans/4",
+    id: 6,
+    tag: "running",
+    format: "offline",
+    duration: "12 недель",
+    title: "Полумарафон",
+    description: "12 недель, 3 пробежки в неделю: лёгкий, темповый и длинный бег. Длинная пробежка растёт с 6,4 км до 19,3 км, по дороге контрольные забеги 5 и 10 км. Финал на 12 неделе — полумарафон 21,1 км.",
+    habit: { title: "Беговая тренировка", durationMin: 60 },
+    coverUrl: planSeed6 as unknown as string,
+    gradient: PLAN_TAG_GRADIENTS.running,
+    schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 6], repeat: "weekly" },
+    participants: [],
+    participantsLabel: "Будь первым",
+    timeDate: "Утро · 12 недель",
+    author: DEFAULT_PLAN_AUTHOR,
+    shareUrl: "https://wellwellwell.app/plans/6",
+  },
+  {
+    id: 7,
+    tag: "running",
+    format: "offline",
+    duration: "10 недель",
+    title: "Весенняя подготовка",
+    description: "10 недель для тех, кто уже бегает. Чередуешь силовую, интервалы и длительный бег. Длительный растёт с 50 до 90 минут, темповые и интервалы добавляют скорость. Разгоняет форму к сезону стартов.",
+    habit: { title: "Беговая тренировка", durationMin: 50 },
+    coverUrl: planSeed7 as unknown as string,
+    gradient: PLAN_TAG_GRADIENTS.running,
+    schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: "weekly" },
+    participants: [],
+    participantsLabel: "Будь первым",
+    timeDate: "Утро · 10 недель",
+    author: DEFAULT_PLAN_AUTHOR,
+    shareUrl: "https://wellwellwell.app/plans/7",
+  },
+  {
+    id: 8,
+    tag: "cycling",
+    format: "offline",
+    duration: "Бессрочно",
+    title: "Велосипед с нуля",
+    description: "Спокойные выезды на низком пульсе набирают базу выносливости без перегруза суставов. 3 выезда в неделю по 45 минут в темпе, на котором можешь говорить.",
+    habit: { title: "Лёгкий выезд", durationMin: 45 },
+    coverUrl: planSeed8 as unknown as string,
+    gradient: PLAN_TAG_GRADIENTS.cycling,
+    schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "day", weekdays: [1, 3, 5], repeat: "weekly" },
+    participants: [],
+    participantsLabel: "Будь первым",
+    timeDate: "День · Бессрочно",
+    author: DEFAULT_PLAN_AUTHOR,
+    shareUrl: "https://wellwellwell.app/plans/8",
+  },
+  {
+    id: 9,
+    tag: "cycling",
+    format: "offline",
+    duration: "Бессрочно",
+    title: "Длинные дистанции на велосипеде",
+    description: "Один длинный выезд в неделю растит выносливость для дальних маршрутов. Темп спокойный, главное — время в седле.",
+    habit: { title: "Длинный выезд", durationMin: 90 },
+    coverUrl: planSeed9 as unknown as string,
+    gradient: PLAN_TAG_GRADIENTS.cycling,
+    schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "day", weekdays: [7], repeat: "weekly" },
+    participants: [],
+    participantsLabel: "Будь первым",
+    timeDate: "День · Бессрочно",
+    author: DEFAULT_PLAN_AUTHOR,
+    shareUrl: "https://wellwellwell.app/plans/9",
+  },
+  {
+    id: 10,
+    tag: "recovery",
+    format: "online",
+    duration: "Бессрочно",
+    title: "Дыхание перед сном",
+    description: "Медленное дыхание перед сном включает парасимпатику и ускоряет засыпание. 5 минут, вдохи длиннее выдохов.",
+    habit: { title: "Медленное дыхание", durationMin: 5 },
+    coverUrl: planSeed10 as unknown as string,
+    gradient: PLAN_TAG_GRADIENTS.recovery,
+    schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "evening", weekdays: [1, 2, 3, 4, 5, 6, 7], repeat: "daily" },
+    participants: [],
+    participantsLabel: "Будь первым",
+    timeDate: "Вечер · Бессрочно",
+    author: DEFAULT_PLAN_AUTHOR,
+    shareUrl: "https://wellwellwell.app/plans/10",
   },
 ];
 
@@ -653,48 +770,14 @@ function HomeScreen({
   };
 
   return (
-    <div className="relative flex flex-col h-full" style={{ backgroundColor: "#F0F1F3" }}>
-      {/* Header */}
-      <div className="h-14 flex items-center justify-center px-4">
-        <div className="text-center leading-none">
-          <p className="text-[17px] font-semibold text-gray-900">WellWellWell</p>
-          <p className="mt-0.5 text-[12px] text-gray-400">mini app</p>
-        </div>
-      </div>
-
-      {/* Category row */}
-      <div className="h-12 pl-4 flex items-center">
-        <div className="min-w-0 flex-1 overflow-x-auto pr-3">
-          <div className="flex gap-2">
-            {CATEGORY_CHIPS.map((chip) => {
-              const active = tagFilter === chip.value;
-              return (
-                <button
-                  key={chip.value}
-                  onClick={() => setTagFilter(chip.value)}
-                  className="h-9 flex-shrink-0 rounded-full border px-3.5 text-[13px] font-medium transition-colors"
-                  style={
-                    active
-                      ? { backgroundColor: GREEN, borderColor: GREEN, color: "#fff" }
-                      : { backgroundColor: "#fff", borderColor: "#D1D5DB", color: "#374151" }
-                  }
-                >
-                  {chip.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div
-          className="w-7 h-12 flex-shrink-0"
-          style={{ background: "linear-gradient(90deg, rgba(240,241,243,0), #F0F1F3)" }}
-        />
-        <div className="flex items-center gap-4 pr-4 flex-shrink-0">
+    <div className="relative flex flex-col h-full bg-surface">
+      <div className="h-12 px-4 flex items-center justify-end">
+        <div className="flex items-center gap-4 flex-shrink-0">
           <button onClick={() => setSheet("filter")} className="w-6 h-6 flex items-center justify-center">
-            <Filter size={24} strokeWidth={1.9} color="#111827" />
+            <Filter size={24} strokeWidth={1.9} color="var(--foreground)" />
           </button>
           <button onClick={() => onNavigate("search", "home")} className="w-6 h-6 flex items-center justify-center">
-            <Search size={24} strokeWidth={1.9} color="#111827" />
+            <Search size={24} strokeWidth={1.9} color="var(--foreground)" />
           </button>
         </div>
       </div>
@@ -751,15 +834,23 @@ function HomeScreen({
       {sheet === "filter" && (
         <HomeSheet title="Фильтры" onClose={() => setSheet(null)}>
           <div className="space-y-2">
-            {["Дата", "Популярные", "Рядом"].map((item) => (
+            {CATEGORY_CHIPS.map((chip) => {
+              const active = tagFilter === chip.value;
+              return (
               <button
-                key={item}
-                onClick={() => setSheet(null)}
-                className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900"
+                key={chip.value}
+                onClick={() => {
+                  setTagFilter(chip.value);
+                  setSheet(null);
+                }}
+                className="w-full rounded-xl px-4 py-3 text-left text-[15px] font-medium flex items-center justify-between"
+                style={active ? { backgroundColor: GREEN_LIGHT, color: GREEN } : { backgroundColor: "var(--muted)", color: "var(--foreground)" }}
               >
-                {item}
+                <span>{chip.label}</span>
+                {active && <Check size={18} strokeWidth={2.2} />}
               </button>
-            ))}
+              );
+            })}
           </div>
         </HomeSheet>
       )}
@@ -1048,7 +1139,6 @@ function PlanAvatarStack({ urls }: { urls: string[] }) {
 }
 
 function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen, from?: Screen) => void; onPlanOpen: (id: number) => void }) {
-  const [activeTab, setActiveTab] = useState(0);
   const [activeDay, setActiveDay] = useState(2);
   const [checkedItems, setCheckedItems] = useState<number[]>([]);
 
@@ -1060,61 +1150,15 @@ function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen, from?
 
   const todayIndex = 2;
   const selectedDayPlans = plans.filter(plan => (plan.dayIndexes ?? [todayIndex]).includes(activeDay));
-  const monthLabel = "Июль 2026";
   const selectedDayTitle = `${activeDay === todayIndex ? "Сегодня · " : ""}${weekDays[activeDay]}, ${weekDates[activeDay]} ${weekDateMonths[activeDay]}`;
-  const hasPlansByDay = (dayIndex: number) =>
-    plans.some(plan => (plan.dayIndexes ?? [todayIndex]).includes(dayIndex));
 
   return (
     <div className="flex flex-col h-full bg-surface">
-      <div className="h-14 px-4 flex items-center justify-between">
-        <h1 className="text-[22px] font-bold text-gray-900">Мои планы</h1>
-        <button
-          onClick={() => setActiveDay(todayIndex)}
-          className="w-9 h-9 rounded-full flex items-center justify-center"
-        >
-          <Calendar size={22} strokeWidth={1.8} color="#6B7280" />
-        </button>
-      </div>
-
-      <div className="h-10 px-4 flex items-center justify-between">
-        <button
-          onClick={() => setActiveDay(day => Math.max(0, day - 1))}
-          className="w-8 h-8 flex items-center justify-center text-gray-400"
-          style={{ opacity: activeDay === 0 ? 0.35 : 1 }}
-        >
-          <ChevronRight size={18} strokeWidth={2} className="rotate-180" />
-        </button>
-        <p className="text-[14px] font-medium text-gray-700">{monthLabel}</p>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setActiveDay(day => Math.min(6, day + 1))}
-            className="w-8 h-8 flex items-center justify-center text-gray-400"
-            style={{ opacity: activeDay === 6 ? 0.35 : 1 }}
-          >
-            <ChevronRight size={18} strokeWidth={2} />
-          </button>
-          <div className="flex rounded-xl bg-gray-200/70 p-0.5">
-            {["Планы", "Аналитика"].map((tab, i) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(i)}
-                className="h-7 rounded-lg px-3 text-[12px] font-semibold"
-                  style={i === activeTab ? { backgroundColor: "var(--card)", color: GREEN } : { color: "var(--muted-foreground)" }}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
       {/* Week calendar */}
-      <div className="px-3 pb-4" style={{ display: activeTab === 1 ? "none" : undefined }}>
+      <div className="px-3 pt-4 pb-4">
         <div className="grid grid-cols-7 gap-[5px]">
           {weekDays.map((day, i) => {
             const isActive = activeDay === i;
-            const hasPlans = hasPlansByDay(i);
             const isPast = i < todayIndex;
             return (
               <button
@@ -1138,19 +1182,13 @@ function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen, from?
                 >
                   {weekDates[i]}
                 </span>
-                <span
-                  className="w-1 h-1 rounded-full"
-                  style={{ backgroundColor: isActive ? "#fff" : hasPlans ? GREEN : "transparent" }}
-                />
               </button>
             );
           })}
         </div>
       </div>
 
-      {activeTab === 1 && <AnalyticsScreen />}
-
-      <div className="flex-1 overflow-y-auto px-4 pb-6" style={{ display: activeTab === 1 ? "none" : undefined }}>
+      <div className="flex-1 overflow-y-auto px-4 pb-6">
         <p className="mb-3 text-[13px] leading-4 text-muted-foreground">{selectedDayTitle}</p>
 
         {selectedDayPlans.length > 0 ? (
@@ -1212,22 +1250,6 @@ function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen, from?
             </button>
           </div>
         )}
-      </div>
-
-      {/* FAB */}
-      <div className="relative h-0" style={{ display: activeTab === 1 ? "none" : undefined }}>
-        <button
-          onClick={() => onNavigate("create")}
-          className="absolute w-14 h-14 rounded-full flex items-center justify-center z-10"
-          style={{
-            backgroundColor: GREEN,
-            bottom: 16,
-            right: 16,
-            boxShadow: "0 6px 20px rgba(0,136,127,0.45)",
-          }}
-        >
-          <Plus size={26} strokeWidth={2.5} color="#fff" />
-        </button>
       </div>
 
     </div>
@@ -1393,24 +1415,29 @@ const ALL_DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const WEEKDAY_VALUES = [1, 2, 3, 4, 5, 6, 7];
 const PART_OF_DAY_RANGES = {
   morning: { label: "Утро", range: "06:00-10:00" },
-  noon: { label: "Обед", range: "12:00-15:00" },
+  day: { label: "День", range: "12:00-15:00" },
   evening: { label: "Вечер", range: "18:00-22:00" },
 } as const;
 
 type TimeMode = "exact" | "partOfDay";
 type PartOfDay = keyof typeof PART_OF_DAY_RANGES;
 type Visibility = "all" | "private";
+type RepeatMode = "none" | "daily" | "weekly" | "untilDate";
 type ScheduleEnd =
   | { type: "never" }
   | { type: "date"; date: string }
   | { type: "weeks"; weeks: number };
 
 interface Schedule {
-  timeMode: TimeMode;
+  timeMode?: TimeMode;
+  mode?: TimeMode;
   time: string | null;
   partOfDay: PartOfDay | null;
   weekdays: number[];
-  end: ScheduleEnd;
+  end?: ScheduleEnd | string;
+  start?: string;
+  repeat?: RepeatMode;
+  repeatUntilDate?: string;
 }
 
 const VISIBILITY_OPTIONS: { value: Visibility; label: string }[] = [
@@ -1439,8 +1466,8 @@ function CheckToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 
 function PlusButton() {
   return (
-    <button className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-200">
-      <Plus size={16} strokeWidth={2.2} color="#6B7280" />
+    <button className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-input">
+      <Plus size={16} strokeWidth={2.2} color="var(--muted-foreground)" />
     </button>
   );
 }
@@ -1457,14 +1484,14 @@ function OptionRow({
   return (
     <button
       onClick={onClick}
-      className="w-full bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm text-left active:opacity-70 transition-opacity"
+      className="w-full bg-card rounded-xl px-4 py-3.5 flex items-center gap-3 text-left active:opacity-70 transition-opacity"
     >
-      <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: GREEN + "18" }}>
+      <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-secondary">
         {icon}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[14px] font-medium text-gray-800">{label}</p>
-        {subtitle && <p className="text-[11px] text-gray-400 mt-0.5 leading-tight">{subtitle}</p>}
+        <p className="text-[15px] font-medium text-foreground">{label}</p>
+        {subtitle && <p className="text-[12px] text-muted-foreground mt-0.5 leading-4">{subtitle}</p>}
       </div>
       {control}
     </button>
@@ -1473,26 +1500,31 @@ function OptionRow({
 
 function SectionCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-4 rounded-2xl bg-white px-4 py-4 shadow-sm">
+    <div className="rounded-xl bg-card px-4 py-4">
       {children}
     </div>
   );
 }
 
 function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen) => void; backTo?: Screen }) {
-  const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const getLocalDateTime = () => {
+    const date = new Date();
+    date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+    return date.toISOString().slice(0, 16);
+  };
+
+  const initialDateTime = getLocalDateTime();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [coverImage, setCoverImage] = useState<string | null>(null);
-  const [timeMode, setTimeMode] = useState<TimeMode>("exact");
-  const [startTime, setStartTime] = useState("08:00");
-  const [endTime, setEndTime] = useState("08:30");
+  const [timeMode, setTimeMode] = useState<TimeMode>("partOfDay");
   const [partOfDay, setPartOfDay] = useState<PartOfDay | null>(null);
-  const [endType, setEndType] = useState<ScheduleEnd["type"]>("never");
-  const [endDate, setEndDate] = useState("");
-  const [endWeeks, setEndWeeks] = useState(4);
-  const [showEndPicker, setShowEndPicker] = useState(false);
-  const [scheduleExpanded, setScheduleExpanded] = useState(false);
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
+  const [exactStart, setExactStart] = useState(initialDateTime);
+  const [exactEnd, setExactEnd] = useState(initialDateTime);
+  const [repeat, setRepeat] = useState<RepeatMode>("weekly");
+  const [repeatUntilDate, setRepeatUntilDate] = useState("");
+  const [showRepeatPicker, setShowRepeatPicker] = useState(false);
   const [scheduleError, setScheduleError] = useState("");
   const [titleError, setTitleError] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("all");
@@ -1501,6 +1533,23 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
   const [videoEnabled, setVideoEnabled] = useState(false);
   const [videoLink, setVideoLink] = useState("");
   const [videoCopied, setVideoCopied] = useState(false);
+
+  const selectedParticipantItems = EVENT_PARTICIPANTS.filter((participant) =>
+    selectedParticipants.includes(participant.id)
+  );
+
+  const repeatLabels: Record<RepeatMode, string> = {
+    none: "Не повторять",
+    daily: "Каждый день",
+    weekly: "Каждую неделю",
+    untilDate: repeatUntilDate ? `До ${repeatUntilDate}` : "До даты",
+  };
+
+  const switchTimeMode = (mode: TimeMode) => {
+    setTimeMode(mode);
+    setRepeat(mode === "partOfDay" ? "weekly" : "none");
+    setScheduleError("");
+  };
 
   const toggleDay = (day: number) => {
     setSelectedDays((prev) =>
@@ -1521,29 +1570,27 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
     );
   };
 
-  const schedule: Schedule = {
-    timeMode,
-    time: timeMode === "exact" && startTime && endTime ? `${startTime}-${endTime}` : null,
-    partOfDay: timeMode === "partOfDay" ? partOfDay : null,
-    weekdays: selectedDays,
-    end:
-      endType === "date"
-        ? { type: "date", date: endDate ? new Date(`${endDate}T00:00:00`).toISOString() : "" }
-        : endType === "weeks"
-          ? { type: "weeks", weeks: endWeeks }
-          : { type: "never" },
-  };
-
-  const endLabel =
-    schedule.end.type === "date"
-      ? endDate || "Выберите дату"
-      : schedule.end.type === "weeks"
-        ? `Через ${endWeeks} нед.`
-        : "Бессрочно";
-
-  const selectedParticipantItems = EVENT_PARTICIPANTS.filter((participant) =>
-    selectedParticipants.includes(participant.id)
-  );
+  const schedule: Schedule = timeMode === "partOfDay"
+    ? {
+        mode: "partOfDay",
+        timeMode: "partOfDay",
+        time: null,
+        partOfDay,
+        weekdays: selectedDays,
+        repeat,
+        repeatUntilDate: repeat === "untilDate" ? repeatUntilDate : undefined,
+      }
+    : {
+        mode: "exact",
+        timeMode: "exact",
+        time: null,
+        partOfDay: null,
+        weekdays: [],
+        start: exactStart ? new Date(exactStart).toISOString() : "",
+        end: exactEnd ? new Date(exactEnd).toISOString() : "",
+        repeat,
+        repeatUntilDate: repeat === "untilDate" ? repeatUntilDate : undefined,
+      };
 
   const videoMeeting = {
     enabled: videoEnabled,
@@ -1551,17 +1598,15 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
   };
 
   const validateSchedule = () => {
-    if ((timeMode === "exact" && (!startTime || !endTime)) || (timeMode === "partOfDay" && !partOfDay)) {
-      return "Выберите время";
+    if (timeMode === "partOfDay") {
+      if (!partOfDay) return "Выберите время суток";
+      if (selectedDays.length === 0) return "Выберите хотя бы один день недели";
     }
-    if (selectedDays.length === 0) {
-      return "Выберите хотя бы один день недели";
+    if (timeMode === "exact" && !exactStart) {
+      return "Выберите дату и время начала";
     }
-    if (endType === "date" && !endDate) {
-      return "Выберите дату окончания";
-    }
-    if (endType === "weeks" && (!endWeeks || endWeeks < 1)) {
-      return "Введите количество недель";
+    if (repeat === "untilDate" && !repeatUntilDate) {
+      return "Выберите дату окончания повтора";
     }
     return "";
   };
@@ -1573,15 +1618,9 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
     setTitleError(nextTitleError);
     setScheduleError(nextScheduleError);
 
-    if (nextScheduleError) {
-      setScheduleExpanded(true);
-    }
+    if (nextTitleError || nextScheduleError) return;
 
-    if (nextTitleError || nextScheduleError) {
-      return;
-    }
-
-    const event = {
+    const plan = {
       title: title.trim(),
       description: description.trim(),
       coverImage,
@@ -1591,64 +1630,38 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
       schedule,
     };
 
-    console.log(event);
+    console.log(plan);
     onNavigate(backTo);
   };
 
   return (
-    <div className="flex flex-col h-full" style={{ backgroundColor: "#F0F1F3" }}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-3 bg-white border-b border-gray-100">
-        <button
-          onClick={() => onNavigate(backTo)}
-          className="w-9 h-9 rounded-full bg-white flex items-center justify-center"
-          style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.12)" }}
-        >
-          <X size={18} strokeWidth={2.2} />
-        </button>
-        <span className="text-[17px] font-semibold">Создать событие</span>
-        <div className="w-9" />
-      </div>
-
-      <div className="flex-1 overflow-y-auto py-4 space-y-3">
-
-        {/* Cover */}
-        <div className="mx-4 rounded-2xl bg-white px-3 py-1 shadow-sm">
-          <div className="min-h-12 rounded-xl bg-gray-50">
-            {coverImage ? (
-              <div className="h-12 flex items-center gap-3">
-                <img src={coverImage} alt="Обложка события" className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[14px] font-semibold text-gray-800 truncate">Обложка добавлена</p>
-                </div>
-                <label
-                  className="h-8 px-3 rounded-full bg-white flex items-center justify-center cursor-pointer text-[12px] font-semibold flex-shrink-0"
-                  style={{ color: GREEN }}
-                >
-                  Заменить
-                  <input type="file" accept="image/*" className="hidden" onChange={handleImagePick} />
-                </label>
-                <button
-                  onClick={() => setCoverImage(null)}
-                  className="w-8 h-8 rounded-full bg-white flex items-center justify-center flex-shrink-0"
-                >
-                  <Trash2 size={15} strokeWidth={2} color="#EF4444" />
-                </button>
-              </div>
-            ) : (
-              <label className="h-12 border-2 border-dashed border-gray-300 rounded-xl px-4 flex items-center gap-3 cursor-pointer active:opacity-70 transition-opacity">
-                <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center flex-shrink-0">
-                  <ImageIcon size={18} strokeWidth={2} color={GREEN} />
-                </div>
-                <p className="text-[14px] font-semibold text-gray-500">Добавить обложку</p>
+    <div className="flex h-full flex-col bg-surface">
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+        <div className="rounded-xl bg-card px-3 py-2">
+          {coverImage ? (
+            <div className="flex h-14 items-center gap-3">
+              <img src={coverImage} alt="Обложка плана" className="h-11 w-11 flex-shrink-0 rounded-lg object-cover" />
+              <p className="min-w-0 flex-1 truncate text-[14px] font-medium text-foreground">Обложка добавлена</p>
+              <label className="cursor-pointer rounded-full px-3 py-2 text-[13px] font-medium" style={{ color: GREEN }}>
+                Заменить
                 <input type="file" accept="image/*" className="hidden" onChange={handleImagePick} />
               </label>
-            )}
-          </div>
+              <button onClick={() => setCoverImage(null)} className="flex h-9 w-9 items-center justify-center rounded-full bg-muted">
+                <Trash2 size={16} strokeWidth={2} color="var(--destructive)" />
+              </button>
+            </div>
+          ) : (
+            <label className="flex h-14 cursor-pointer items-center gap-3 rounded-lg border border-dashed border-border px-3 active:opacity-75">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-muted">
+                <ImageIcon size={18} strokeWidth={2} color={GREEN} />
+              </div>
+              <span className="text-[15px] font-medium text-muted-foreground">Добавить обложку</span>
+              <input type="file" accept="image/*" className="hidden" onChange={handleImagePick} />
+            </label>
+          )}
         </div>
 
-        {/* Details */}
-        <div className="mx-4 rounded-2xl bg-white px-4 py-2 shadow-sm">
+        <div className="rounded-xl bg-card px-4">
           <input
             value={title}
             onChange={(e) => {
@@ -1656,9 +1669,9 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
               setTitleError("");
             }}
             placeholder="Название"
-            className="w-full border-b border-gray-100 py-4 text-[22px] font-semibold text-gray-900 placeholder-gray-300 outline-none"
+            className="w-full border-b border-border bg-transparent py-4 text-[22px] font-semibold leading-7 text-foreground placeholder:text-muted-foreground/60 outline-none"
           />
-          {titleError && <p className="pt-2 text-[12px] font-medium text-red-500">{titleError}</p>}
+          {titleError && <p className="pt-2 text-[12px] font-medium text-destructive">{titleError}</p>}
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -1668,236 +1681,173 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
             }}
             placeholder="Описание"
             rows={1}
-            className="w-full min-h-14 border-b border-gray-100 py-4 text-[15px] leading-relaxed text-gray-700 placeholder-gray-300 outline-none resize-none overflow-hidden"
+            className="min-h-14 w-full resize-none overflow-hidden border-b border-border bg-transparent py-4 text-[15px] leading-5 text-foreground placeholder:text-muted-foreground/60 outline-none"
           />
         </div>
 
-        {/* Schedule */}
         <SectionCard>
-          <button
-            onClick={() => setScheduleExpanded((expanded) => !expanded)}
-            className="w-full flex items-center justify-between gap-3 text-left active:opacity-70 transition-opacity"
-          >
-            <p className="text-[15px] font-semibold text-gray-800">Расписание</p>
-            <ChevronDown
-              size={18}
-              strokeWidth={2}
-              color="#9CA3AF"
-              className={`flex-shrink-0 transition-transform ${scheduleExpanded ? "rotate-180" : ""}`}
-            />
-          </button>
-
-          {scheduleExpanded && (
-          <div className="space-y-5 pt-5">
+          <div className="space-y-5">
             <div>
-              <p className="text-[12px] font-semibold text-gray-400 uppercase tracking-wide mb-3">Время</p>
-              <div className="grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1 mb-4">
-                {[
-                  { value: "exact" as const, label: "Точное время" },
-                  { value: "partOfDay" as const, label: "Время суток" },
-                ].map((mode) => {
-                  const active = timeMode === mode.value;
-                  return (
-                    <button
-                      key={mode.value}
-                      onClick={() => {
-                        setTimeMode(mode.value);
-                        setScheduleError("");
-                      }}
-                      className="h-10 rounded-lg text-[13px] font-semibold transition-colors"
-                      style={active ? { backgroundColor: GREEN, color: "#fff" } : { color: "#6B7280" }}
-                    >
-                      {mode.label}
-                    </button>
-                  );
-                })}
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-[15px] font-semibold text-foreground">Время</p>
+                <button
+                  onClick={() => switchTimeMode(timeMode === "partOfDay" ? "exact" : "partOfDay")}
+                  className="text-[14px] font-medium"
+                  style={{ color: GREEN }}
+                >
+                  {timeMode === "partOfDay" ? "Точное время" : "Время суток"}
+                </button>
               </div>
 
-              {timeMode === "exact" ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="rounded-xl bg-gray-50 px-4 py-3">
-                    <span className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">с</span>
-                    <input
-                      type="time"
-                      value={startTime}
-                      onChange={(e) => {
-                        setStartTime(e.target.value);
-                        setScheduleError("");
-                      }}
-                      className="w-full bg-transparent text-[20px] font-bold outline-none"
-                      style={{ color: GREEN }}
-                    />
-                  </label>
-                  <label className="rounded-xl bg-gray-50 px-4 py-3">
-                    <span className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">по</span>
-                    <input
-                      type="time"
-                      value={endTime}
-                      onChange={(e) => {
-                        setEndTime(e.target.value);
-                        setScheduleError("");
-                      }}
-                      className="w-full bg-transparent text-[20px] font-bold outline-none"
-                      style={{ color: GREEN }}
-                    />
-                  </label>
+              {timeMode === "partOfDay" ? (
+                <div className="space-y-4">
+                  <div className="flex gap-2">
+                    {Object.entries(PART_OF_DAY_RANGES).map(([key, item]) => {
+                      const active = partOfDay === key;
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => {
+                            setPartOfDay(key as PartOfDay);
+                            setScheduleError("");
+                          }}
+                          className="h-10 flex-1 rounded-full border text-[14px] font-medium transition-colors"
+                          style={active ? { backgroundColor: GREEN, borderColor: GREEN, color: "#fff" } : { borderColor: "var(--border)", color: "var(--foreground)" }}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex justify-between">
+                    {ALL_DAYS.map((day, i) => {
+                      const value = WEEKDAY_VALUES[i];
+                      const active = selectedDays.includes(value);
+                      return (
+                        <button
+                          key={day}
+                          onClick={() => toggleDay(value)}
+                          className="flex h-10 w-10 items-center justify-center rounded-full border text-[12px] font-semibold transition-colors"
+                          style={active ? { backgroundColor: GREEN, borderColor: GREEN, color: "#fff" } : { borderColor: "var(--border)", color: "var(--foreground)" }}
+                        >
+                          {day}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  {Object.entries(PART_OF_DAY_RANGES).map(([key, item]) => {
-                    const active = partOfDay === key;
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => {
-                          setPartOfDay(key as PartOfDay);
-                          setScheduleError("");
-                        }}
-                        className="h-10 rounded-full border px-3 text-[13px] font-semibold transition-colors"
-                        style={
-                          active
-                            ? { backgroundColor: GREEN, borderColor: GREEN, color: "#fff" }
-                            : { backgroundColor: "#fff", borderColor: "#D1D5DB", color: GREEN }
-                        }
-                      >
-                        {item.label}
-                      </button>
-                    );
-                  })}
+                <div className="space-y-3">
+                  <label className="block rounded-xl bg-input px-4 py-3">
+                    <span className="mb-2 block text-[12px] font-medium text-muted-foreground">Начало</span>
+                    <input
+                      type="datetime-local"
+                      value={exactStart}
+                      onChange={(e) => {
+                        setExactStart(e.target.value);
+                        setExactEnd((current) => current || e.target.value);
+                        setScheduleError("");
+                      }}
+                      className="w-full bg-transparent text-[15px] font-medium text-foreground outline-none"
+                    />
+                  </label>
+                  <label className="block rounded-xl bg-input px-4 py-3">
+                    <span className="mb-2 block text-[12px] font-medium text-muted-foreground">Окончание</span>
+                    <input
+                      type="datetime-local"
+                      value={exactEnd}
+                      onChange={(e) => {
+                        setExactEnd(e.target.value);
+                        setScheduleError("");
+                      }}
+                      className="w-full bg-transparent text-[15px] font-medium text-foreground outline-none"
+                    />
+                  </label>
                 </div>
               )}
             </div>
 
             <div>
-              <p className="text-[12px] font-semibold text-gray-400 uppercase tracking-wide mb-3">Дни недели</p>
-              <div className="flex justify-between">
-                {ALL_DAYS.map((day, i) => {
-                  const value = WEEKDAY_VALUES[i];
-                  const active = selectedDays.includes(value);
+              <button
+                onClick={() => setShowRepeatPicker((show) => !show)}
+                className="flex w-full items-center justify-between rounded-xl bg-input px-4 py-3 text-left"
+              >
+                <span className="text-[15px] font-medium text-foreground">Повторение</span>
+                <span className="flex items-center gap-2 text-[14px] text-muted-foreground">
+                  {repeatLabels[repeat]}
+                  <ChevronDown size={17} strokeWidth={2} />
+                </span>
+              </button>
+
+              {showRepeatPicker && (
+                <div className="mt-2 space-y-2 rounded-xl bg-card p-2">
+                  {([
+                    { value: "none" as const, label: "Не повторять" },
+                    { value: "daily" as const, label: "Каждый день" },
+                    { value: "weekly" as const, label: "Каждую неделю" },
+                    { value: "untilDate" as const, label: "До даты" },
+                  ]).map((option) => {
+                    const active = repeat === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        onClick={() => {
+                          setRepeat(option.value);
+                          setScheduleError("");
+                        }}
+                        className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[14px] font-medium"
+                        style={active ? { backgroundColor: GREEN_LIGHT, color: GREEN } : { color: "var(--foreground)" }}
+                      >
+                        {option.label}
+                        {active && <Check size={16} strokeWidth={2.4} />}
+                      </button>
+                    );
+                  })}
+                  {repeat === "untilDate" && (
+                    <input
+                      type="date"
+                      value={repeatUntilDate}
+                      onChange={(e) => {
+                        setRepeatUntilDate(e.target.value);
+                        setScheduleError("");
+                      }}
+                      className="w-full rounded-lg bg-input px-3 py-2.5 text-[14px] font-medium text-foreground outline-none"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+
+            {scheduleError && <p className="text-[12px] font-medium text-destructive">{scheduleError}</p>}
+          </div>
+        </SectionCard>
+
+        <div className="space-y-2">
+          <div className="rounded-xl bg-card px-4 py-3.5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-secondary">
+                {visibility === "all" ? <Eye size={17} strokeWidth={1.8} color={GREEN} /> : <Lock size={17} strokeWidth={1.8} color={GREEN} />}
+              </div>
+              <p className="flex-1 text-[15px] font-medium text-foreground">Видимость</p>
+              <div className="grid grid-cols-2 gap-1 rounded-lg bg-input p-1">
+                {VISIBILITY_OPTIONS.map((option) => {
+                  const active = visibility === option.value;
                   return (
                     <button
-                      key={day}
-                      onClick={() => toggleDay(value)}
-                      className="w-10 h-10 rounded-full flex items-center justify-center text-[12px] font-semibold border-2 transition-colors"
-                      style={
-                        active
-                          ? { backgroundColor: GREEN, borderColor: GREEN, color: "#fff" }
-                          : { backgroundColor: "#fff", borderColor: GREEN, color: GREEN }
-                      }
+                      key={option.value}
+                      onClick={() => setVisibility(option.value)}
+                      className="h-8 rounded-md px-3 text-[12px] font-semibold whitespace-nowrap"
+                      style={active ? { backgroundColor: GREEN, color: "#fff" } : { color: "var(--muted-foreground)" }}
                     >
-                      {day}
+                      {option.label}
                     </button>
                   );
                 })}
               </div>
             </div>
-
-            <div>
-              <p className="text-[12px] font-semibold text-gray-400 uppercase tracking-wide mb-3">Окончание</p>
-              <button
-                onClick={() => setShowEndPicker((show) => !show)}
-                className="w-full rounded-xl bg-gray-50 px-4 py-3 flex items-center justify-between text-left active:opacity-70 transition-opacity"
-              >
-                <span className="text-[15px] font-medium text-gray-800">{endLabel}</span>
-                <ChevronDown size={18} strokeWidth={2} color="#9CA3AF" />
-              </button>
-
-              {showEndPicker && (
-                <div className="mt-3 space-y-2">
-                  {[
-                    { type: "never" as const, label: "Бессрочно" },
-                    { type: "date" as const, label: "До даты" },
-                    { type: "weeks" as const, label: "Через N недель" },
-                  ].map((item) => {
-                    const active = endType === item.type;
-                    return (
-                      <button
-                        key={item.type}
-                        onClick={() => {
-                          setEndType(item.type);
-                          setScheduleError("");
-                        }}
-                        className="w-full rounded-xl border px-4 py-3 flex items-center justify-between text-left transition-colors"
-                        style={
-                          active
-                            ? { backgroundColor: GREEN_LIGHT, borderColor: GREEN }
-                            : { backgroundColor: "#fff", borderColor: "#E5E7EB" }
-                        }
-                      >
-                        <span className="text-[14px] font-medium text-gray-800">{item.label}</span>
-                        {active && <Check size={16} strokeWidth={2.5} color={GREEN} />}
-                      </button>
-                    );
-                  })}
-
-                  {endType === "date" && (
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => {
-                        setEndDate(e.target.value);
-                        setScheduleError("");
-                      }}
-                      className="w-full rounded-xl bg-gray-50 px-4 py-3 text-[15px] font-medium text-gray-800 outline-none"
-                    />
-                  )}
-
-                  {endType === "weeks" && (
-                    <input
-                      type="number"
-                      min={1}
-                      value={endWeeks}
-                      onChange={(e) => {
-                        setEndWeeks(Number(e.target.value));
-                        setScheduleError("");
-                      }}
-                      className="w-full rounded-xl bg-gray-50 px-4 py-3 text-[15px] font-medium text-gray-800 outline-none"
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-
-            {scheduleError && (
-              <p className="text-[12px] font-medium text-red-500">{scheduleError}</p>
-            )}
-          </div>
-          )}
-
-          {!scheduleExpanded && scheduleError && (
-            <p className="pt-3 text-[12px] font-medium text-red-500">{scheduleError}</p>
-          )}
-        </SectionCard>
-
-        {/* Options — вертикальный список */}
-        <div className="mx-4 space-y-2">
-
-          {/* Видимость */}
-          <div className="w-full bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: GREEN + "18" }}>
-              {visibility === "all"
-                ? <Eye size={17} strokeWidth={1.8} color={GREEN} />
-                : <Lock size={17} strokeWidth={1.8} color={GREEN} />}
-            </div>
-            <p className="flex-1 text-[14px] font-medium text-gray-800">Видимость</p>
-            <div className="grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1">
-              {VISIBILITY_OPTIONS.map((option) => {
-                const active = visibility === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    onClick={() => setVisibility(option.value)}
-                    className="h-8 rounded-lg px-3 text-[12px] font-semibold whitespace-nowrap transition-colors"
-                    style={active ? { backgroundColor: GREEN, color: "#fff" } : { color: "#6B7280" }}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
-          {/* Участники */}
           <div className="space-y-2">
             <OptionRow
               icon={<Users size={17} strokeWidth={1.8} color={GREEN} />}
@@ -1907,12 +1857,7 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
                 selectedParticipantItems.length > 0 ? (
                   <div className="flex -space-x-2">
                     {selectedParticipantItems.slice(0, 4).map((participant) => (
-                      <img
-                        key={participant.id}
-                        src={participant.avatar}
-                        alt={participant.name}
-                        className="w-7 h-7 rounded-full border-2 border-white object-cover"
-                      />
+                      <img key={participant.id} src={participant.avatar} alt={participant.name} className="h-7 w-7 rounded-full border-2 border-card object-cover" />
                     ))}
                   </div>
                 ) : (
@@ -1922,18 +1867,18 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
             />
 
             {showParticipantsPicker && (
-              <div className="rounded-2xl bg-white p-2 shadow-sm space-y-1">
+              <div className="rounded-xl bg-card p-2 space-y-1">
                 {EVENT_PARTICIPANTS.map((participant) => {
                   const active = selectedParticipants.includes(participant.id);
                   return (
                     <button
                       key={participant.id}
                       onClick={() => toggleParticipant(participant.id)}
-                      className="w-full rounded-xl px-3 py-2.5 flex items-center gap-3 text-left"
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left"
                       style={active ? { backgroundColor: GREEN_LIGHT } : undefined}
                     >
-                      <img src={participant.avatar} alt={participant.name} className="w-8 h-8 rounded-full object-cover" />
-                      <span className="flex-1 text-[14px] font-medium text-gray-800">{participant.name}</span>
+                      <img src={participant.avatar} alt={participant.name} className="h-8 w-8 rounded-full object-cover" />
+                      <span className="flex-1 text-[14px] font-medium text-foreground">{participant.name}</span>
                       {active && <Check size={16} strokeWidth={2.5} color={GREEN} />}
                     </button>
                   );
@@ -1942,7 +1887,6 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
             )}
           </div>
 
-          {/* Видеовстреча */}
           <div className="space-y-2">
             <OptionRow
               icon={<Video size={17} strokeWidth={1.8} color={GREEN} />}
@@ -1951,37 +1895,28 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
               onClick={() => {
                 setVideoEnabled((enabled) => {
                   const nextEnabled = !enabled;
-                  if (nextEnabled && !videoLink) {
-                    setVideoLink("https://meet.wellwellwell.local/event");
-                  }
+                  if (nextEnabled && !videoLink) setVideoLink("https://meet.wellwellwell.local/plan");
                   return nextEnabled;
                 });
               }}
               control={
-                <div
-                  className="w-11 h-6 rounded-full p-0.5 transition-colors"
-                  style={{ backgroundColor: videoEnabled ? GREEN : "#E5E7EB" }}
-                >
-                  <div
-                    className="w-5 h-5 rounded-full bg-white transition-transform"
-                    style={{ transform: videoEnabled ? "translateX(20px)" : "translateX(0)" }}
-                  />
+                <div className="h-6 w-11 rounded-full p-0.5 transition-colors" style={{ backgroundColor: videoEnabled ? "var(--component-switch-on, var(--accent))" : "rgba(120,120,128,0.16)" }}>
+                  <div className="h-5 w-5 rounded-full bg-card transition-transform" style={{ transform: videoEnabled ? "translateX(20px)" : "translateX(0)" }} />
                 </div>
               }
             />
 
             {videoEnabled && (
-              <div className="rounded-2xl bg-white px-4 py-3 shadow-sm">
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Ссылка</p>
+              <div className="rounded-xl bg-card px-4 py-3">
                 <div className="flex items-center gap-2">
-                  <span className="flex-1 min-w-0 truncate text-[14px] text-gray-800">{videoLink}</span>
+                  <span className="min-w-0 flex-1 truncate text-[14px] text-foreground">{videoLink}</span>
                   <button
                     onClick={async () => {
                       await navigator.clipboard?.writeText(videoLink);
                       setVideoCopied(true);
                       window.setTimeout(() => setVideoCopied(false), 1200);
                     }}
-                    className="h-8 rounded-full px-3 flex items-center gap-1.5 text-[12px] font-semibold text-white flex-shrink-0"
+                    className="flex h-9 flex-shrink-0 items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold text-white"
                     style={{ backgroundColor: GREEN }}
                   >
                     <Copy size={13} strokeWidth={2.2} />
@@ -1993,17 +1928,16 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
           </div>
         </div>
 
-        <div className="h-2" />
+        <div className="h-3" />
       </div>
 
-      {/* Submit — fixed */}
-      <div className="flex-shrink-0 px-4 pb-6 pt-3 bg-white border-t border-gray-100">
+      <div className="flex-shrink-0 border-t border-border bg-card px-4 pb-4 pt-3">
         <button
           onClick={handleCreate}
-          className="w-full py-4 rounded-2xl text-white text-[16px] font-semibold"
+          className="w-full rounded-xl py-4 text-[15px] font-medium text-white"
           style={{ backgroundColor: GREEN }}
         >
-          Создать событие
+          Создать план
         </button>
       </div>
     </div>
@@ -2161,33 +2095,66 @@ function BlueBadge() {
   );
 }
 
-function CommentsBlock({ comment, setComment }: { comment: string; setComment: (v: string) => void }) {
+function CommentsBlock({
+  comment,
+  setComment,
+  comments,
+  onSend,
+}: {
+  comment: string;
+  setComment: (v: string) => void;
+  comments: { id: number; author: string; avatarUrl: string; time: string; text: string }[];
+  onSend: () => void;
+}) {
+  const canSend = comment.trim().length > 0;
+
   return (
-    <div className="bg-surface px-4 pt-[18px] pb-6">
-      <h3 className="text-[15px] font-semibold text-gray-900 mb-3.5 flex items-center gap-2">
-        Комментарии <span className="text-[15px] font-normal text-gray-400">0</span>
+    <div className="border-t border-border bg-surface px-4 pt-[18px] pb-6">
+      <h3 className="mb-3.5 flex items-center gap-2 text-[15px] font-semibold text-foreground">
+        Комментарии <span className="text-[15px] font-normal text-muted-foreground">{comments.length}</span>
       </h3>
-      <div className="flex items-center gap-2.5 mb-[18px]">
+      <div className="mb-[18px] flex items-center gap-2.5">
         <img src={UNSPLASH.userAvatar} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
         <div className="flex-1 bg-input rounded-full px-3.5 py-[9px] flex items-center gap-2">
           <input
             value={comment}
             onChange={e => setComment(e.target.value)}
             placeholder="Напишите комментарий..."
-            className="flex-1 bg-transparent text-[13px] text-gray-700 placeholder-gray-400 outline-none"
+            className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground outline-none"
           />
-          <button className="flex-shrink-0">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
-              <polyline points="21 15 16 10 5 21"/>
-            </svg>
+          <button
+            onClick={onSend}
+            disabled={!canSend}
+            className="w-7 h-7 rounded-full flex items-center justify-center transition-opacity"
+            style={{
+              backgroundColor: canSend ? GREEN : "var(--muted)",
+              opacity: canSend ? 1 : 0.7,
+            }}
+          >
+            <ChevronRight size={16} strokeWidth={2.3} color={canSend ? "#fff" : "var(--muted-foreground)"} />
           </button>
-          {comment && <button><Share2 size={16} color={GREEN} /></button>}
         </div>
       </div>
-      <div className="flex justify-center py-8">
-        <p className="text-[13px] text-gray-400">Пока нет комментариев</p>
-      </div>
+      {comments.length > 0 ? (
+        <div className="space-y-4">
+          {comments.map((item) => (
+            <div key={item.id} className="flex gap-2.5">
+              <img src={item.avatarUrl} alt="" className="h-8 w-8 flex-shrink-0 rounded-full object-cover" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2">
+                  <p className="truncate text-[14px] font-medium text-foreground">{item.author}</p>
+                  <span className="text-[12px] text-muted-foreground">{item.time}</span>
+                </div>
+                <p className="mt-0.5 text-[14px] leading-5 text-foreground">{item.text}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex justify-center py-8">
+          <p className="text-[13px] text-muted-foreground">Пока нет комментариев</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -2233,6 +2200,11 @@ interface EventDetailProps {
   title: string;
   coverSrc?: string;
   backgroundGradient?: string;
+  tag?: PlanTag;
+  schedule?: Schedule;
+  shareUrl?: string;
+  participantAvatars?: string[];
+  participantsLabel?: string;
   authorName: string;
   authorAvatarUrl: string;
   authorVerified?: boolean;
@@ -2240,6 +2212,8 @@ interface EventDetailProps {
   badgeDate: string;
   paragraphs: string[];
   meta: EventMeta;
+  format?: "online" | "offline";
+  duration?: string;
   onBack: () => void;
   initiallyJoined?: boolean;
   onProfile?: () => void;
@@ -2247,99 +2221,193 @@ interface EventDetailProps {
 
 function EventDetailScreen({
   title, coverSrc, backgroundGradient, authorName, authorAvatarUrl, authorVerified,
-  readTime, badgeDate, paragraphs, meta, onBack, initiallyJoined, onProfile,
+  readTime, badgeDate, paragraphs, meta, format = "offline", duration, tag, schedule, shareUrl,
+  participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, onProfile,
 }: EventDetailProps) {
-  const [joined, setJoined] = useState(initiallyJoined ?? false);
-  const [sheet, setSheet] = useState<"participants" | "profile" | null>(null);
+  void authorVerified;
+  void readTime;
+  void badgeDate;
+  const [joined, setJoined] = useState(Boolean(initiallyJoined));
+  const [toast, setToast] = useState("");
+  const [sheet, setSheet] = useState<"participants" | "profile" | "share" | null>(null);
   const [subscribed, setSubscribed] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [comment, setComment] = useState("");
+  const [comments, setComments] = useState<{ id: number; author: string; avatarUrl: string; time: string; text: string }[]>([]);
+  const [copied, setCopied] = useState(false);
   const description = paragraphs.join(" ");
-  const participantAvatars = DETAIL_AVATARS;
+  const participantAvatars = planParticipantAvatars?.length ? planParticipantAvatars : DETAIL_AVATARS;
   const organizerAction = onProfile ?? (() => setSheet("profile"));
   const needsDescriptionClamp = description.length > 260;
+  const formatLabel = format === "online" ? "Онлайн" : "Офлайн";
+  const tagLabel = tag ? PLAN_TAG_LABELS[normalizePlanTag(tag)] : "План";
+  const participantCountLabel = participantsLabel ?? `${meta.participants} участников`;
+  const overflowLabel = meta.plusN.startsWith("+") ? meta.plusN : "";
+
+  const weekdayLabel = (days: number[]) =>
+    days
+      .map((day) => ALL_DAYS[WEEKDAY_VALUES.indexOf(day)])
+      .filter(Boolean)
+      .join(", ");
+
+  const exactDateLabel = (value?: string) => {
+    if (!value) return meta.date;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? meta.date
+      : date.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+  };
+
+  const exactTimeLabel = (start?: string, end?: string) => {
+    if (!start) return meta.time;
+    const startDate = new Date(start);
+    const endDate = end ? new Date(end) : null;
+    const startTime = Number.isNaN(startDate.getTime())
+      ? ""
+      : startDate.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    const endTime = endDate && !Number.isNaN(endDate.getTime())
+      ? endDate.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    return endTime ? `${startTime} — ${endTime}` : startTime || meta.time;
+  };
+
+  const schedulePrimary =
+    schedule?.mode === "partOfDay" || schedule?.timeMode === "partOfDay"
+      ? `${weekdayLabel(schedule.weekdays) || "Дни не выбраны"} · ${schedule.partOfDay ? PART_OF_DAY_RANGES[schedule.partOfDay].label : "Время суток"}`
+      : schedule?.mode === "exact" || schedule?.timeMode === "exact"
+        ? exactDateLabel(schedule.start)
+        : meta.date;
+  const scheduleSecondary =
+    schedule?.mode === "exact" || schedule?.timeMode === "exact"
+      ? exactTimeLabel(schedule.start, typeof schedule.end === "string" ? schedule.end : undefined)
+      : duration || meta.time;
+
+  const showJoinToast = () => {
+    setToast("Добавлено в Мои планы");
+    window.setTimeout(() => setToast(""), 2200);
+  };
+
+  const joinPlan = () => {
+    setJoined(true);
+    showJoinToast();
+  };
+
+  const cancelJoin = () => {
+    setJoined(false);
+  };
+
+  const toggleJoin = () => {
+    if (joined) {
+      cancelJoin();
+    } else {
+      joinPlan();
+    }
+  };
+
+  const sendComment = () => {
+    const text = comment.trim();
+    if (!text) return;
+    setComments((items) => [
+      ...items,
+      {
+        id: Date.now(),
+        author: "Вы",
+        avatarUrl: UNSPLASH.userAvatar,
+        time: "сейчас",
+        text,
+      },
+    ]);
+    setComment("");
+  };
+
+  const copyShareLink = async () => {
+    await navigator.clipboard?.writeText(shareUrl ?? `https://wellwellwell.app/plans/${encodeURIComponent(title)}`);
+    setCopied(true);
+  };
 
   return (
-    <div className="relative h-full overflow-hidden bg-black">
-      {coverSrc ? (
-        <img src={coverSrc} alt={title} className="fixed inset-0 h-[100dvh] w-full object-cover" />
-      ) : (
-        <div className="fixed inset-0 h-[100dvh]" style={{ background: backgroundGradient ?? `linear-gradient(135deg, ${GREEN} 0%, #111827 100%)` }} />
-      )}
-      <div
-        className="fixed inset-0 min-h-[100dvh]"
-        style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0) 28%, rgba(0,0,0,0.30) 62%, rgba(0,0,0,0.55) 100%)" }}
-      />
-
-      <button
-        onClick={onBack}
-        className="absolute left-4 z-20 w-10 h-10 rounded-full bg-black/35 flex items-center justify-center"
-        style={{ top: "calc(env(safe-area-inset-top) + 12px)" }}
-      >
-        <ArrowLeft size={20} strokeWidth={2} color="#fff" />
-      </button>
-
-      <div className="relative z-10 h-full overflow-y-auto">
-        <div className="min-h-[62vh] px-6 pt-20 pb-[22px] flex flex-col items-center justify-end text-center">
-          <h1
-            className="max-w-[345px] text-[30px] leading-9 font-bold text-white"
-            style={{
-              display: "-webkit-box",
-              WebkitLineClamp: 3,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
-            }}
-          >
-            {title}
-          </h1>
-
-          <div className="mt-4 max-w-[345px] text-[16px] leading-[1.4] text-white/90">
-            <p>{meta.time} · {meta.date}</p>
-            {meta.location && meta.location !== "Онлайн" && (
-              <p>{meta.location}</p>
-            )}
-          </div>
-
-          <div className="mt-[26px] w-full max-w-[345px] rounded-full bg-white/10 p-1 flex items-stretch backdrop-blur-sm">
-            {[
-              { value: "going" as const, label: "Иду", Icon: Check },
-              { value: "notGoing" as const, label: "Не иду", Icon: X },
-            ].map((item) => {
-              const active = item.value === "going" ? joined : !joined;
-              const Icon = item.Icon;
-              return (
-                <div key={item.value} className="flex flex-1 items-center">
-                  <button
-                    onClick={() => setJoined(item.value === "going")}
-                    className="py-[11px] flex-1 rounded-[26px] flex flex-col items-center justify-center gap-[5px] transition-colors"
-                    style={active ? { backgroundColor: "#fff", color: GREEN } : { color: "rgba(255,255,255,0.85)" }}
-                  >
-                    <Icon size={20} strokeWidth={2.2} />
-                    <span className="text-[15px] font-semibold">{item.label}</span>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+    <div className="relative flex h-full flex-col bg-surface">
+      {toast && (
+        <div
+          className="absolute left-1/2 z-30 -translate-x-1/2 rounded-full px-4 py-2 text-[14px] font-medium text-white shadow-lg"
+          style={{ top: "calc(env(safe-area-inset-top) + 14px)", backgroundColor: GREEN }}
+        >
+          {toast}
         </div>
+      )}
 
-        <div className="relative">
-          <div className="rounded-t-xl bg-white/15 px-[18px] pt-5 pb-5 text-white backdrop-blur-xl">
+      <div className="flex h-14 flex-shrink-0 items-center px-4">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[15px] font-medium text-foreground">
+          <ArrowLeft size={20} strokeWidth={2} />
+          <span>Назад</span>
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-4">
+          <div className="relative aspect-[4/5] overflow-hidden rounded-xl" style={{ background: backgroundGradient ?? PLAN_TAG_GRADIENTS.other }}>
+            {coverSrc && (
+              <img src={coverSrc} alt={title} className="absolute inset-0 h-full w-full object-cover" />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/55" />
+            <div className="absolute left-4 top-4 rounded-full bg-black/50 px-3 py-1.5 text-[13px] font-medium text-white">
+              {tagLabel}
+            </div>
+            <button
+              onClick={() => {
+                setCopied(false);
+                setSheet("share");
+              }}
+              className="absolute right-4 top-4 flex h-[34px] w-[34px] items-center justify-center rounded-full bg-black/50"
+            >
+              <Share2 size={16} strokeWidth={2} color="#fff" />
+            </button>
+            <div className="absolute inset-x-4 bottom-[18px] flex flex-col items-center text-center">
+              <div className="flex -space-x-2">
+                {participantAvatars.slice(0, 3).map((url, i) => (
+                  <img key={i} src={url} alt="" className="h-[30px] w-[30px] rounded-full border-2 border-white object-cover" />
+                ))}
+              </div>
+              <p className="mt-1.5 text-[12px] text-white/85">{participantCountLabel}</p>
+              <h1
+                className="mt-2 max-w-full text-[28px] font-bold leading-[34px] text-white"
+                style={{
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {title}
+              </h1>
+            </div>
+          </div>
+
+          <button
+            onClick={toggleJoin}
+            className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl border text-[15px]"
+            style={joined ? { backgroundColor: "var(--surface)", borderColor: "var(--border)", color: "var(--foreground)", fontWeight: 500 } : { backgroundColor: GREEN, borderColor: GREEN, color: "#fff", fontWeight: 600 }}
+          >
+            {joined ? <Check size={18} strokeWidth={2.4} color={GREEN} /> : <Plus size={18} strokeWidth={2.3} color="#fff" />}
+            {joined ? "Вы участвуете" : "Присоединиться"}
+          </button>
+
+          <div className="mt-4 border-t border-border pt-4">
             <div className="mb-4 flex items-center justify-between gap-3">
               <button onClick={organizerAction} className="flex min-w-0 items-center gap-2.5 text-left active:opacity-80">
-                <img src={authorAvatarUrl} alt={authorName} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
-                <span className="truncate text-[15px] font-medium text-white">{authorName}</span>
+                <img src={authorAvatarUrl} alt={authorName} className="h-9 w-9 flex-shrink-0 rounded-full object-cover" />
+                <span className="truncate text-[15px] font-medium text-foreground">{authorName}</span>
               </button>
               <button
                 onClick={() => setSubscribed((value) => !value)}
-                className="rounded-full border px-3.5 py-[7px] text-[12px] font-semibold uppercase tracking-[0.4px] text-white flex-shrink-0"
-                style={{ borderColor: "rgba(255,255,255,0.5)" }}
+                className="flex-shrink-0 rounded-full border px-3 py-1.5 text-[12px] font-semibold"
+                style={{ borderColor: GREEN, color: GREEN }}
               >
                 {subscribed ? "Подписан" : "Подписаться"}
               </button>
             </div>
 
-            <div className="mb-4 text-[14px] leading-[1.5] text-white/90">
+            <div className="mb-4 text-[14px] leading-[1.5] text-muted-foreground">
               <p
                 style={!descriptionExpanded && needsDescriptionClamp ? {
                   display: "-webkit-box",
@@ -2361,47 +2429,56 @@ function EventDetailScreen({
               )}
             </div>
 
-            <div className="mb-4 h-px bg-white/20" style={{ height: 0.5 }} />
-
-            <div className="mb-3.5 flex items-start gap-3">
-              <Calendar size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-white/70" />
-              <div>
-                <p className="text-[14px] text-white">{meta.date}</p>
-                <p className="text-[13px] text-white/65">{meta.time}</p>
-              </div>
-            </div>
-
-            {meta.location && (
-              <div className="mb-4 flex items-start gap-3">
-                <MapPin size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-white/70" />
+            <div className="space-y-3.5 pb-5">
+              <div className="flex items-start gap-3">
+                <Calendar size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
                 <div>
-                  <p className="text-[14px] text-white">{meta.location}</p>
-                  {meta.locationSub && <p className="text-[13px] text-white/65">{meta.locationSub}</p>}
+                  <p className="text-[14px] leading-5 text-foreground">{schedulePrimary}</p>
+                  {scheduleSecondary && <p className="text-[13px] leading-4 text-muted-foreground">{scheduleSecondary}</p>}
                 </div>
               </div>
-            )}
 
-            <button
-              onClick={() => setSheet("participants")}
-              className="w-full flex items-center justify-between gap-3 text-left active:opacity-85"
-            >
-              <div className="flex items-center gap-3">
-                <Users size={20} strokeWidth={1.8} className="flex-shrink-0 text-white/70" />
-                <span className="text-[14px] text-white">{meta.participants} участников</span>
-              </div>
-              <div className="flex -space-x-2">
-                {participantAvatars.slice(0, 3).map((url, i) => (
-                  <img key={i} src={url} alt="" className="w-7 h-7 rounded-full border object-cover" style={{ borderColor: "rgba(255,255,255,0.15)" }} />
-                ))}
-                <div className="w-7 h-7 rounded-full border bg-white/20 flex items-center justify-center" style={{ borderColor: "rgba(255,255,255,0.15)" }}>
-                  <span className="text-[10px] font-bold text-white">{meta.plusN}</span>
+              {meta.location && (
+                <div className="flex items-start gap-3">
+                  <MapPin size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
+                  <div>
+                    <p className="text-[14px] leading-5 text-foreground">{meta.location}</p>
+                    {meta.locationSub && <p className="text-[13px] leading-4 text-muted-foreground">{meta.locationSub}</p>}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-start gap-3">
+                <Video size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
+                <div>
+                  <p className="text-[14px] leading-5 text-foreground">{formatLabel}</p>
                 </div>
               </div>
-            </button>
+
+              <button
+                onClick={() => setSheet("participants")}
+                className="flex w-full items-center justify-between gap-3 text-left active:opacity-85"
+              >
+                <div className="flex items-center gap-3">
+                  <Users size={20} strokeWidth={1.8} className="flex-shrink-0 text-muted-foreground" />
+                  <span className="text-[14px] text-foreground">{meta.participants} участников</span>
+                </div>
+                <div className="flex -space-x-2">
+                  {participantAvatars.slice(0, 3).map((url, i) => (
+                    <img key={i} src={url} alt="" className="h-7 w-7 rounded-full border object-cover" style={{ borderColor: "var(--surface)" }} />
+                  ))}
+                  {overflowLabel && (
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted">
+                      <span className="text-[10px] font-bold text-foreground">{overflowLabel}</span>
+                    </div>
+                  )}
+                </div>
+              </button>
+            </div>
           </div>
-
-          <CommentsBlock comment={comment} setComment={setComment} />
         </div>
+
+        <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} />
       </div>
 
       {sheet === "participants" && (
@@ -2415,6 +2492,19 @@ function EventDetailScreen({
             ))}
             <p className="pt-2 text-center text-[13px] text-gray-400">И ещё {meta.plusN} участников</p>
           </div>
+        </HomeSheet>
+      )}
+
+      {sheet === "share" && (
+        <HomeSheet title="Поделиться" onClose={() => setSheet(null)}>
+          <button
+            onClick={copyShareLink}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl text-[15px] font-semibold text-white"
+            style={{ backgroundColor: GREEN }}
+          >
+            <Copy size={17} strokeWidth={2.2} />
+            {copied ? "Ссылка скопирована" : "Скопировать ссылку"}
+          </button>
         </HomeSheet>
       )}
 
@@ -2772,7 +2862,7 @@ function ProfileScreenOld({
 }
 
 
-const NO_BOTTOM_NAV: Screen[] = ["create", "article", "search", "planEvent", "detail"];
+const NO_BOTTOM_NAV: Screen[] = ["article", "search", "planEvent", "detail"];
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("home");
@@ -2837,6 +2927,11 @@ export default function App() {
               title={feedPlan.title}
               coverSrc={feedPlan.coverUrl as string | undefined}
               backgroundGradient={feedPlan.gradient}
+              tag={feedPlan.tag}
+              schedule={feedPlan.schedule}
+              shareUrl={feedPlan.shareUrl}
+              participantAvatars={feedPlan.participants}
+              participantsLabel={feedPlan.participantsLabel}
               authorName={feedPlan.author.name}
               authorAvatarUrl={feedPlan.author.avatarUrl}
               badgeDate={feedPlan.timeDate}
@@ -2846,12 +2941,14 @@ export default function App() {
                 time: feedPlan.timeDate,
                 location: feedPlan.address ?? "",
                 locationSub: "",
-                participants: Math.max(feedPlan.participants.length, 1),
-                plusN: feedPlan.participantsLabel,
+                participants: feedPlan.participants.length,
+                plusN: feedPlan.participants.length > 3 ? `+${feedPlan.participants.length - 3}` : "",
                 joinLabel: "Присоединиться",
               }}
+              format={feedPlan.format}
+              duration={feedPlan.duration}
               onBack={() => setScreen(planEventOrigin)}
-              initiallyJoined={true}
+              initiallyJoined={false}
               onProfile={() => setScreen("profile")}
             />
           );
@@ -2866,7 +2963,7 @@ export default function App() {
             paragraphs={ev.paragraphs}
             meta={ev.meta}
             onBack={() => setScreen(planEventOrigin)}
-            initiallyJoined={true}
+            initiallyJoined={false}
             onProfile={() => setScreen("profile")}
           />
         ) : null;
@@ -2891,9 +2988,10 @@ export default function App() {
           {([
             { id: "home" as Screen, label: "Главная", Icon: Home },
             { id: "plans" as Screen, label: "Планы", Icon: Calendar },
+            { id: "create" as Screen, label: "Создать", Icon: Plus },
             { id: "profile" as Screen, label: "Профиль", Icon: User },
           ] as { id: Screen; label: string; Icon: React.FC<{ size: number; strokeWidth: number; color: string }> }[]).map(({ id, label, Icon }) => {
-            const isActive = screen === id || (id === "plans" && (screen === "detail" || screen === "planEvent" || screen === "create")) || (id === "home" && screen === "search");
+            const isActive = screen === id || (id === "plans" && (screen === "detail" || screen === "planEvent")) || (id === "home" && screen === "search");
             return (
               <button key={id} onClick={() => navigate(id)} className="flex flex-col items-center gap-0.5 px-4 py-1">
                 <Icon size={22} strokeWidth={isActive ? 2.2 : 1.7} color={isActive ? GREEN : "#9CA3AF"} />
