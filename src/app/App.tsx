@@ -2232,29 +2232,29 @@ function CommentsBlock({
   const canSend = comment.trim().length > 0;
 
   return (
-    <div className="rounded-xl border border-white/15 bg-white/15 px-4 pt-[18px] pb-6 text-white backdrop-blur-xl">
-      <h3 className="mb-3.5 flex items-center gap-2 text-[15px] font-semibold text-white">
-        Комментарии <span className="text-[15px] font-normal text-white/65">{comments.length}</span>
+    <div className="border-t border-border bg-surface px-4 pt-[18px] pb-6">
+      <h3 className="mb-3.5 flex items-center gap-2 text-[15px] font-semibold text-foreground">
+        Комментарии <span className="text-[15px] font-normal text-muted-foreground">{comments.length}</span>
       </h3>
       <div className="mb-[18px] flex items-center gap-2.5">
         <img src={UNSPLASH.userAvatar} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-        <div className="flex-1 rounded-full bg-white/15 px-3.5 py-[9px] flex items-center gap-2">
+        <div className="flex-1 bg-input rounded-full px-3.5 py-[9px] flex items-center gap-2">
           <input
             value={comment}
             onChange={e => setComment(e.target.value)}
             placeholder="Напишите комментарий..."
-            className="flex-1 bg-transparent text-[13px] text-white placeholder:text-white/55 outline-none"
+            className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground outline-none"
           />
           <button
             onClick={onSend}
             disabled={!canSend}
             className="w-7 h-7 rounded-full flex items-center justify-center transition-opacity"
             style={{
-              backgroundColor: canSend ? GREEN : "rgba(255,255,255,0.18)",
+              backgroundColor: canSend ? GREEN : "var(--muted)",
               opacity: canSend ? 1 : 0.7,
             }}
           >
-            <ChevronRight size={16} strokeWidth={2.3} color="#fff" />
+            <ChevronRight size={16} strokeWidth={2.3} color={canSend ? "#fff" : "var(--muted-foreground)"} />
           </button>
         </div>
       </div>
@@ -2265,17 +2265,17 @@ function CommentsBlock({
               <img src={item.avatarUrl} alt="" className="h-8 w-8 flex-shrink-0 rounded-full object-cover" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
-                  <p className="truncate text-[14px] font-medium text-white">{item.author}</p>
-                  <span className="text-[12px] text-white/60">{item.time}</span>
+                  <p className="truncate text-[14px] font-medium text-foreground">{item.author}</p>
+                  <span className="text-[12px] text-muted-foreground">{item.time}</span>
                 </div>
-                <p className="mt-0.5 text-[14px] leading-5 text-white/90">{item.text}</p>
+                <p className="mt-0.5 text-[14px] leading-5 text-foreground">{item.text}</p>
               </div>
             </div>
           ))}
         </div>
       ) : (
         <div className="flex justify-center py-8">
-          <p className="text-[13px] text-white/65">Пока нет комментариев</p>
+          <p className="text-[13px] text-muted-foreground">Пока нет комментариев</p>
         </div>
       )}
     </div>
@@ -2449,13 +2449,7 @@ function EventDetailScreen({
   };
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-black">
-      {coverSrc ? (
-        <img src={coverSrc} alt="" className="absolute inset-0 h-full w-full object-cover" />
-      ) : (
-        <div className="absolute inset-0" style={{ background: backgroundGradient ?? PLAN_TAG_GRADIENTS.other }} />
-      )}
-      <div className="absolute inset-0 bg-black/55" />
+    <div className="relative flex h-full flex-col bg-surface">
       {toast && (
         <div
           className="absolute left-1/2 z-30 -translate-x-1/2 rounded-full px-4 py-2 text-[14px] font-medium text-white shadow-lg"
@@ -2465,14 +2459,14 @@ function EventDetailScreen({
         </div>
       )}
 
-      <div className="relative z-10 flex h-14 flex-shrink-0 items-center px-4">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[15px] font-medium text-white">
+      <div className="flex h-14 flex-shrink-0 items-center px-4">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[15px] font-medium text-foreground">
           <ArrowLeft size={20} strokeWidth={2} />
           <span>Назад</span>
         </button>
       </div>
 
-      <div className="relative z-10 flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto">
         <div className="px-4">
           <div className="relative aspect-[4/5] overflow-hidden rounded-xl" style={{ background: backgroundGradient ?? PLAN_TAG_GRADIENTS.other }}>
             {coverSrc && (
@@ -2512,22 +2506,20 @@ function EventDetailScreen({
             </div>
           </div>
 
-          <div className="mt-4 rounded-xl border border-white/15 bg-white/15 p-3 backdrop-blur-xl">
-            <button
-              onClick={toggleJoin}
-              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border text-[15px]"
-              style={joined ? { backgroundColor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.22)", color: "#fff", fontWeight: 500 } : { backgroundColor: GREEN, borderColor: GREEN, color: "#fff", fontWeight: 600 }}
-            >
-              {joined ? <Check size={18} strokeWidth={2.4} color={GREEN} /> : <Plus size={18} strokeWidth={2.3} color="#fff" />}
-              {joined ? "Вы участвуете" : "Присоединиться"}
-            </button>
-          </div>
+          <button
+            onClick={toggleJoin}
+            className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl border text-[15px]"
+            style={joined ? { backgroundColor: "var(--surface)", borderColor: "var(--border)", color: "var(--foreground)", fontWeight: 500 } : { backgroundColor: GREEN, borderColor: GREEN, color: "#fff", fontWeight: 600 }}
+          >
+            {joined ? <Check size={18} strokeWidth={2.4} color={GREEN} /> : <Plus size={18} strokeWidth={2.3} color="#fff" />}
+            {joined ? "Вы участвуете" : "Присоединиться"}
+          </button>
 
-          <div className="mt-3 rounded-xl border border-white/15 bg-white/15 p-4 text-white backdrop-blur-xl">
+          <div className="mt-4 border-t border-border pt-4">
             <div className="mb-4 flex items-center justify-between gap-3">
               <button onClick={organizerAction} className="flex min-w-0 items-center gap-2.5 text-left active:opacity-80">
                 <img src={authorAvatarUrl} alt={authorName} className="h-9 w-9 flex-shrink-0 rounded-full object-cover" />
-                <span className="truncate text-[15px] font-medium text-white">{authorName}</span>
+                <span className="truncate text-[15px] font-medium text-foreground">{authorName}</span>
               </button>
               <button
                 onClick={() => setSubscribed((value) => !value)}
@@ -2538,7 +2530,7 @@ function EventDetailScreen({
               </button>
             </div>
 
-            <div className="mb-4 text-[14px] leading-[1.5] text-white/85">
+            <div className="mb-4 text-[14px] leading-[1.5] text-muted-foreground">
               <p
                 style={!descriptionExpanded && needsDescriptionClamp ? {
                   display: "-webkit-box",
@@ -2562,27 +2554,27 @@ function EventDetailScreen({
 
             <div className="space-y-3.5 pb-5">
               <div className="flex items-start gap-3">
-                <Calendar size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-white/65" />
+                <Calendar size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
                 <div>
-                  <p className="text-[14px] leading-5 text-white">{schedulePrimary}</p>
-                  {scheduleSecondary && <p className="text-[13px] leading-4 text-white/65">{scheduleSecondary}</p>}
+                  <p className="text-[14px] leading-5 text-foreground">{schedulePrimary}</p>
+                  {scheduleSecondary && <p className="text-[13px] leading-4 text-muted-foreground">{scheduleSecondary}</p>}
                 </div>
               </div>
 
               {meta.location && (
                 <div className="flex items-start gap-3">
-                  <MapPin size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-white/65" />
+                  <MapPin size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
                   <div>
-                    <p className="text-[14px] leading-5 text-white">{meta.location}</p>
-                    {meta.locationSub && <p className="text-[13px] leading-4 text-white/65">{meta.locationSub}</p>}
+                    <p className="text-[14px] leading-5 text-foreground">{meta.location}</p>
+                    {meta.locationSub && <p className="text-[13px] leading-4 text-muted-foreground">{meta.locationSub}</p>}
                   </div>
                 </div>
               )}
 
               <div className="flex items-start gap-3">
-                <Video size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-white/65" />
+                <Video size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
                 <div>
-                  <p className="text-[14px] leading-5 text-white">{formatLabel}</p>
+                  <p className="text-[14px] leading-5 text-foreground">{formatLabel}</p>
                 </div>
               </div>
 
@@ -2591,16 +2583,16 @@ function EventDetailScreen({
                 className="flex w-full items-center justify-between gap-3 text-left active:opacity-85"
               >
                 <div className="flex items-center gap-3">
-                  <Users size={20} strokeWidth={1.8} className="flex-shrink-0 text-white/65" />
-                  <span className="text-[14px] text-white">{meta.participants} участников</span>
+                  <Users size={20} strokeWidth={1.8} className="flex-shrink-0 text-muted-foreground" />
+                  <span className="text-[14px] text-foreground">{meta.participants} участников</span>
                 </div>
                 <div className="flex -space-x-2">
                   {participantAvatars.slice(0, 3).map((url, i) => (
-                    <img key={i} src={url} alt="" className="h-7 w-7 rounded-full border object-cover" style={{ borderColor: "rgba(255,255,255,0.18)" }} />
+                    <img key={i} src={url} alt="" className="h-7 w-7 rounded-full border object-cover" style={{ borderColor: "var(--surface)" }} />
                   ))}
                   {overflowLabel && (
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20">
-                      <span className="text-[10px] font-bold text-white">{overflowLabel}</span>
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted">
+                      <span className="text-[10px] font-bold text-foreground">{overflowLabel}</span>
                     </div>
                   )}
                 </div>
@@ -2609,9 +2601,7 @@ function EventDetailScreen({
           </div>
         </div>
 
-        <div className="px-4 pt-3 pb-6">
-          <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} />
-        </div>
+        <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} />
       </div>
 
       {sheet === "participants" && (
