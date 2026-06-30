@@ -18,13 +18,17 @@ import {
   ArrowLeft,
   ChevronDown,
   MoreVertical,
+  Image as ImageIcon,
+  Trash2,
   MapPin,
   Users,
   Video,
-  RefreshCw,
   MessageCircle,
   Check,
   ChevronRight,
+  Eye,
+  Link,
+  Lock,
   Share2,
   Construction,
 } from "lucide-react";
@@ -775,8 +779,48 @@ function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen, from?
 
 // ─── Screen: Create Plan ──────────────────────────────────────────────────────
 
-const ALL_DAYS = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"];
-const REPEAT_OPTIONS = ["Не задано", "Каждый день", "Каждый будний", "По выходным", "По СБ", "По ВС", "Еженедельно"];
+const ALL_DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+const WEEKDAY_VALUES = [1, 2, 3, 4, 5, 6, 7];
+const WEEKDAY_PRESETS = [
+  { label: "Каждый день", days: [1, 2, 3, 4, 5, 6, 7] },
+  { label: "Будни", days: [1, 2, 3, 4, 5] },
+  { label: "Выходные", days: [6, 7] },
+];
+
+const PART_OF_DAY_RANGES = {
+  morning: { label: "Утро", range: "06:00-10:00" },
+  noon: { label: "Обед", range: "12:00-15:00" },
+  evening: { label: "Вечер", range: "18:00-22:00" },
+} as const;
+
+type TimeMode = "exact" | "partOfDay";
+type PartOfDay = keyof typeof PART_OF_DAY_RANGES;
+type Visibility = "all" | "link" | "participants";
+type ScheduleEnd =
+  | { type: "never" }
+  | { type: "date"; date: string }
+  | { type: "weeks"; weeks: number };
+
+interface Schedule {
+  timeMode: TimeMode;
+  time: string | null;
+  partOfDay: PartOfDay | null;
+  weekdays: number[];
+  end: ScheduleEnd;
+}
+
+const VISIBILITY_OPTIONS: { value: Visibility; label: string }[] = [
+  { value: "all", label: "Все" },
+  { value: "link", label: "По ссылке" },
+  { value: "participants", label: "Только участники" },
+];
+
+const EVENT_PARTICIPANTS = [
+  { id: "maria", name: "Мария", avatar: P_AVATARS.w1 },
+  { id: "dmitry", name: "Дмитрий", avatar: P_AVATARS.m1 },
+  { id: "anna", name: "Анна", avatar: P_AVATARS.w2 },
+  { id: "gena", name: "Гена", avatar: P_AVATARS.m2 },
+];
 
 function CheckToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
@@ -833,29 +877,134 @@ function SectionCard({ children }: { children: React.ReactNode }) {
 }
 
 function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen) => void; backTo?: Screen }) {
-  const [selectedDays, setSelectedDays] = useState<number[]>([0, 1, 2, 3, 4]);
+  const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [coverImage, setCoverImage] = useState<string | null>(null);
+  const [timeMode, setTimeMode] = useState<TimeMode>("exact");
   const [startTime, setStartTime] = useState("08:00");
-  const [endTime, setEndTime] = useState("08:30");
-  const [previewImg, setPreviewImg] = useState<string | null>(null);
-  const [repeatIdx, setRepeatIdx] = useState(0);
-  const [showRepeat, setShowRepeat] = useState(false);
-  const [seats, setSeats] = useState(0);
-  const [meetingLinked, setMeetingLinked] = useState(false);
-  const [participants] = useState([P_AVATARS.w1, P_AVATARS.m1]);
-  const [repeatOn, setRepeatOn] = useState(false);
-  const [visibilityPublic, setVisibilityPublic] = useState(false);
+  const [partOfDay, setPartOfDay] = useState<PartOfDay | null>(null);
+  const [endType, setEndType] = useState<ScheduleEnd["type"]>("never");
+  const [endDate, setEndDate] = useState("");
+  const [endWeeks, setEndWeeks] = useState(4);
+  const [showEndPicker, setShowEndPicker] = useState(false);
+  const [scheduleExpanded, setScheduleExpanded] = useState(false);
+  const [scheduleError, setScheduleError] = useState("");
+  const [titleError, setTitleError] = useState("");
+  const [visibility, setVisibility] = useState<Visibility>("all");
+  const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
+  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
+  const [showParticipantsPicker, setShowParticipantsPicker] = useState(false);
+  const [videoEnabled, setVideoEnabled] = useState(false);
+  const [videoLink, setVideoLink] = useState("");
 
-  const toggleDay = (i: number) => {
+  const toggleDay = (day: number) => {
     setSelectedDays((prev) =>
-      prev.includes(i) ? prev.filter((d) => d !== i) : [...prev, i]
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b)
     );
+    setScheduleError("");
   };
 
   const handleImagePick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) setPreviewImg(URL.createObjectURL(file));
+    if (file) setCoverImage(URL.createObjectURL(file));
+    e.target.value = "";
+  };
+
+  const toggleParticipant = (id: string) => {
+    setSelectedParticipants((prev) =>
+      prev.includes(id) ? prev.filter((participantId) => participantId !== id) : [...prev, id]
+    );
+  };
+
+  const schedule: Schedule = {
+    timeMode,
+    time: timeMode === "exact" ? startTime || null : null,
+    partOfDay: timeMode === "partOfDay" ? partOfDay : null,
+    weekdays: selectedDays,
+    end:
+      endType === "date"
+        ? { type: "date", date: endDate ? new Date(`${endDate}T00:00:00`).toISOString() : "" }
+        : endType === "weeks"
+          ? { type: "weeks", weeks: endWeeks }
+          : { type: "never" },
+  };
+
+  const endLabel =
+    schedule.end.type === "date"
+      ? endDate || "Выберите дату"
+      : schedule.end.type === "weeks"
+        ? `Через ${endWeeks} нед.`
+        : "Бессрочно";
+
+  const timeSummary =
+    schedule.timeMode === "exact"
+      ? schedule.time || "Время"
+      : schedule.partOfDay
+        ? PART_OF_DAY_RANGES[schedule.partOfDay].label
+        : "Время суток";
+
+  const daysSummary =
+    selectedDays.length === 7
+      ? "Каждый день"
+      : selectedDays.length > 0
+        ? selectedDays.map((day) => ALL_DAYS[day - 1]).join(", ")
+        : "Дни";
+
+  const selectedParticipantItems = EVENT_PARTICIPANTS.filter((participant) =>
+    selectedParticipants.includes(participant.id)
+  );
+
+  const visibilityLabel = VISIBILITY_OPTIONS.find((item) => item.value === visibility)?.label ?? "Все";
+
+  const videoMeeting = {
+    enabled: videoEnabled,
+    link: videoEnabled ? videoLink : "",
+  };
+
+  const validateSchedule = () => {
+    if ((timeMode === "exact" && !startTime) || (timeMode === "partOfDay" && !partOfDay)) {
+      return "Выберите время";
+    }
+    if (selectedDays.length === 0) {
+      return "Выберите хотя бы один день недели";
+    }
+    if (endType === "date" && !endDate) {
+      return "Выберите дату окончания";
+    }
+    if (endType === "weeks" && (!endWeeks || endWeeks < 1)) {
+      return "Введите количество недель";
+    }
+    return "";
+  };
+
+  const handleCreate = () => {
+    const nextTitleError = title.trim() ? "" : "Введите название";
+    const nextScheduleError = validateSchedule();
+
+    setTitleError(nextTitleError);
+    setScheduleError(nextScheduleError);
+
+    if (nextScheduleError) {
+      setScheduleExpanded(true);
+    }
+
+    if (nextTitleError || nextScheduleError) {
+      return;
+    }
+
+    const event = {
+      title: title.trim(),
+      description: description.trim(),
+      coverImage,
+      visibility,
+      participants: selectedParticipants,
+      videoMeeting,
+      schedule,
+    };
+
+    console.log(event);
+    onNavigate(backTo);
   };
 
   return (
@@ -869,191 +1018,410 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
         >
           <X size={18} strokeWidth={2.2} />
         </button>
-        <span className="text-[17px] font-semibold">Создать план</span>
+        <span className="text-[17px] font-semibold">Создать событие</span>
         <div className="w-9" />
       </div>
 
       <div className="flex-1 overflow-y-auto py-4 space-y-3">
 
-        {/* Image section */}
+        {/* Cover */}
         <SectionCard>
-          <p className="text-[12px] font-semibold text-gray-400 uppercase tracking-wide mb-3">Изображение</p>
-          <div className="relative w-full h-40 rounded-xl overflow-hidden bg-gray-100">
-            {previewImg ? (
-              <img src={previewImg} alt="preview" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-2">
-                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                  <Plus size={20} strokeWidth={2} color="#9CA3AF" />
+          <div className="relative w-full h-44 rounded-xl overflow-hidden bg-gray-50">
+            {coverImage ? (
+              <>
+                <img src={coverImage} alt="Обложка события" className="w-full h-full object-cover" />
+                <div className="absolute right-2 bottom-2 flex gap-2">
+                  <label
+                    className="h-9 px-3 rounded-full bg-white flex items-center justify-center cursor-pointer text-[12px] font-semibold"
+                    style={{ color: GREEN, boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}
+                  >
+                    Заменить
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImagePick} />
+                  </label>
+                  <button
+                    onClick={() => setCoverImage(null)}
+                    className="w-9 h-9 rounded-full bg-white flex items-center justify-center"
+                    style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}
+                  >
+                    <Trash2 size={16} strokeWidth={2} color="#EF4444" />
+                  </button>
                 </div>
-                <p className="text-[13px] text-gray-400">Добавьте обложку плана</p>
-              </div>
+              </>
+            ) : (
+              <label className="w-full h-full border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer active:opacity-70 transition-opacity">
+                <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center">
+                  <ImageIcon size={20} strokeWidth={2} color={GREEN} />
+                </div>
+                <p className="text-[14px] font-semibold text-gray-500">Добавить обложку</p>
+                <input type="file" accept="image/*" className="hidden" onChange={handleImagePick} />
+              </label>
             )}
-            <label className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-white flex items-center justify-center cursor-pointer"
-              style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-              <input type="file" accept="image/*" className="hidden" onChange={handleImagePick} />
-            </label>
           </div>
         </SectionCard>
 
-        {/* Name */}
-        <SectionCard>
-          <label className="text-[12px] font-semibold text-gray-400 uppercase tracking-wide block mb-2">Название</label>
+        {/* Details */}
+        <div className="mx-4 rounded-2xl bg-white px-4 py-2 shadow-sm">
           <input
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Введите название плана"
-            className="w-full text-[15px] text-gray-800 placeholder-gray-300 outline-none"
+            onChange={(e) => {
+              setTitle(e.target.value);
+              setTitleError("");
+            }}
+            placeholder="Название"
+            className="w-full border-b border-gray-100 py-4 text-[22px] font-semibold text-gray-900 placeholder-gray-300 outline-none"
           />
-        </SectionCard>
-
-        {/* Description */}
-        <SectionCard>
-          <label className="text-[12px] font-semibold text-gray-400 uppercase tracking-wide block mb-2">Описание</label>
+          {titleError && <p className="pt-2 text-[12px] font-medium text-red-500">{titleError}</p>}
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Опишите план (необязательно)"
-            rows={3}
-            className="w-full text-[15px] text-gray-800 placeholder-gray-300 outline-none resize-none"
+            onInput={(e) => {
+              e.currentTarget.style.height = "auto";
+              e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+            }}
+            placeholder="Описание"
+            rows={1}
+            className="w-full min-h-14 border-b border-gray-100 py-4 text-[15px] leading-relaxed text-gray-700 placeholder-gray-300 outline-none resize-none overflow-hidden"
           />
-        </SectionCard>
-
-        {/* Time */}
-        <div className="flex gap-3 px-4">
-          <div className="flex-1 bg-white rounded-2xl px-4 py-4 shadow-sm">
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">НАЧАЛО</p>
-            <input
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              className="text-[24px] font-bold outline-none w-full"
-              style={{ color: GREEN }}
-            />
-          </div>
-          <div className="flex-1 bg-white rounded-2xl px-4 py-4 shadow-sm">
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">КОНЕЦ</p>
-            <input
-              type="time"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              className="text-[24px] font-bold outline-none w-full"
-              style={{ color: GREEN }}
-            />
-          </div>
         </div>
 
-        {/* Days */}
+        {/* Schedule */}
         <SectionCard>
-          <p className="text-[12px] font-semibold text-gray-400 uppercase tracking-wide mb-3">Дни недели</p>
-          <div className="flex justify-between">
-            {ALL_DAYS.map((day, i) => {
-              const active = selectedDays.includes(i);
-              return (
-                <button
-                  key={day}
-                  onClick={() => toggleDay(i)}
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-[12px] font-semibold border-2 transition-colors"
-                  style={
-                    active
-                      ? { backgroundColor: GREEN, borderColor: GREEN, color: "#fff" }
-                      : { backgroundColor: "#fff", borderColor: GREEN, color: GREEN }
-                  }
-                >
-                  {day}
-                </button>
-              );
-            })}
+          <button
+            onClick={() => setScheduleExpanded((expanded) => !expanded)}
+            className="w-full flex items-center justify-between gap-3 text-left active:opacity-70 transition-opacity"
+          >
+            <div className="min-w-0">
+              <p className="text-[12px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Расписание</p>
+              <div className="flex flex-wrap gap-2">
+                {[timeSummary, daysSummary, endLabel].map((item) => (
+                  <span
+                    key={item}
+                    className="max-w-full rounded-full px-3 py-1 text-[12px] font-semibold truncate"
+                    style={{ backgroundColor: GREEN_LIGHT, color: GREEN }}
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <ChevronDown
+              size={18}
+              strokeWidth={2}
+              color="#9CA3AF"
+              className={`flex-shrink-0 transition-transform ${scheduleExpanded ? "rotate-180" : ""}`}
+            />
+          </button>
+
+          {scheduleExpanded && (
+          <div className="space-y-5 pt-5">
+            <div>
+              <p className="text-[12px] font-semibold text-gray-400 uppercase tracking-wide mb-3">Время</p>
+              <div className="grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1 mb-4">
+                {[
+                  { value: "exact" as const, label: "Точное время" },
+                  { value: "partOfDay" as const, label: "Время суток" },
+                ].map((mode) => {
+                  const active = timeMode === mode.value;
+                  return (
+                    <button
+                      key={mode.value}
+                      onClick={() => {
+                        setTimeMode(mode.value);
+                        setScheduleError("");
+                      }}
+                      className="h-10 rounded-lg text-[13px] font-semibold transition-colors"
+                      style={active ? { backgroundColor: GREEN, color: "#fff" } : { color: "#6B7280" }}
+                    >
+                      {mode.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {timeMode === "exact" ? (
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => {
+                    setStartTime(e.target.value);
+                    setScheduleError("");
+                  }}
+                  className="w-full rounded-xl bg-gray-50 px-4 py-3 text-[24px] font-bold outline-none"
+                  style={{ color: GREEN }}
+                />
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {Object.entries(PART_OF_DAY_RANGES).map(([key, item]) => {
+                    const active = partOfDay === key;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => {
+                          setPartOfDay(key as PartOfDay);
+                          setScheduleError("");
+                        }}
+                        className="rounded-xl border px-2 py-3 text-left transition-colors"
+                        style={
+                          active
+                            ? { backgroundColor: GREEN_LIGHT, borderColor: GREEN }
+                            : { backgroundColor: "#F9FAFB", borderColor: "#E5E7EB" }
+                        }
+                      >
+                        <span className="block text-[13px] font-semibold text-gray-800">{item.label}</span>
+                        <span className="block text-[11px] text-gray-400 mt-1 leading-tight">{item.range}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <p className="text-[12px] font-semibold text-gray-400 uppercase tracking-wide mb-3">Дни недели</p>
+              <div className="flex gap-2 overflow-x-auto pb-1 mb-3">
+                {WEEKDAY_PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => {
+                      setSelectedDays(preset.days);
+                      setScheduleError("");
+                    }}
+                    className="flex-shrink-0 rounded-full border px-3 py-2 text-[12px] font-semibold transition-colors"
+                    style={{ borderColor: GREEN, color: GREEN, backgroundColor: "#fff" }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex justify-between">
+                {ALL_DAYS.map((day, i) => {
+                  const value = WEEKDAY_VALUES[i];
+                  const active = selectedDays.includes(value);
+                  return (
+                    <button
+                      key={day}
+                      onClick={() => toggleDay(value)}
+                      className="w-10 h-10 rounded-full flex items-center justify-center text-[12px] font-semibold border-2 transition-colors"
+                      style={
+                        active
+                          ? { backgroundColor: GREEN, borderColor: GREEN, color: "#fff" }
+                          : { backgroundColor: "#fff", borderColor: GREEN, color: GREEN }
+                      }
+                    >
+                      {day}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[12px] font-semibold text-gray-400 uppercase tracking-wide mb-3">Окончание</p>
+              <button
+                onClick={() => setShowEndPicker((show) => !show)}
+                className="w-full rounded-xl bg-gray-50 px-4 py-3 flex items-center justify-between text-left active:opacity-70 transition-opacity"
+              >
+                <span className="text-[15px] font-medium text-gray-800">{endLabel}</span>
+                <ChevronDown size={18} strokeWidth={2} color="#9CA3AF" />
+              </button>
+
+              {showEndPicker && (
+                <div className="mt-3 space-y-2">
+                  {[
+                    { type: "never" as const, label: "Бессрочно" },
+                    { type: "date" as const, label: "До даты" },
+                    { type: "weeks" as const, label: "Через N недель" },
+                  ].map((item) => {
+                    const active = endType === item.type;
+                    return (
+                      <button
+                        key={item.type}
+                        onClick={() => {
+                          setEndType(item.type);
+                          setScheduleError("");
+                        }}
+                        className="w-full rounded-xl border px-4 py-3 flex items-center justify-between text-left transition-colors"
+                        style={
+                          active
+                            ? { backgroundColor: GREEN_LIGHT, borderColor: GREEN }
+                            : { backgroundColor: "#fff", borderColor: "#E5E7EB" }
+                        }
+                      >
+                        <span className="text-[14px] font-medium text-gray-800">{item.label}</span>
+                        {active && <Check size={16} strokeWidth={2.5} color={GREEN} />}
+                      </button>
+                    );
+                  })}
+
+                  {endType === "date" && (
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => {
+                        setEndDate(e.target.value);
+                        setScheduleError("");
+                      }}
+                      className="w-full rounded-xl bg-gray-50 px-4 py-3 text-[15px] font-medium text-gray-800 outline-none"
+                    />
+                  )}
+
+                  {endType === "weeks" && (
+                    <input
+                      type="number"
+                      min={1}
+                      value={endWeeks}
+                      onChange={(e) => {
+                        setEndWeeks(Number(e.target.value));
+                        setScheduleError("");
+                      }}
+                      className="w-full rounded-xl bg-gray-50 px-4 py-3 text-[15px] font-medium text-gray-800 outline-none"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+
+            {scheduleError && (
+              <p className="text-[12px] font-medium text-red-500">{scheduleError}</p>
+            )}
           </div>
+          )}
+
+          {!scheduleExpanded && scheduleError && (
+            <p className="pt-3 text-[12px] font-medium text-red-500">{scheduleError}</p>
+          )}
         </SectionCard>
 
         {/* Options — вертикальный список */}
         <div className="mx-4 space-y-2">
 
-          {/* Повторение */}
-          <OptionRow
-            icon={<RefreshCw size={17} strokeWidth={1.8} color={GREEN} />}
-            label="Повторение"
-            subtitle={repeatOn ? "Включено" : undefined}
-            onClick={() => setRepeatOn(!repeatOn)}
-            control={
-              repeatOn
-                ? <span className="text-[12px] font-semibold" style={{ color: GREEN }}>Вкл</span>
-                : <PlusButton />
-            }
-          />
-
           {/* Видимость */}
-          <OptionRow
-            icon={
-              visibilityPublic
-                ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            }
-            label="Видимость"
-            subtitle={visibilityPublic ? "Появится в ленте на Главной" : "Виден только в ваших Планах"}
-            onClick={() => setVisibilityPublic(!visibilityPublic)}
-            control={
-              visibilityPublic
-                ? <span className="text-[12px] font-semibold" style={{ color: GREEN }}>Публичный</span>
-                : <PlusButton />
-            }
-          />
+          <div className="space-y-2">
+            <OptionRow
+              icon={
+                visibility === "all"
+                  ? <Eye size={17} strokeWidth={1.8} color={GREEN} />
+                  : visibility === "link"
+                    ? <Link size={17} strokeWidth={1.8} color={GREEN} />
+                    : <Lock size={17} strokeWidth={1.8} color={GREEN} />
+              }
+              label="Видимость"
+              onClick={() => setShowVisibilityPicker((show) => !show)}
+              control={
+                <span className="text-[12px] font-semibold" style={{ color: GREEN }}>
+                  {visibilityLabel}
+                </span>
+              }
+            />
+
+            {showVisibilityPicker && (
+              <div className="rounded-2xl bg-white p-2 shadow-sm space-y-1">
+                {VISIBILITY_OPTIONS.map((option) => {
+                  const active = visibility === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      onClick={() => {
+                        setVisibility(option.value);
+                        setShowVisibilityPicker(false);
+                      }}
+                      className="w-full rounded-xl px-3 py-3 flex items-center justify-between text-left"
+                      style={active ? { backgroundColor: GREEN_LIGHT } : undefined}
+                    >
+                      <span className="text-[14px] font-medium text-gray-800">{option.label}</span>
+                      {active && <Check size={16} strokeWidth={2.5} color={GREEN} />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Участники */}
-          <OptionRow
-            icon={<Users size={17} strokeWidth={1.8} color={GREEN} />}
-            label="Участники"
-            onClick={() => {}}
-            control={
-              <div className="flex -space-x-2">
-                {participants.map((url, i) => (
-                  <img key={i} src={url} alt="" className="w-7 h-7 rounded-full border-2 border-white object-cover" />
-                ))}
-                <div className="w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: GREEN }}>+</div>
-              </div>
-            }
-          />
-
-          {/* Количество мест */}
-          <OptionRow
-            icon={<User size={17} strokeWidth={1.8} color={GREEN} />}
-            label="Количество мест"
-            onClick={() => setSeats(s => s + 1)}
-            control={
-              seats > 0
-                ? (
-                  <div className="flex items-center gap-2">
-                    <button onClick={e => { e.stopPropagation(); setSeats(s => Math.max(0, s - 1)); }}
-                      className="w-6 h-6 rounded-full border-2 flex items-center justify-center font-bold"
-                      style={{ borderColor: GREEN, color: GREEN }}>−</button>
-                    <span className="text-[14px] font-bold w-4 text-center" style={{ color: GREEN }}>{seats}</span>
-                    <button onClick={e => { e.stopPropagation(); setSeats(s => s + 1); }}
-                      className="w-6 h-6 rounded-full border-2 flex items-center justify-center font-bold"
-                      style={{ borderColor: GREEN, color: GREEN }}>+</button>
+          <div className="space-y-2">
+            <OptionRow
+              icon={<Users size={17} strokeWidth={1.8} color={GREEN} />}
+              label="Участники"
+              onClick={() => setShowParticipantsPicker((show) => !show)}
+              control={
+                selectedParticipantItems.length > 0 ? (
+                  <div className="flex -space-x-2">
+                    {selectedParticipantItems.slice(0, 4).map((participant) => (
+                      <img
+                        key={participant.id}
+                        src={participant.avatar}
+                        alt={participant.name}
+                        className="w-7 h-7 rounded-full border-2 border-white object-cover"
+                      />
+                    ))}
                   </div>
+                ) : (
+                  <PlusButton />
                 )
-                : <PlusButton />
-            }
-          />
+              }
+            />
+
+            {showParticipantsPicker && (
+              <div className="rounded-2xl bg-white p-2 shadow-sm space-y-1">
+                {EVENT_PARTICIPANTS.map((participant) => {
+                  const active = selectedParticipants.includes(participant.id);
+                  return (
+                    <button
+                      key={participant.id}
+                      onClick={() => toggleParticipant(participant.id)}
+                      className="w-full rounded-xl px-3 py-2.5 flex items-center gap-3 text-left"
+                      style={active ? { backgroundColor: GREEN_LIGHT } : undefined}
+                    >
+                      <img src={participant.avatar} alt={participant.name} className="w-8 h-8 rounded-full object-cover" />
+                      <span className="flex-1 text-[14px] font-medium text-gray-800">{participant.name}</span>
+                      {active && <Check size={16} strokeWidth={2.5} color={GREEN} />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Видеовстреча */}
-          <OptionRow
-            icon={<Video size={17} strokeWidth={1.8} color={GREEN} />}
-            label="Видеовстреча"
-            onClick={() => setMeetingLinked(!meetingLinked)}
-            control={
-              meetingLinked
-                ? <span className="flex items-center gap-1 text-[12px] font-semibold" style={{ color: GREEN }}>
-                    <Check size={13} strokeWidth={2.5} color={GREEN} />Ссылка создана
-                  </span>
-                : <PlusButton />
-            }
-          />
+          <div className="space-y-2">
+            <OptionRow
+              icon={<Video size={17} strokeWidth={1.8} color={GREEN} />}
+              label="Видеовстреча"
+              subtitle={videoEnabled ? "Ссылка прикреплена" : undefined}
+              onClick={() => {
+                setVideoEnabled((enabled) => {
+                  const nextEnabled = !enabled;
+                  if (nextEnabled && !videoLink) {
+                    setVideoLink("https://meet.wellwellwell.local/event");
+                  }
+                  return nextEnabled;
+                });
+              }}
+              control={
+                <div
+                  className="w-11 h-6 rounded-full p-0.5 transition-colors"
+                  style={{ backgroundColor: videoEnabled ? GREEN : "#E5E7EB" }}
+                >
+                  <div
+                    className="w-5 h-5 rounded-full bg-white transition-transform"
+                    style={{ transform: videoEnabled ? "translateX(20px)" : "translateX(0)" }}
+                  />
+                </div>
+              }
+            />
+
+            {videoEnabled && (
+              <div className="rounded-2xl bg-white px-4 py-3 shadow-sm">
+                <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide block mb-2">Ссылка</label>
+                <input
+                  value={videoLink}
+                  onChange={(e) => setVideoLink(e.target.value)}
+                  placeholder="Вставьте ссылку на встречу"
+                  className="w-full text-[14px] text-gray-800 placeholder-gray-300 outline-none"
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="h-2" />
@@ -1062,11 +1430,11 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
       {/* Submit — fixed */}
       <div className="flex-shrink-0 px-4 pb-6 pt-3 bg-white border-t border-gray-100">
         <button
-          onClick={() => onNavigate(backTo)}
+          onClick={handleCreate}
           className="w-full py-4 rounded-2xl text-white text-[16px] font-semibold"
           style={{ backgroundColor: GREEN }}
         >
-          Создать план
+          Создать событие
         </button>
       </div>
     </div>
