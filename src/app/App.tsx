@@ -20,6 +20,7 @@ import {
   MoreVertical,
   Image as ImageIcon,
   Trash2,
+  Copy,
   MapPin,
   Users,
   Video,
@@ -27,7 +28,6 @@ import {
   Check,
   ChevronRight,
   Eye,
-  Link,
   Lock,
   Share2,
   Construction,
@@ -781,12 +781,6 @@ function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen, from?
 
 const ALL_DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const WEEKDAY_VALUES = [1, 2, 3, 4, 5, 6, 7];
-const WEEKDAY_PRESETS = [
-  { label: "Каждый день", days: [1, 2, 3, 4, 5, 6, 7] },
-  { label: "Будни", days: [1, 2, 3, 4, 5] },
-  { label: "Выходные", days: [6, 7] },
-];
-
 const PART_OF_DAY_RANGES = {
   morning: { label: "Утро", range: "06:00-10:00" },
   noon: { label: "Обед", range: "12:00-15:00" },
@@ -795,7 +789,7 @@ const PART_OF_DAY_RANGES = {
 
 type TimeMode = "exact" | "partOfDay";
 type PartOfDay = keyof typeof PART_OF_DAY_RANGES;
-type Visibility = "all" | "link" | "participants";
+type Visibility = "all" | "private";
 type ScheduleEnd =
   | { type: "never" }
   | { type: "date"; date: string }
@@ -811,8 +805,7 @@ interface Schedule {
 
 const VISIBILITY_OPTIONS: { value: Visibility; label: string }[] = [
   { value: "all", label: "Все" },
-  { value: "link", label: "По ссылке" },
-  { value: "participants", label: "Только участники" },
+  { value: "private", label: "Только я" },
 ];
 
 const EVENT_PARTICIPANTS = [
@@ -883,6 +876,7 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
   const [coverImage, setCoverImage] = useState<string | null>(null);
   const [timeMode, setTimeMode] = useState<TimeMode>("exact");
   const [startTime, setStartTime] = useState("08:00");
+  const [endTime, setEndTime] = useState("08:30");
   const [partOfDay, setPartOfDay] = useState<PartOfDay | null>(null);
   const [endType, setEndType] = useState<ScheduleEnd["type"]>("never");
   const [endDate, setEndDate] = useState("");
@@ -892,11 +886,11 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
   const [scheduleError, setScheduleError] = useState("");
   const [titleError, setTitleError] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("all");
-  const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [showParticipantsPicker, setShowParticipantsPicker] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(false);
   const [videoLink, setVideoLink] = useState("");
+  const [videoCopied, setVideoCopied] = useState(false);
 
   const toggleDay = (day: number) => {
     setSelectedDays((prev) =>
@@ -919,7 +913,7 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
 
   const schedule: Schedule = {
     timeMode,
-    time: timeMode === "exact" ? startTime || null : null,
+    time: timeMode === "exact" && startTime && endTime ? `${startTime}-${endTime}` : null,
     partOfDay: timeMode === "partOfDay" ? partOfDay : null,
     weekdays: selectedDays,
     end:
@@ -937,25 +931,9 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
         ? `Через ${endWeeks} нед.`
         : "Бессрочно";
 
-  const timeSummary =
-    schedule.timeMode === "exact"
-      ? schedule.time || "Время"
-      : schedule.partOfDay
-        ? PART_OF_DAY_RANGES[schedule.partOfDay].label
-        : "Время суток";
-
-  const daysSummary =
-    selectedDays.length === 7
-      ? "Каждый день"
-      : selectedDays.length > 0
-        ? selectedDays.map((day) => ALL_DAYS[day - 1]).join(", ")
-        : "Дни";
-
   const selectedParticipantItems = EVENT_PARTICIPANTS.filter((participant) =>
     selectedParticipants.includes(participant.id)
   );
-
-  const visibilityLabel = VISIBILITY_OPTIONS.find((item) => item.value === visibility)?.label ?? "Все";
 
   const videoMeeting = {
     enabled: videoEnabled,
@@ -963,7 +941,7 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
   };
 
   const validateSchedule = () => {
-    if ((timeMode === "exact" && !startTime) || (timeMode === "partOfDay" && !partOfDay)) {
+    if ((timeMode === "exact" && (!startTime || !endTime)) || (timeMode === "partOfDay" && !partOfDay)) {
       return "Выберите время";
     }
     if (selectedDays.length === 0) {
@@ -1025,39 +1003,39 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
       <div className="flex-1 overflow-y-auto py-4 space-y-3">
 
         {/* Cover */}
-        <SectionCard>
-          <div className="relative w-full h-44 rounded-xl overflow-hidden bg-gray-50">
+        <div className="mx-4 rounded-2xl bg-white px-3 py-1 shadow-sm">
+          <div className="min-h-12 rounded-xl bg-gray-50">
             {coverImage ? (
-              <>
-                <img src={coverImage} alt="Обложка события" className="w-full h-full object-cover" />
-                <div className="absolute right-2 bottom-2 flex gap-2">
-                  <label
-                    className="h-9 px-3 rounded-full bg-white flex items-center justify-center cursor-pointer text-[12px] font-semibold"
-                    style={{ color: GREEN, boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}
-                  >
-                    Заменить
-                    <input type="file" accept="image/*" className="hidden" onChange={handleImagePick} />
-                  </label>
-                  <button
-                    onClick={() => setCoverImage(null)}
-                    className="w-9 h-9 rounded-full bg-white flex items-center justify-center"
-                    style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}
-                  >
-                    <Trash2 size={16} strokeWidth={2} color="#EF4444" />
-                  </button>
+              <div className="h-12 flex items-center gap-3">
+                <img src={coverImage} alt="Обложка события" className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[14px] font-semibold text-gray-800 truncate">Обложка добавлена</p>
                 </div>
-              </>
+                <label
+                  className="h-8 px-3 rounded-full bg-white flex items-center justify-center cursor-pointer text-[12px] font-semibold flex-shrink-0"
+                  style={{ color: GREEN }}
+                >
+                  Заменить
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImagePick} />
+                </label>
+                <button
+                  onClick={() => setCoverImage(null)}
+                  className="w-8 h-8 rounded-full bg-white flex items-center justify-center flex-shrink-0"
+                >
+                  <Trash2 size={15} strokeWidth={2} color="#EF4444" />
+                </button>
+              </div>
             ) : (
-              <label className="w-full h-full border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer active:opacity-70 transition-opacity">
-                <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center">
-                  <ImageIcon size={20} strokeWidth={2} color={GREEN} />
+              <label className="h-12 border-2 border-dashed border-gray-300 rounded-xl px-4 flex items-center gap-3 cursor-pointer active:opacity-70 transition-opacity">
+                <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center flex-shrink-0">
+                  <ImageIcon size={18} strokeWidth={2} color={GREEN} />
                 </div>
                 <p className="text-[14px] font-semibold text-gray-500">Добавить обложку</p>
                 <input type="file" accept="image/*" className="hidden" onChange={handleImagePick} />
               </label>
             )}
           </div>
-        </SectionCard>
+        </div>
 
         {/* Details */}
         <div className="mx-4 rounded-2xl bg-white px-4 py-2 shadow-sm">
@@ -1090,20 +1068,7 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
             onClick={() => setScheduleExpanded((expanded) => !expanded)}
             className="w-full flex items-center justify-between gap-3 text-left active:opacity-70 transition-opacity"
           >
-            <div className="min-w-0">
-              <p className="text-[12px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Расписание</p>
-              <div className="flex flex-wrap gap-2">
-                {[timeSummary, daysSummary, endLabel].map((item) => (
-                  <span
-                    key={item}
-                    className="max-w-full rounded-full px-3 py-1 text-[12px] font-semibold truncate"
-                    style={{ backgroundColor: GREEN_LIGHT, color: GREEN }}
-                  >
-                    {item}
-                  </span>
-                ))}
-              </div>
-            </div>
+            <p className="text-[15px] font-semibold text-gray-800">Расписание</p>
             <ChevronDown
               size={18}
               strokeWidth={2}
@@ -1139,16 +1104,34 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
               </div>
 
               {timeMode === "exact" ? (
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => {
-                    setStartTime(e.target.value);
-                    setScheduleError("");
-                  }}
-                  className="w-full rounded-xl bg-gray-50 px-4 py-3 text-[24px] font-bold outline-none"
-                  style={{ color: GREEN }}
-                />
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="rounded-xl bg-gray-50 px-4 py-3">
+                    <span className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">с</span>
+                    <input
+                      type="time"
+                      value={startTime}
+                      onChange={(e) => {
+                        setStartTime(e.target.value);
+                        setScheduleError("");
+                      }}
+                      className="w-full bg-transparent text-[20px] font-bold outline-none"
+                      style={{ color: GREEN }}
+                    />
+                  </label>
+                  <label className="rounded-xl bg-gray-50 px-4 py-3">
+                    <span className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">по</span>
+                    <input
+                      type="time"
+                      value={endTime}
+                      onChange={(e) => {
+                        setEndTime(e.target.value);
+                        setScheduleError("");
+                      }}
+                      className="w-full bg-transparent text-[20px] font-bold outline-none"
+                      style={{ color: GREEN }}
+                    />
+                  </label>
+                </div>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
                   {Object.entries(PART_OF_DAY_RANGES).map(([key, item]) => {
@@ -1160,15 +1143,14 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
                           setPartOfDay(key as PartOfDay);
                           setScheduleError("");
                         }}
-                        className="rounded-xl border px-2 py-3 text-left transition-colors"
+                        className="h-10 rounded-full border px-3 text-[13px] font-semibold transition-colors"
                         style={
                           active
-                            ? { backgroundColor: GREEN_LIGHT, borderColor: GREEN }
-                            : { backgroundColor: "#F9FAFB", borderColor: "#E5E7EB" }
+                            ? { backgroundColor: GREEN, borderColor: GREEN, color: "#fff" }
+                            : { backgroundColor: "#fff", borderColor: "#D1D5DB", color: GREEN }
                         }
                       >
-                        <span className="block text-[13px] font-semibold text-gray-800">{item.label}</span>
-                        <span className="block text-[11px] text-gray-400 mt-1 leading-tight">{item.range}</span>
+                        {item.label}
                       </button>
                     );
                   })}
@@ -1178,21 +1160,6 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
 
             <div>
               <p className="text-[12px] font-semibold text-gray-400 uppercase tracking-wide mb-3">Дни недели</p>
-              <div className="flex gap-2 overflow-x-auto pb-1 mb-3">
-                {WEEKDAY_PRESETS.map((preset) => (
-                  <button
-                    key={preset.label}
-                    onClick={() => {
-                      setSelectedDays(preset.days);
-                      setScheduleError("");
-                    }}
-                    className="flex-shrink-0 rounded-full border px-3 py-2 text-[12px] font-semibold transition-colors"
-                    style={{ borderColor: GREEN, color: GREEN, backgroundColor: "#fff" }}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
               <div className="flex justify-between">
                 {ALL_DAYS.map((day, i) => {
                   const value = WEEKDAY_VALUES[i];
@@ -1296,45 +1263,28 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
         <div className="mx-4 space-y-2">
 
           {/* Видимость */}
-          <div className="space-y-2">
-            <OptionRow
-              icon={
-                visibility === "all"
-                  ? <Eye size={17} strokeWidth={1.8} color={GREEN} />
-                  : visibility === "link"
-                    ? <Link size={17} strokeWidth={1.8} color={GREEN} />
-                    : <Lock size={17} strokeWidth={1.8} color={GREEN} />
-              }
-              label="Видимость"
-              onClick={() => setShowVisibilityPicker((show) => !show)}
-              control={
-                <span className="text-[12px] font-semibold" style={{ color: GREEN }}>
-                  {visibilityLabel}
-                </span>
-              }
-            />
-
-            {showVisibilityPicker && (
-              <div className="rounded-2xl bg-white p-2 shadow-sm space-y-1">
-                {VISIBILITY_OPTIONS.map((option) => {
-                  const active = visibility === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      onClick={() => {
-                        setVisibility(option.value);
-                        setShowVisibilityPicker(false);
-                      }}
-                      className="w-full rounded-xl px-3 py-3 flex items-center justify-between text-left"
-                      style={active ? { backgroundColor: GREEN_LIGHT } : undefined}
-                    >
-                      <span className="text-[14px] font-medium text-gray-800">{option.label}</span>
-                      {active && <Check size={16} strokeWidth={2.5} color={GREEN} />}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+          <div className="w-full bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: GREEN + "18" }}>
+              {visibility === "all"
+                ? <Eye size={17} strokeWidth={1.8} color={GREEN} />
+                : <Lock size={17} strokeWidth={1.8} color={GREEN} />}
+            </div>
+            <p className="flex-1 text-[14px] font-medium text-gray-800">Видимость</p>
+            <div className="grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1">
+              {VISIBILITY_OPTIONS.map((option) => {
+                const active = visibility === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    onClick={() => setVisibility(option.value)}
+                    className="h-8 rounded-lg px-3 text-[12px] font-semibold whitespace-nowrap transition-colors"
+                    style={active ? { backgroundColor: GREEN, color: "#fff" } : { color: "#6B7280" }}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Участники */}
@@ -1412,13 +1362,22 @@ function CreateScreen({ onNavigate, backTo = "plans" }: { onNavigate: (s: Screen
 
             {videoEnabled && (
               <div className="rounded-2xl bg-white px-4 py-3 shadow-sm">
-                <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide block mb-2">Ссылка</label>
-                <input
-                  value={videoLink}
-                  onChange={(e) => setVideoLink(e.target.value)}
-                  placeholder="Вставьте ссылку на встречу"
-                  className="w-full text-[14px] text-gray-800 placeholder-gray-300 outline-none"
-                />
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Ссылка</p>
+                <div className="flex items-center gap-2">
+                  <span className="flex-1 min-w-0 truncate text-[14px] text-gray-800">{videoLink}</span>
+                  <button
+                    onClick={async () => {
+                      await navigator.clipboard?.writeText(videoLink);
+                      setVideoCopied(true);
+                      window.setTimeout(() => setVideoCopied(false), 1200);
+                    }}
+                    className="h-8 rounded-full px-3 flex items-center gap-1.5 text-[12px] font-semibold text-white flex-shrink-0"
+                    style={{ backgroundColor: GREEN }}
+                  >
+                    <Copy size={13} strokeWidth={2.2} />
+                    {videoCopied ? "Скопировано" : "Копировать"}
+                  </button>
+                </div>
               </div>
             )}
           </div>
