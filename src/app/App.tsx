@@ -569,44 +569,34 @@ function HomeSheet({
   );
 }
 
-function FeedAvatarStack({ avatars, label }: { avatars: string[]; label: string }) {
-  const visible = avatars.slice(0, 6);
-  const primary = visible[0];
-  const orbit = visible.slice(1);
-  const positions = [
-    "left-[24px] top-[34px]",
-    "left-[58px] top-[4px]",
-    "right-[58px] top-[8px]",
-    "right-[24px] top-[36px]",
-    "right-[70px] bottom-[0px]",
-  ];
+function ParticipantAvatarLine({ avatars }: { avatars: string[] }) {
+  const visible = avatars.slice(0, 5);
 
   return (
+    <div className="flex -space-x-2">
+      {visible.length > 0 ? (
+        visible.map((url, index) => (
+          <img
+            key={`${url}-${index}`}
+            src={url}
+            alt=""
+            className="h-7 w-7 rounded-full border-2 border-white object-cover shadow-[0_4px_10px_rgba(0,0,0,0.22)]"
+          />
+        ))
+      ) : (
+        <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-white/25">
+          <Users size={14} strokeWidth={1.8} color="#fff" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FeedAvatarStack({ avatars, label }: { avatars: string[]; label: string }) {
+  return (
     <div className="flex flex-col items-center">
-      <div className="relative h-[86px] w-[220px]">
-        {primary ? (
-          <>
-            <img
-              src={primary}
-              alt=""
-              className="absolute left-1/2 top-1/2 h-[68px] w-[68px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/85 object-cover shadow-[0_8px_22px_rgba(0,0,0,0.32)]"
-            />
-            {orbit.map((url, index) => (
-              <img
-                key={`${url}-${index}`}
-                src={url}
-                alt=""
-                className={`absolute h-[34px] w-[34px] rounded-full border-2 border-white/85 object-cover shadow-[0_6px_14px_rgba(0,0,0,0.3)] ${positions[index] ?? "left-0 top-0"}`}
-              />
-            ))}
-          </>
-        ) : (
-          <div className="absolute left-1/2 top-1/2 flex h-[68px] w-[68px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white/85 bg-white/25">
-            <Users size={17} strokeWidth={1.8} color="#fff" />
-          </div>
-        )}
-      </div>
-      <span className="mt-1 text-[30px] font-bold leading-9 text-white/75">{label}</span>
+      <ParticipantAvatarLine avatars={avatars} />
+      <span className="mt-1.5 text-[13px] font-medium leading-4 text-white/85">{label}</span>
     </div>
   );
 }
@@ -638,17 +628,20 @@ function FeedEventCard({
             onOpen();
           }
         }}
-        className="relative w-full aspect-[4/5] overflow-hidden rounded-[20px] text-left active:opacity-95"
+        className="relative w-full aspect-[4/5] overflow-hidden rounded-[28px] text-left active:opacity-95"
         style={{ background: plan.gradient ?? "#D1D5DB" }}
       >
         {plan.coverUrl && (
           <img src={plan.coverUrl} alt={plan.title} className="absolute inset-0 h-full w-full object-cover" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/10 to-black/75" />
+        <div
+          className="absolute inset-0"
+          style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.20) 0%, rgba(0,0,0,0.05) 42%, rgba(0,0,0,0.82) 100%)" }}
+        />
 
-        <div className="absolute left-4 right-4 top-4 flex items-start justify-between gap-3">
+        <div className="absolute left-5 right-5 top-5 flex items-start justify-between gap-3">
           <div className="flex flex-wrap gap-2">
-            <span className="inline-flex items-center rounded-full bg-black/50 px-3.5 py-1.5 text-[13px] font-medium text-white">
+            <span className="inline-flex items-center rounded-full bg-black/45 px-3 py-1.5 text-[13px] font-medium leading-4 text-white">
               {PLAN_TAG_LABELS[tag]}
             </span>
           </div>
@@ -657,16 +650,16 @@ function FeedEventCard({
               e.stopPropagation();
               onShare();
             }}
-            className="w-9 h-9 rounded-full bg-black/50 flex items-center justify-center flex-shrink-0"
+            className="flex h-[42px] w-[42px] flex-shrink-0 items-center justify-center rounded-full bg-black/45"
           >
             <Share2 size={18} strokeWidth={2} color="#fff" />
           </button>
         </div>
 
-        <div className="absolute bottom-4 left-4 right-4 flex flex-col items-center text-center">
+        <div className="absolute bottom-8 left-5 right-5 flex flex-col items-center text-center">
           <FeedAvatarStack avatars={plan.participants} label={plan.participantsLabel} />
           <h2
-            className="mt-3 text-[30px] font-bold leading-[1.1] text-white"
+            className="mt-3 max-w-[300px] text-[30px] font-bold leading-9 text-white"
             style={{
               display: "-webkit-box",
               WebkitLineClamp: 2,
@@ -676,19 +669,19 @@ function FeedEventCard({
           >
             {plan.isChallenge ? `Челлендж: ${plan.title}` : plan.title}
           </h2>
-          <p className="mt-2 max-w-full truncate text-[15px] text-white/85">{plan.timeDate}</p>
+          <p className="mt-2 max-w-full truncate text-[16px] leading-6 text-white/75">{plan.timeDate}</p>
           {plan.address && (
-            <p className="mt-1 max-w-full truncate text-[14px] text-white/75">{plan.address}</p>
+            <p className="mt-0.5 max-w-full truncate text-[14px] text-white/65">{plan.address}</p>
           )}
         </div>
       </div>
 
-      <div className="h-14 px-4 flex items-center border-b border-gray-200/70">
+      <div className="mt-3 flex h-12 items-center px-1">
         <button
           onClick={onAuthor}
           className="flex min-w-0 flex-1 items-center text-left"
         >
-          <img src={plan.author.avatarUrl} alt={plan.author.name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+          <img src={plan.author.avatarUrl} alt={plan.author.name} className="h-9 w-9 flex-shrink-0 rounded-full object-cover" />
           <span className="ml-2.5 truncate text-[15px] font-medium text-gray-900">{plan.author.name}</span>
         </button>
         <button onClick={onAuthorMenu} className="w-8 h-8 flex items-center justify-end text-gray-400">
@@ -1150,8 +1143,32 @@ function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen, from?
 
   const getStatus = (planId: number, dayIndex: number) => {
     if (checkedItems.includes(planId)) return "Выполнено";
-    if (dayIndex < todayIndex) return "Пропущено";
+    if (dayIndex < todayIndex) return "Не выполнено";
     return "Запланировано";
+  };
+
+  const getTimeLabel = (plan: HomeFeedPlan) => {
+    if (plan.schedule.mode === "exact" || plan.schedule.timeMode === "exact") {
+      const start = plan.schedule.start ? new Date(plan.schedule.start) : null;
+      if (start && !Number.isNaN(start.getTime())) {
+        return start.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+      }
+    }
+    if (plan.schedule.partOfDay) {
+      return PART_OF_DAY_RANGES[plan.schedule.partOfDay].label;
+    }
+    return plan.timeDate.split("·")[0]?.trim() || "Время";
+  };
+
+  const getScheduleMeta = (plan: HomeFeedPlan, dayIndex: number, status: string) => {
+    const timeLabel = getTimeLabel(plan);
+    const prefix =
+      dayIndex === todayIndex
+        ? `${timeLabel.includes(":") ? "Сегодня в " : ""}${timeLabel}`
+        : dayIndex === todayIndex + 1
+          ? `${timeLabel.includes(":") ? "Завтра в " : "Завтра · "}${timeLabel}`
+          : timeLabel;
+    return `${prefix} · ${status}`;
   };
 
   const getGradient = (plan: HomeFeedPlan) => plan.gradient ?? PLAN_TAG_GRADIENTS[normalizePlanTag(plan.tag)];
@@ -1212,6 +1229,7 @@ function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen, from?
               const { plan, dayIndex, dayNumber, monthName } = item;
               const done = checkedItems.includes(plan.id);
               const status = getStatus(plan.id, dayIndex);
+              const scheduleMeta = getScheduleMeta(plan, dayIndex, status);
               const monthIndex = monthNumberByName[monthName] ?? 0;
               const gradient = getGradient(plan);
               return (
@@ -1239,7 +1257,7 @@ function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen, from?
                     >
                       {plan.title}
                     </h3>
-                    <p className="mt-0.5 truncate text-[13px] leading-4 text-muted-foreground">{status}</p>
+                    <p className="mt-0.5 truncate text-[13px] leading-4 text-muted-foreground">{scheduleMeta}</p>
                   </div>
                   <span
                     onClick={(e) => { e.stopPropagation(); toggleCheck(plan.id); }}
@@ -1870,104 +1888,6 @@ const eventMeta: Record<number, EventMeta> = {
   },
 };
 
-interface PlanEvent {
-  title: string;
-  coverUrl: string;
-  authorName: string;
-  authorAvatarUrl: string;
-  paragraphs: string[];
-  meta: EventMeta;
-  badgeDate: string;
-}
-
-const planEvents: Record<number, PlanEvent> = {
-  1: {
-    title: "Питание с белком",
-    coverUrl: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?crop=entropy&cs=tinysrgb&fit=crop&w=800&h=400&q=80",
-    authorName: "Анна Соколова",
-    authorAvatarUrl: P_AVATARS.w2,
-    badgeDate: "Сегодня в 9:00",
-    paragraphs: [
-      "Белок — основа восстановления мышц и чувства сытости. Недостаточное его количество тормозит прогресс в тренировках и провоцирует переедание простых углеводов.",
-      "В этом плане вы освоите простые способы набирать 1,5–2 г белка на кг веса в сутки без подсчёта калорий: через продукты, которые легко найти в любом магазине.",
-      "Завтрак с яйцами или творогом, обед с курицей или рыбой, ужин с бобовыми — такой ритм выстраивается за 3 дня и удерживается без усилий.",
-    ],
-    meta: {
-      date: "Сегодня", time: "9:00 — 9:45",
-      location: "Онлайн", locationSub: "Материалы в приложении",
-      participants: 34, plusN: "+29", joinLabel: "Присоединиться",
-    },
-  },
-  2: {
-    title: "Программа весенней подготовки",
-    coverUrl: "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?crop=entropy&cs=tinysrgb&fit=crop&w=800&h=400&q=80",
-    authorName: "Мария Кузнецова",
-    authorAvatarUrl: UNSPLASH.avatarMaria,
-    badgeDate: "Сегодня в 11:00",
-    paragraphs: [
-      "Весенняя подготовка — это плавный переход от зимнего режима к активному сезону. Резкие нагрузки после паузы приводят к травмам, поэтому первые 2 недели посвящены мобилизации и базовой выносливости.",
-      "В программе 3 тренировки в неделю: лёгкий бег или ходьба в темпе, функциональная тренировка и растяжка. Каждая сессия занимает не более 60 минут.",
-      "К концу месяца вы будете готовы к полноценным тренировкам и первым стартам сезона. Начнём вместе — это проще, чем в одиночку.",
-    ],
-    meta: {
-      date: "Сегодня", time: "11:00 — 12:00",
-      location: "Парк Горького", locationSub: "Москва, главная аллея",
-      participants: 19, plusN: "+14", joinLabel: "Записаться",
-    },
-  },
-  3: {
-    title: "Купить изотоники в продуктовом",
-    coverUrl: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?crop=entropy&cs=tinysrgb&fit=crop&w=800&h=400&q=80",
-    authorName: "Well Well Well",
-    authorAvatarUrl: avatarBrand as unknown as string,
-    badgeDate: "Сегодня в 13:30",
-    paragraphs: [
-      "Изотоники восполняют потери электролитов при длительных тренировках. Вода справляется до 60 минут активности, дальше нужна поддержка натрия, калия и магния.",
-      "Не все изотоники одинаковые. Некоторые содержат слишком много сахара и скорее подходят для ультра-нагрузок. Мы составили короткий список того, что стоит положить в корзину.",
-      "Альтернатива покупным: вода с щепоткой соли и лимонным соком. Работает не хуже, стоит в разы дешевле.",
-    ],
-    meta: {
-      date: "Сегодня", time: "13:30 — 14:00",
-      location: "Ближайший магазин", locationSub: "По пути после тренировки",
-      participants: 8, plusN: "+3", joinLabel: "Отметить выполненным",
-    },
-  },
-  4: {
-    title: "Звонок с коллегами",
-    coverUrl: "https://images.unsplash.com/photo-1531482615713-2afd69097998?crop=entropy&cs=tinysrgb&fit=crop&w=800&h=400&q=80",
-    authorName: "Гена Лохтин",
-    authorAvatarUrl: UNSPLASH.avatarGena,
-    badgeDate: "Сегодня в 16:00",
-    paragraphs: [
-      "Встреча команды для синхронизации по текущим задачам и дедлайнам. Формат короткий — не больше 60 минут, без долгих обсуждений, только статусы и блокеры.",
-      "Повестка: прогресс по ключевым проектам, распределение приоритетов на неделю, вопросы которые невозможно решить асинхронно.",
-      "Подготовьте короткий апдейт по своим задачам — 2-3 предложения, что сделано и что нужно для продвижения вперёд.",
-    ],
-    meta: {
-      date: "Сегодня", time: "16:00 — 17:00",
-      location: "Онлайн", locationSub: "Ссылка в календаре",
-      participants: 6, plusN: "+1", joinLabel: "Подключиться",
-    },
-  },
-  5: {
-    title: "Челлендж: Вечерний цифровой детокс",
-    coverUrl: challengeImg as unknown as string,
-    authorName: "Гена Лохтин",
-    authorAvatarUrl: UNSPLASH.avatarGena,
-    badgeDate: "Сегодня в 21:30",
-    paragraphs: [
-      "Свет экрана вечером подавляет мелатонин и сдвигает циркадные часы. Давайте вместе откладывать телефон за 2 часа до сна и давать мозгу время на отдых.",
-      "128 человек уже присоединились к этому плану. Многие отмечают, что уже через 3 дня качество сна заметно улучшается.",
-      "Никаких созвонов, никаких обязательств — просто общее намерение и взаимная поддержка в комментариях.",
-    ],
-    meta: {
-      date: "Сегодня", time: "21:30 — 22:15",
-      location: "Онлайн", locationSub: "Из любой точки мира",
-      participants: 128, plusN: "+123", joinLabel: "Присоединиться",
-    },
-  },
-};
-
 // ─── Shared components ────────────────────────────────────────────────────────
 
 function BlueBadge() {
@@ -1994,12 +1914,12 @@ function CommentsBlock({
 
   return (
     <div
-      className="mx-4 mb-6 rounded-[18px] border px-4 pt-[18px] pb-6 text-white"
+      className="mx-4 mb-6 rounded-[28px] border px-4 pt-[18px] pb-6 text-white"
       style={{
-        backgroundColor: "rgba(255,255,255,0.13)",
-        borderColor: "rgba(255,255,255,0.16)",
-        backdropFilter: "blur(18px)",
-        WebkitBackdropFilter: "blur(18px)",
+        backgroundColor: "rgba(6,10,18,0.42)",
+        borderColor: "rgba(255,255,255,0.2)",
+        backdropFilter: "blur(24px)",
+        WebkitBackdropFilter: "blur(24px)",
       }}
     >
       <h3 className="mb-3.5 flex items-center gap-2 text-[15px] font-semibold text-white">
@@ -2172,7 +2092,7 @@ function EventDetailScreen({
   const scheduleSecondary =
     schedule?.mode === "exact" || schedule?.timeMode === "exact"
       ? exactTimeLabel(schedule.start, typeof schedule.end === "string" ? schedule.end : undefined)
-      : duration || meta.time;
+      : "";
 
   const showJoinToast = () => {
     setToast("Добавлено в Мои планы");
@@ -2228,8 +2148,8 @@ function EventDetailScreen({
         </div>
       )}
 
-      <div className="h-full overflow-y-auto px-4 py-4">
-        <div className="relative min-h-[calc(100dvh-32px)] overflow-hidden rounded-[18px] bg-black">
+      <div className="h-full overflow-y-auto px-6 py-4">
+        <div className="relative min-h-[calc(100dvh-32px)] overflow-hidden rounded-[28px] bg-black">
           <div className="absolute inset-0">
             {coverSrc ? (
               <img src={coverSrc} alt="" className="h-full w-full object-cover" />
@@ -2267,28 +2187,23 @@ function EventDetailScreen({
           <div className="relative z-10">
             <div className="flex min-h-[calc(100dvh-32px)] flex-col justify-end px-4 pb-5 pt-[138px]">
               <div className="flex flex-col items-center text-center">
-              <div className="flex -space-x-2">
-                {participantAvatars.slice(0, 3).map((url, i) => (
-                  <img key={i} src={url} alt="" className="h-[30px] w-[30px] rounded-full border-2 border-white object-cover" />
-                ))}
-              </div>
-              <p className="mt-1.5 text-[12px] text-white/85">{participantCountLabel}</p>
-              <h1
-                className="mt-2 max-w-full text-[30px] font-bold leading-9 text-white"
-                style={{
-                  display: "-webkit-box",
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: "vertical",
-                  overflow: "hidden",
-                }}
-              >
-                {title}
-              </h1>
+                <FeedAvatarStack avatars={participantAvatars} label={participantCountLabel} />
+                <h1
+                  className="mt-3 max-w-full text-[30px] font-bold leading-9 text-white"
+                  style={{
+                    display: "-webkit-box",
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                  }}
+                >
+                  {title}
+                </h1>
               </div>
 
               <button
                 onClick={toggleJoin}
-                className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/75 bg-white text-[15px] active:opacity-90"
+                className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-[16px] border border-white/75 bg-white text-[15px] active:opacity-90"
                 style={{ color: GREEN, fontWeight: joined ? 500 : 600 }}
               >
                 {joined ? <Check size={18} strokeWidth={2.4} color={GREEN} /> : <Plus size={18} strokeWidth={2.3} color={GREEN} />}
@@ -2296,12 +2211,12 @@ function EventDetailScreen({
               </button>
 
               <div
-                className="mt-4 rounded-[18px] border px-4 py-4 text-white"
+                className="mt-4 rounded-[28px] border px-4 py-4 text-white"
                 style={{
-                  backgroundColor: "rgba(255,255,255,0.13)",
-                  borderColor: "rgba(255,255,255,0.16)",
-                  backdropFilter: "blur(18px)",
-                  WebkitBackdropFilter: "blur(18px)",
+                  backgroundColor: "rgba(6,10,18,0.42)",
+                  borderColor: "rgba(255,255,255,0.2)",
+                  backdropFilter: "blur(24px)",
+                  WebkitBackdropFilter: "blur(24px)",
                 }}
               >
             <div className="mb-4 flex items-center justify-between gap-3">
@@ -2322,7 +2237,7 @@ function EventDetailScreen({
               <p
                 style={!descriptionExpanded && needsDescriptionClamp ? {
                   display: "-webkit-box",
-                  WebkitLineClamp: 4,
+                  WebkitLineClamp: 5,
                   WebkitBoxOrient: "vertical",
                   overflow: "hidden",
                 } : undefined}
@@ -2351,6 +2266,16 @@ function EventDetailScreen({
                 </div>
               </div>
 
+              {duration && (
+                <div className="flex items-start gap-3">
+                  <Clock size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-white/70" />
+                  <div>
+                    <p className="text-[14px] leading-5 text-white">{duration}</p>
+                    <p className="text-[13px] leading-4 text-white/65">Длительность</p>
+                  </div>
+                </div>
+              )}
+
               {meta.location && (
                 <div className="flex items-start gap-3">
                   <MapPin size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-white/70" />
@@ -2376,12 +2301,10 @@ function EventDetailScreen({
                   <Users size={20} strokeWidth={1.8} className="flex-shrink-0 text-white/70" />
                   <span className="text-[14px] text-white">{meta.participants} участников</span>
                 </div>
-                <div className="flex -space-x-2">
-                  {participantAvatars.slice(0, 3).map((url, i) => (
-                    <img key={i} src={url} alt="" className="h-7 w-7 rounded-full border object-cover" style={{ borderColor: "rgba(255,255,255,0.45)" }} />
-                  ))}
+                <div className="flex items-center">
+                  <ParticipantAvatarLine avatars={participantAvatars} />
                   {overflowLabel && (
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20">
+                    <div className="-ml-2 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-white/20">
                       <span className="text-[10px] font-bold text-white">{overflowLabel}</span>
                     </div>
                   )}
@@ -2833,13 +2756,12 @@ export default function App() {
           />
         );
       case "planEvent": {
-        const ev = planEvents[activePlanId];
         const feedPlan = homeFeedPlans.find(plan => plan.id === activePlanId);
         if (feedPlan) {
           const participantsCount = Number.parseInt(feedPlan.participantsLabel, 10) || feedPlan.participants.length;
           return (
             <EventDetailScreen
-              title={feedPlan.title}
+              title={feedPlan.isChallenge ? `Челлендж: ${feedPlan.title}` : feedPlan.title}
               coverSrc={feedPlan.coverUrl as string | undefined}
               backgroundGradient={feedPlan.gradient}
               tag={feedPlan.tag}
@@ -2868,20 +2790,7 @@ export default function App() {
             />
           );
         }
-        return ev ? (
-          <EventDetailScreen
-            title={ev.title}
-            coverSrc={ev.coverUrl}
-            authorName={ev.authorName}
-            authorAvatarUrl={ev.authorAvatarUrl}
-            badgeDate={ev.badgeDate}
-            paragraphs={ev.paragraphs}
-            meta={ev.meta}
-            onBack={() => setScreen(planEventOrigin)}
-            initiallyJoined={false}
-            onProfile={() => setScreen("profile")}
-          />
-        ) : null;
+        return <WorkInProgress />;
       }
     }
   };
