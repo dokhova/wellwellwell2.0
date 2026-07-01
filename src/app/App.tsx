@@ -2,7 +2,7 @@ import { Calendar, Home, Plus, User } from "lucide-react";
 import { useState } from "react";
 import type { Article, Screen } from "@/app/types";
 import { NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
-import { experts, expertProfile, getExpertPlans, type ExpertProfile } from "@/app/data/profile";
+import { experts, expertProfile, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
 import { HomeScreen } from "@/app/screens/HomeScreen";
 import { PlansScreen } from "@/app/screens/PlansScreen";
@@ -25,9 +25,11 @@ export default function App() {
   const [planEventOrigin, setPlanEventOrigin] = useState<Screen>("plans");
   const [previousScreen, setPreviousScreen] = useState<Screen>("plans");
   const [profileConnectionsType, setProfileConnectionsType] = useState<ConnectionType>("followers");
+  const [profileConnectionsCanEditFollowing, setProfileConnectionsCanEditFollowing] = useState(false);
   const [viewingOwnProfile, setViewingOwnProfile] = useState(true);
   const [viewingExpertId, setViewingExpertId] = useState("gena");
   const [editableProfile, setEditableProfile] = useState<ExpertProfile>(expertProfile);
+  const currentUserId = editableProfile.id;
 
   const navigate = (s: Screen, from?: Screen) => {
     if (s === "detail" && from) setDetailOrigin(from);
@@ -57,8 +59,9 @@ export default function App() {
     setScreen("profile");
   };
 
-  const openProfileConnections = (type: ConnectionType) => {
+  const openProfileConnections = (type: ConnectionType, ownerIsCurrentUser = false) => {
     setProfileConnectionsType(type);
+    setProfileConnectionsCanEditFollowing(ownerIsCurrentUser);
     setPreviousScreen(screen);
     setScreen("profileConnections");
   };
@@ -83,16 +86,19 @@ export default function App() {
         const viewedProfile = viewingOwnProfile
           ? editableProfile
           : experts.find((expert) => expert.id === viewingExpertId) ?? expertProfile;
+        const isCurrentUserProfile = viewedProfile.id === currentUserId;
+        const viewedPlans = homeFeedPlans.filter((plan) => (plan.author.id ?? currentUserId) === viewedProfile.id);
         return (
           <ProfileScreen
             onNavigate={navigate}
             onArticle={a => openArticle(a, "profile" as Screen)}
             onPlanOpen={id => { openPlanEvent(id, "profile"); }}
-            onConnectionsOpen={openProfileConnections}
+            onConnectionsOpen={(type) => openProfileConnections(type, isCurrentUserProfile)}
             onEdit={() => setScreen("editProfile")}
+            onBack={() => setScreen(previousScreen)}
             profile={viewedProfile}
-            plans={getExpertPlans(viewedProfile.id)}
-            isMe={viewingOwnProfile}
+            plans={viewedPlans}
+            isMe={isCurrentUserProfile}
           />
         );
       case "editProfile":
@@ -112,6 +118,7 @@ export default function App() {
             type={profileConnectionsType}
             onBack={() => setScreen(previousScreen)}
             onProfileOpen={() => setScreen("profile")}
+            canEditFollowing={profileConnectionsCanEditFollowing}
           />
         );
       case "planEvent": {

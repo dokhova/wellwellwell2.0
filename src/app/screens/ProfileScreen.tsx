@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { ArrowLeft, Check, Edit3, UserPlus } from "lucide-react";
-import type { Article, Screen } from "@/app/types";
+import type { Article, HomeFeedPlan, Screen } from "@/app/types";
+import { weekDates, weekDateMonths } from "@/app/data/calendar";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
-import { profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile, type ExpertProfilePlan } from "@/app/data/profile";
+import { profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
+import { PlanListCard } from "@/app/screens/PlansScreen";
 
 export type ConnectionType = "followers" | "following";
 
@@ -40,25 +42,6 @@ function ProfileStat({
   );
 }
 
-function PlanCard({ plan, onOpen }: { plan: ExpertProfilePlan; onOpen: () => void }) {
-  return (
-    <button
-      onClick={onOpen}
-      className="flex w-full items-center gap-3 rounded-[16px] bg-card px-3.5 py-3 text-left active:opacity-90 border border-border"
-    >
-      <div className="h-[50px] w-[50px] flex-shrink-0 overflow-hidden rounded-xl" style={{ background: plan.gradient ?? GREEN_LIGHT }}>
-        {plan.coverUrl && <img src={plan.coverUrl} alt={plan.title} className="h-full w-full object-cover" />}
-      </div>
-      <div className="min-w-0 flex-1">
-        <h3 className="truncate text-[14px] leading-5 font-medium text-foreground">{plan.title}</h3>
-        <p className="mt-0.5 truncate text-[13px] leading-4 text-muted-foreground">
-          {plan.axis} · {plan.weeksCount ? `${plan.weeksCount} нед.` : "Бессрочно"} · {plan.participantsCount}+ участников
-        </p>
-      </div>
-    </button>
-  );
-}
-
 function Avatar({ user }: { user: ExpertConnection }) {
   if (user.avatarUrl) {
     return <img src={user.avatarUrl} alt={user.name} className="h-11 w-11 flex-shrink-0 rounded-full object-cover" />;
@@ -84,7 +67,7 @@ function ConnectionRow({
 }: {
   user: ExpertConnection;
   onProfile: () => void;
-  onToggle: () => void;
+  onToggle?: () => void;
 }) {
   return (
     <button
@@ -93,16 +76,18 @@ function ConnectionRow({
     >
       <Avatar user={user} />
       <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-gray-900">{user.name}</span>
-      <span
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggle();
-        }}
-        className="flex-shrink-0 rounded-full border px-3 py-1.5 text-[12px] font-semibold"
-        style={user.isFollowedByMe ? { borderColor: "var(--border)", color: "var(--foreground)" } : { borderColor: GREEN, color: GREEN }}
-      >
-        {user.isFollowedByMe ? "Отписаться" : "Подписаться"}
-      </span>
+      {onToggle && (
+        <span
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggle();
+          }}
+          className="flex-shrink-0 rounded-full border px-3 py-1.5 text-[12px] font-semibold"
+          style={user.isFollowedByMe ? { borderColor: "var(--border)", color: "var(--foreground)" } : { borderColor: GREEN, color: GREEN }}
+        >
+          {user.isFollowedByMe ? "Отписаться" : "Подписаться"}
+        </span>
+      )}
     </button>
   );
 }
@@ -111,10 +96,12 @@ export function ProfileConnectionsScreen({
   type,
   onBack,
   onProfileOpen,
+  canEditFollowing,
 }: {
   type: ConnectionType;
   onBack: () => void;
   onProfileOpen: () => void;
+  canEditFollowing: boolean;
 }) {
   const [followers, setFollowers] = useState(profileFollowers);
   const [following, setFollowing] = useState(profileFollowing);
@@ -122,6 +109,7 @@ export function ProfileConnectionsScreen({
   const title = isFollowers ? "Подписчики" : "Подписки";
   const people = isFollowers ? followers : following;
   const emptyText = isFollowers ? "Пока никто не подписался" : "Вы ни на кого не подписаны";
+  const canEditConnections = canEditFollowing && !isFollowers;
 
   const toggle = (id: string) => {
     const update = (items: ExpertConnection[]) =>
@@ -152,7 +140,7 @@ export function ProfileConnectionsScreen({
                 key={user.id}
                 user={user}
                 onProfile={onProfileOpen}
-                onToggle={() => toggle(user.id)}
+                onToggle={canEditConnections ? () => toggle(user.id) : undefined}
               />
             ))}
           </div>
@@ -172,15 +160,33 @@ export function ProfileScreen(props: {
   onPlanOpen: (id: number) => void;
   onConnectionsOpen: (type: ConnectionType) => void;
   onEdit: () => void;
+  onBack?: () => void;
   profile: ExpertProfile;
-  plans: ExpertProfilePlan[];
+  plans: HomeFeedPlan[];
   isMe: boolean;
 }) {
   void props.onArticle;
   void props.onNavigate;
   const [isFollowed, setIsFollowed] = useState(props.profile.isFollowedByMe);
   const [isBioExpanded, setIsBioExpanded] = useState(false);
+  const [showAllPlans, setShowAllPlans] = useState(false);
   const shouldShowBioToggle = props.profile.bio.length > 100;
+  const visiblePlans = showAllPlans ? props.plans : props.plans.slice(0, 3);
+  const hasMorePlans = props.plans.length > visiblePlans.length;
+  const monthShortByName: Record<string, string> = {
+    января: "Янв",
+    февраля: "Фев",
+    марта: "Мар",
+    апреля: "Апр",
+    мая: "Май",
+    июня: "Июн",
+    июля: "Июл",
+    августа: "Авг",
+    сентября: "Сен",
+    октября: "Окт",
+    ноября: "Ноя",
+    декабря: "Дек",
+  };
   const heroInitials = props.profile.name
     .split(" ")
     .map((part) => part[0])
@@ -199,6 +205,15 @@ export function ProfileScreen(props: {
             </div>
           )}
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/42" />
+          {!props.isMe && props.onBack && (
+            <button
+              onClick={props.onBack}
+              className="absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white active:opacity-85"
+              aria-label="Назад"
+            >
+              <ArrowLeft size={21} strokeWidth={2.2} />
+            </button>
+          )}
           {props.isMe && (
             <button
               onClick={props.onEdit}
@@ -212,17 +227,28 @@ export function ProfileScreen(props: {
 
         <section className="relative -mt-12 rounded-t-[28px] bg-card px-5 pb-6 pt-6 shadow-[0_-16px_38px_rgba(0,0,0,0.14)]">
           <h1 className="text-[34px] font-bold leading-[38px] text-foreground">{props.profile.name}</h1>
-          <p
-            className="mt-2 text-[15px] leading-5 text-muted-foreground"
-            style={!isBioExpanded ? {
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
-            } : undefined}
-          >
-            {props.profile.bio}
-          </p>
+          <div className="mt-2 flex items-start gap-2">
+            <p
+              className="min-w-0 flex-1 text-[15px] leading-5 text-muted-foreground"
+              style={!isBioExpanded ? {
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              } : undefined}
+            >
+              {props.profile.bio}
+            </p>
+            {props.isMe && (
+              <button
+                onClick={props.onEdit}
+                className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground active:opacity-80"
+                aria-label="Редактировать описание"
+              >
+                <Edit3 size={15} strokeWidth={2} />
+              </button>
+            )}
+          </div>
           {shouldShowBioToggle && (
             <button
               onClick={() => setIsBioExpanded((value) => !value)}
@@ -250,20 +276,37 @@ export function ProfileScreen(props: {
             </button>
           )}
 
-          <div className="mt-7">
-            <h2 className="mb-3 text-[19px] font-bold leading-6 text-foreground">Планы</h2>
-            {props.plans.length > 0 ? (
-              <div className="space-y-2.5">
-                {props.plans.map((plan) => (
-                  <PlanCard key={plan.id} plan={plan} onOpen={() => props.onPlanOpen(plan.id)} />
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-xl bg-muted px-4 py-8 text-center">
-                <p className="text-[14px] leading-5 text-muted-foreground">Пока нет опубликованных планов</p>
-              </div>
-            )}
-          </div>
+          {!props.isMe && (
+            <div className="mt-7">
+              <h2 className="mb-3 text-[19px] font-bold leading-6 text-foreground">Планы</h2>
+              {props.plans.length > 0 ? (
+                <div className="space-y-2.5">
+                  {visiblePlans.map((plan, index) => (
+                    <PlanListCard
+                      key={plan.id}
+                      plan={plan}
+                      dayNumber={weekDates[index % weekDates.length]}
+                      monthLabel={monthShortByName[weekDateMonths[index % weekDateMonths.length]] ?? weekDateMonths[index % weekDateMonths.length]}
+                      scheduleMeta={`${plan.timeDate} · Активен`}
+                      onOpen={() => props.onPlanOpen(plan.id)}
+                    />
+                  ))}
+                  {hasMorePlans && (
+                    <button
+                      onClick={() => setShowAllPlans(true)}
+                      className="mt-1 flex h-11 w-full items-center justify-center rounded-xl bg-muted text-[14px] font-semibold text-foreground active:opacity-85"
+                    >
+                      Все планы
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-xl bg-muted px-4 py-8 text-center">
+                  <p className="text-[14px] leading-5 text-muted-foreground">Пока нет опубликованных планов</p>
+                </div>
+              )}
+            </div>
+          )}
         </section>
       </div>
     </div>

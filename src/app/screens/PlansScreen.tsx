@@ -5,6 +5,68 @@ import { chartData, PERIODS, weekDates, weekDateMonths, weekDays, weekRanges } f
 import { homeFeedPlans, normalizePlanTag, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
 import { GREEN, PART_OF_DAY_RANGES } from "@/app/data/constants";
 
+export function PlanListCard({
+  plan,
+  dayNumber,
+  monthLabel,
+  scheduleMeta,
+  done = false,
+  onOpen,
+  onToggle,
+}: {
+  plan: Pick<HomeFeedPlan, "id" | "title" | "coverUrl" | "gradient" | "tag">;
+  dayNumber: string | number;
+  monthLabel: string;
+  scheduleMeta: string;
+  done?: boolean;
+  onOpen: () => void;
+  onToggle?: () => void;
+}) {
+  const gradient = plan.gradient ?? PLAN_TAG_GRADIENTS[normalizePlanTag(plan.tag)];
+
+  return (
+    <button
+      onClick={onOpen}
+      className="flex w-full items-center gap-3 rounded-[16px] bg-card px-3.5 py-3 text-left active:opacity-90"
+      style={{ opacity: done ? 0.65 : 1 }}
+    >
+      <div className="flex w-[42px] flex-shrink-0 flex-col items-center justify-center">
+        <span className="text-[12px] leading-4 text-muted-foreground">{monthLabel}</span>
+        <span className="text-[20px] font-semibold leading-7 text-muted-foreground">{dayNumber}</span>
+      </div>
+      <div className="h-[38px] w-px flex-shrink-0 bg-border" />
+      <div className="h-[50px] w-[50px] flex-shrink-0 overflow-hidden rounded-xl" style={{ background: gradient }}>
+        {plan.coverUrl && <img src={plan.coverUrl} alt={plan.title} className="h-full w-full object-cover" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <h3
+          className="truncate text-[14px] leading-5 font-medium"
+          style={{
+            color: done ? "var(--muted-foreground)" : "var(--foreground)",
+            textDecoration: done ? "line-through" : "none",
+          }}
+        >
+          {plan.title}
+        </h3>
+        <p className="mt-0.5 truncate text-[13px] leading-4 text-muted-foreground">{scheduleMeta}</p>
+      </div>
+      <span
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle?.();
+        }}
+        className="flex h-[26px] w-[26px] flex-shrink-0 items-center justify-center rounded-full border"
+        style={{
+          borderColor: done ? GREEN : "var(--border)",
+          backgroundColor: done ? GREEN : "transparent",
+        }}
+      >
+        {done && <Check size={14} strokeWidth={3} color="#fff" />}
+      </span>
+    </button>
+  );
+}
+
 export function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen, from?: Screen) => void; onPlanOpen: (id: number) => void }) {
   void onNavigate;
   const [activeTab, setActiveTab] = useState<"plans" | "analytics">("plans");
@@ -145,45 +207,17 @@ export function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen
               const status = getStatus(plan.id, dayIndex);
               const scheduleMeta = getScheduleMeta(plan, dayIndex, status);
               const monthIndex = monthNumberByName[monthName] ?? 0;
-              const gradient = getGradient(plan);
               return (
-                <button
+                <PlanListCard
                   key={`${plan.id}-${dayIndex}`}
-                  onClick={() => onPlanOpen(plan.id)}
-                  className="flex w-full items-center gap-3 rounded-[16px] bg-card px-3.5 py-3 text-left active:opacity-90"
-                  style={{ opacity: done ? 0.65 : 1 }}
-                >
-                  <div className="flex w-[42px] flex-shrink-0 flex-col items-center justify-center">
-                    <span className="text-[12px] leading-4 text-muted-foreground">{monthShort[monthIndex]}</span>
-                    <span className="text-[20px] font-semibold leading-7 text-muted-foreground">{dayNumber}</span>
-                  </div>
-                  <div className="h-[38px] w-px flex-shrink-0 bg-border" />
-                  <div className="h-[50px] w-[50px] flex-shrink-0 overflow-hidden rounded-xl" style={{ background: gradient }}>
-                    {plan.coverUrl && <img src={plan.coverUrl} alt={plan.title} className="h-full w-full object-cover" />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3
-                      className="truncate text-[14px] leading-5 font-medium"
-                      style={{
-                        color: done ? "var(--muted-foreground)" : "var(--foreground)",
-                        textDecoration: done ? "line-through" : "none",
-                      }}
-                    >
-                      {plan.title}
-                    </h3>
-                    <p className="mt-0.5 truncate text-[13px] leading-4 text-muted-foreground">{scheduleMeta}</p>
-                  </div>
-                  <span
-                    onClick={(e) => { e.stopPropagation(); toggleCheck(plan.id); }}
-                    className="flex h-[26px] w-[26px] flex-shrink-0 items-center justify-center rounded-full border"
-                    style={{
-                      borderColor: done ? GREEN : "var(--border)",
-                      backgroundColor: done ? GREEN : "transparent",
-                    }}
-                  >
-                    {done && <Check size={14} strokeWidth={3} color="#fff" />}
-                  </span>
-                </button>
+                  plan={plan}
+                  dayNumber={dayNumber}
+                  monthLabel={monthShort[monthIndex]}
+                  scheduleMeta={scheduleMeta}
+                  done={done}
+                  onOpen={() => onPlanOpen(plan.id)}
+                  onToggle={() => toggleCheck(plan.id)}
+                />
               );
             })}
           </div>
