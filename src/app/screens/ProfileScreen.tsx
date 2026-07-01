@@ -195,8 +195,8 @@ export function ProfileScreen(props: {
 
   return (
     <div className="h-full overflow-y-auto bg-card">
-      <div className="relative">
-        <div className="relative h-[280px] w-full overflow-hidden bg-gray-300">
+      <div className="relative flex min-h-full flex-col">
+        <div className="relative min-h-[280px] w-full flex-1 overflow-hidden bg-gray-300">
           {props.profile.photoUrl ? (
             <img src={props.profile.photoUrl} alt={props.profile.name} className="h-full w-full object-cover" />
           ) : (
@@ -225,7 +225,7 @@ export function ProfileScreen(props: {
           )}
         </div>
 
-        <section className="relative -mt-12 rounded-t-[28px] bg-card px-5 pb-6 pt-6 shadow-[0_-16px_38px_rgba(0,0,0,0.14)]">
+        <section className="relative -mt-12 flex-shrink-0 rounded-t-[28px] bg-card px-5 pb-6 pt-6 shadow-[0_-16px_38px_rgba(0,0,0,0.14)]">
           <h1 className="text-[34px] font-bold leading-[38px] text-foreground">{props.profile.name}</h1>
           <div className="mt-2 flex items-start gap-2">
             <p

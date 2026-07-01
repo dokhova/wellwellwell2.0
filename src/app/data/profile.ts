@@ -7,7 +7,7 @@ import expertAvatarDmitryOrlov from "@/imports/avatar_02.jpg";
 import expertAvatarSvetlanaVoronova from "@/imports/avatar_03.jpg";
 import expertAvatarAlexeyPetrov from "@/imports/avatar_04.jpg";
 import expertAvatarYuliaBelova from "@/imports/avatar_05.jpg";
-import expertPhoto from "@/imports/photo_443373052130078088_c.jpg";
+import expertPhoto from "@/imports/avatar 10.png";
 import { P_AVATARS, UNSPLASH } from "@/app/data/constants";
 import { homeFeedPlans, normalizePlanTag } from "@/app/data/plans";
 import type { PlanTag } from "@/app/types";
@@ -117,8 +117,8 @@ export const expertPlans: ExpertProfilePlan[] = homeFeedPlans
 
 export const expertProfile: ExpertProfile = {
   id: "gena",
-  name: "Гена Лохтин",
-  bio: "Тренер по бегу и устойчивым привычкам. Собирает понятные планы для тех, кто хочет начать без перегруза и держать ритм.",
+  name: "Евгения Лаптева",
+  bio: "Тренирую женщин семь лет, от первого подхода до свободы в собственном теле. Работаю онлайн и офлайн, люблю тех, кто возвращается после перерыва, после родов или после долгого «потом начну».",
   photoUrl: expertPhoto as unknown as string,
   followersCount: profileFollowers.length,
   followingCount: profileFollowing.length,
