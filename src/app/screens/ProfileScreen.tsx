@@ -24,8 +24,8 @@ function ProfileStat({
 }) {
   const content = (
     <>
-      <span className="text-[20px] font-bold leading-6 text-white">{value}</span>
-      <span className="mt-1 text-[12px] leading-4 text-white/62">{label}</span>
+      <span className="text-[20px] font-bold leading-6 text-foreground">{value}</span>
+      <span className="mt-1 text-[12px] leading-4 text-muted-foreground">{label}</span>
     </>
   );
 
@@ -33,7 +33,7 @@ function ProfileStat({
     return (
       <button
         onClick={onClick}
-        className="flex min-w-0 flex-1 flex-col items-center rounded-xl px-2 py-2.5 active:bg-white/8"
+        className="flex min-w-0 flex-1 flex-col items-center rounded-xl px-2 py-2.5 active:bg-black/5"
       >
         {content}
       </button>
@@ -51,7 +51,7 @@ function PlanCard({ plan, onOpen }: { plan: ExpertProfilePlan; onOpen: () => voi
   return (
     <button
       onClick={onOpen}
-      className="flex w-full items-center gap-3 rounded-xl bg-white/8 p-3 text-left active:bg-white/12"
+      className="flex w-full items-center gap-3 rounded-xl bg-card p-3 text-left border border-border active:bg-black/[0.02]"
     >
       <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: GREEN_LIGHT }}>
         <span className="text-[18px] font-bold leading-none" style={{ color: GREEN }}>
@@ -59,12 +59,12 @@ function PlanCard({ plan, onOpen }: { plan: ExpertProfilePlan; onOpen: () => voi
         </span>
       </div>
       <div className="min-w-0 flex-1">
-        <h3 className="truncate text-[15px] font-semibold leading-5 text-white">{plan.title}</h3>
-        <p className="mt-1 truncate text-[12px] leading-4 text-white/58">
+        <h3 className="truncate text-[15px] font-semibold leading-5 text-foreground">{plan.title}</h3>
+        <p className="mt-1 truncate text-[12px] leading-4 text-muted-foreground">
           {plan.axis} · {plan.weeksCount ? `${plan.weeksCount} нед.` : "Бессрочно"} · {plan.participantsCount}+ участников
         </p>
       </div>
-      <ChevronRight size={18} strokeWidth={2} className="flex-shrink-0 text-white/50" />
+      <ChevronRight size={18} strokeWidth={2} className="flex-shrink-0 text-muted-foreground" />
     </button>
   );
 }
@@ -204,13 +204,10 @@ export function ProfileScreen(props: {
           )}
         </div>
 
-        <section
-          className="relative -mt-9 rounded-t-[28px] px-5 pb-6 pt-6 shadow-[0_-12px_34px_rgba(0,0,0,0.18)]"
-          style={{ backgroundColor: "var(--brand-dark)" }}
-        >
-          <h1 className="text-[30px] font-bold leading-9 text-white">{expertProfile.name}</h1>
+        <section className="relative -mt-9 rounded-t-[28px] bg-card px-5 pb-6 pt-6 shadow-[0_-12px_34px_rgba(0,0,0,0.10)]">
+          <h1 className="text-[30px] font-bold leading-9 text-foreground">{expertProfile.name}</h1>
           <p
-            className="mt-2 text-[15px] leading-5 text-white/68"
+            className="mt-2 text-[15px] leading-5 text-muted-foreground"
             style={{
               display: "-webkit-box",
               WebkitLineClamp: 2,
@@ -221,11 +218,11 @@ export function ProfileScreen(props: {
             {expertProfile.bio}
           </p>
 
-          <div className="mt-5 flex items-center justify-between rounded-2xl bg-white/6 px-1">
+          <div className="mt-5 flex items-center justify-between rounded-2xl bg-muted px-1">
             <ProfileStat value={expertProfile.followersCount} label="Подписчики" onClick={() => props.onConnectionsOpen("followers")} />
-            <div className="h-9 w-px bg-white/10" />
+            <div className="h-9 w-px bg-border" />
             <ProfileStat value={expertProfile.followingCount} label="Подписки" onClick={() => props.onConnectionsOpen("following")} />
-            <div className="h-9 w-px bg-white/10" />
+            <div className="h-9 w-px bg-border" />
             <ProfileStat value={expertProfile.plansCount} label="Планов" />
           </div>
 
@@ -233,7 +230,7 @@ export function ProfileScreen(props: {
             <button
               onClick={() => setIsFollowed((value) => !value)}
               className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl border text-[15px] font-semibold active:opacity-90"
-              style={isFollowed ? { backgroundColor: "transparent", borderColor: "rgba(255,255,255,0.18)", color: "#fff" } : { backgroundColor: GREEN, borderColor: GREEN, color: "#fff" }}
+              style={isFollowed ? { backgroundColor: "var(--muted)", borderColor: "var(--border)", color: "var(--foreground)" } : { backgroundColor: GREEN, borderColor: GREEN, color: "#fff" }}
             >
               {isFollowed ? <Check size={18} strokeWidth={2.4} /> : <UserPlus size={18} strokeWidth={2.2} />}
               {isFollowed ? "Вы подписаны" : "Подписаться"}
@@ -241,7 +238,7 @@ export function ProfileScreen(props: {
           )}
 
           <div className="mt-7">
-            <h2 className="mb-3 text-[19px] font-bold leading-6 text-white">{sectionTitle}</h2>
+            <h2 className="mb-3 text-[19px] font-bold leading-6 text-foreground">{sectionTitle}</h2>
             {expertPlans.length > 0 ? (
               <div className="space-y-2.5">
                 {expertPlans.map((plan) => (
@@ -249,8 +246,8 @@ export function ProfileScreen(props: {
                 ))}
               </div>
             ) : (
-              <div className="rounded-xl bg-white/8 px-4 py-8 text-center">
-                <p className="text-[14px] leading-5 text-white/55">Пока нет опубликованных планов</p>
+              <div className="rounded-xl bg-muted px-4 py-8 text-center">
+                <p className="text-[14px] leading-5 text-muted-foreground">Пока нет опубликованных планов</p>
               </div>
             )}
           </div>
