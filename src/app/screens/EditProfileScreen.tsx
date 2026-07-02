@@ -24,31 +24,27 @@ export function EditProfileScreen({
     .slice(0, 2)
     .join("");
 
-  const readFileAsDataUrl = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-
   const handlePhotoPick = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     if (files.length > 0) {
-      const nextPhotoUrls = await Promise.all(files.map(readFileAsDataUrl));
+      const nextPhotoUrls = files.map((file) => URL.createObjectURL(file));
       setPhotoUrls((current) => [...current, ...nextPhotoUrls]);
     }
     event.target.value = "";
   };
 
   const handleSave = () => {
-    onSave({
-      ...profile,
-      name: name.trim() || profile.name,
-      bio: bio.trim(),
-      photoUrl: photoUrls[0] ?? null,
-      photoUrls,
-    });
+    try {
+      onSave({
+        ...profile,
+        name: name.trim() || profile.name,
+        bio: bio.trim(),
+        photoUrl: photoUrls[0] ?? null,
+        photoUrls,
+      });
+    } catch (error) {
+      console.error("EditProfileScreen save failed", error);
+    }
   };
 
   return (

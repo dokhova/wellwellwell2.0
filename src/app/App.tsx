@@ -29,7 +29,11 @@ const readJson = <T,>(key: string, fallback: T): T => {
 };
 
 const writeJson = (key: string, value: unknown) => {
-  window.localStorage.setItem(key, JSON.stringify(value));
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error(`localStorage write failed for ${key}`, error);
+  }
 };
 
 const SUPPORT_PEER: ChatPeer = {
@@ -149,6 +153,7 @@ export default function App() {
   const myPlansStorageKey = `${storagePrefix}:myPlans`;
   const checkedItemsStorageKey = `${storagePrefix}:checkedItems`;
   const createdPlansStorageKey = `${storagePrefix}:createdPlans`;
+  const deletedPlansStorageKey = `${storagePrefix}:deletedPlans`;
   const followingStorageKey = `${storagePrefix}:following`;
   const chatThreadIdsStorageKey = `${storagePrefix}:chatThreadIds`;
   const chatThreadStorageKey = (peerId: string) => `${storagePrefix}:chat:${encodeURIComponent(peerId)}`;
@@ -177,6 +182,7 @@ export default function App() {
   });
   const [checkedItemKeys, setCheckedItemKeys] = useState<string[]>(() => readJson(checkedItemsStorageKey, []));
   const [createdPlans, setCreatedPlans] = useState<HomeFeedPlan[]>(() => readJson(createdPlansStorageKey, []));
+  const [deletedPlanIds, setDeletedPlanIds] = useState<number[]>(() => readJson(deletedPlansStorageKey, []));
   const [myFollowing, setMyFollowing] = useState<ExpertConnection[]>(() => readJson(followingStorageKey, []));
   const [chatThreads, setChatThreads] = useState<ChatThread[]>(() => {
     const ids = readJson<string[]>(chatThreadIdsStorageKey, []);
@@ -200,12 +206,13 @@ export default function App() {
     name: editableProfile.name,
     avatarUrl: editableProfile.photoUrl,
   };
-  const allPlans = [...createdPlans, ...homeFeedPlans];
+  const deletedPlanIdSet = new Set(deletedPlanIds);
+  const allPlans = [...createdPlans, ...homeFeedPlans].filter((plan) => !deletedPlanIdSet.has(plan.id));
   const allPlanDetails = [
     ...createdPlans.flatMap((plan) => plan.items?.length ? plan.items : []),
     ...createdPlans,
     ...homeFeedPlans,
-  ];
+  ].filter((plan) => !deletedPlanIdSet.has(plan.id));
   const participantKey = (ref: ParticipantPlanRef) => `${ref.kind}:${ref.id}`;
   const myParticipantKeys = new Set(myParticipantIds.map(participantKey));
   const myPlans = allPlans.filter((plan) => myParticipantKeys.has(participantKey({ kind: plan.kind ?? "plan", id: plan.id })));
@@ -217,6 +224,15 @@ export default function App() {
     avatarUrl: participant.avatar,
     cannedReplies: participant.cannedReplies,
   }));
+  const chatSearchPeers: ChatPeer[] = [
+    ...experts.map((expert) => ({
+      id: expert.id,
+      name: expert.name,
+      avatarUrl: expert.photoUrl,
+      cannedReplies: expert.cannedReplies,
+    })),
+    ...participantChatPeers,
+  ];
 
   useEffect(() => initTelegram(), []);
 
@@ -236,6 +252,10 @@ export default function App() {
   useEffect(() => {
     writeJson(createdPlansStorageKey, createdPlans);
   }, [createdPlans, createdPlansStorageKey]);
+
+  useEffect(() => {
+    writeJson(deletedPlansStorageKey, deletedPlanIds);
+  }, [deletedPlanIds, deletedPlansStorageKey]);
 
   useEffect(() => {
     writeJson(followingStorageKey, myFollowing);
@@ -341,6 +361,15 @@ export default function App() {
     setCheckedItemKeys((keys) => keys.filter((key) => !key.endsWith(`:${id}`)));
   };
 
+  const deletePlan = (id: number) => {
+    setDeletedPlanIds((ids) => ids.includes(id) ? ids : [id, ...ids]);
+    setCreatedPlans((plans) => plans.filter((plan) => plan.id !== id));
+    setMyParticipantIds((ids) => ids.filter((item) => item.id !== id));
+    setCheckedItemKeys((keys) => keys.filter((key) => !key.endsWith(`:${id}`)));
+    setPlansPreferredTab("author");
+    setScreen("plans");
+  };
+
   const toggleCheckedItem = (key: string) => {
     setCheckedItemKeys((keys) => keys.includes(key) ? keys.filter((item) => item !== key) : [...keys, key]);
   };
@@ -383,6 +412,7 @@ export default function App() {
             checkedItemKeys={checkedItemKeys}
             onToggleCheck={toggleCheckedItem}
             onRemoveParticipant={removePlanFromMine}
+            onDeletePlan={deletePlan}
             preferredTab={plansPreferredTab}
             highlightedPlanId={highlightedPlanId}
           />
@@ -390,9 +420,9 @@ export default function App() {
       case "create":
         return <CreateScreen onNavigate={navigate} backTo={createOrigin} onCreatePlan={createPlan} currentAuthor={currentAuthor} />;
       case "chats":
-        return <ChatsScreen threads={chatThreads} onOpenThread={openChatWithPeer} />;
+        return <ChatsScreen threads={chatThreads} onOpenThread={openChatWithPeer} availablePeers={chatSearchPeers} />;
       case "chat": {
-        if (!activeChatPeer) return <ChatsScreen threads={chatThreads} onOpenThread={openChatWithPeer} />;
+        if (!activeChatPeer) return <ChatsScreen threads={chatThreads} onOpenThread={openChatWithPeer} availablePeers={chatSearchPeers} />;
         const thread = chatThreads.find((item) => item.peer.id === activeChatPeer.id);
         return (
           <ChatScreen
@@ -518,6 +548,8 @@ export default function App() {
               participantItems={participantChatPeers}
               onMessageParticipant={openChatWithPeer}
               programItems={feedPlan.items}
+              canDelete={feedPlan.author.id === currentUserId}
+              onDelete={() => deletePlan(feedPlan.id)}
             />
           );
         }

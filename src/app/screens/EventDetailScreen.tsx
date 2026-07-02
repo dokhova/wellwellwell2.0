@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Calendar, Check, ChevronDown, ChevronRight, Clock, Copy, Eye, MapPin, MessageCircle, Plus, Share2, Users, Video } from "lucide-react";
+import { ArrowLeft, Calendar, Check, ChevronRight, Copy, MapPin, Plus, Share2, Trash2, Users, Video } from "lucide-react";
 import type { EventDetailProps } from "@/app/types";
 import { DETAIL_AVATARS, normalizePlanTag, PLAN_TAG_GRADIENTS, PLAN_TAG_LABELS } from "@/app/data/plans";
 import { ALL_DAYS, GREEN, PART_OF_DAY_RANGES, UNSPLASH, WEEKDAY_VALUES } from "@/app/data/constants";
@@ -112,7 +112,7 @@ export function EventDetailScreen({
   readTime, badgeDate, paragraphs, meta, format = "offline", duration, tag, schedule, shareUrl,
   participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, planId, onJoin, onLeave, onProfile,
   authorId, onMessageAuthor, participantItems, onMessageParticipant,
-  programItems,
+  programItems, canDelete = false, onDelete,
 }: EventDetailProps) {
   void authorVerified;
   void readTime;
@@ -248,15 +248,30 @@ export function EventDetailScreen({
             <div className="absolute left-4 top-4 rounded-full bg-black/50 px-3 py-1.5 text-[13px] font-medium leading-4 text-white">
               {tagLabel}
             </div>
-            <button
-              onClick={() => {
-                setCopied(false);
-                setSheet("share");
-              }}
-              className="absolute right-4 top-4 flex h-[34px] w-[34px] items-center justify-center rounded-full bg-black/50 active:opacity-85"
-            >
-              <Share2 size={16} strokeWidth={2} color="#fff" />
-            </button>
+            <div className="absolute right-4 top-4 flex items-center gap-2">
+              {canDelete && (
+                <button
+                  onClick={() => {
+                    const confirmed = window.confirm("Удалить план полностью? Он исчезнет из ленты и у всех, кто к нему присоединился");
+                    if (confirmed) onDelete?.();
+                  }}
+                  className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-black/50 active:opacity-85"
+                  aria-label="Удалить план"
+                >
+                  <Trash2 size={16} strokeWidth={2} color="#fff" />
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setCopied(false);
+                  setSheet("share");
+                }}
+                className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-black/50 active:opacity-85"
+                aria-label="Поделиться"
+              >
+                <Share2 size={16} strokeWidth={2} color="#fff" />
+              </button>
+            </div>
             <div className="absolute inset-x-4 bottom-[18px] flex flex-col items-center text-center">
               <div className="flex -space-x-2">
                 {participantAvatars.slice(0, 4).map((url, i) => (
@@ -362,7 +377,7 @@ export function EventDetailScreen({
                 </div>
               </div>
 
-              {meta.location && (
+              {format === "offline" && meta.location && (
                 <div className="flex items-start gap-3">
                   <MapPin size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
                   <div>
@@ -376,7 +391,7 @@ export function EventDetailScreen({
                 <Video size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
                   <p className="text-[14px] leading-5 text-foreground">{formatLabel}</p>
-                  {format === "offline" && <StaticMapPreview />}
+                  {format === "offline" && meta.location && <StaticMapPreview />}
                 </div>
               </div>
 

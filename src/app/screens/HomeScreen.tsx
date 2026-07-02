@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Copy, Filter, MapPin, MoreVertical, Plus, Search, Share2, Users } from "lucide-react";
-import type { ChatPeer, HomeFeedPlan, Screen } from "@/app/types";
+import { Copy, Filter, MoreVertical, Plus, Search, Share2, Trash2, Users } from "lucide-react";
+import type { ChatPeer, HomeFeedPlan, Screen, TagFilter } from "@/app/types";
 import { CATEGORY_CHIPS, homeFeedPlans, normalizePlanTag, PLAN_TAG_LABELS } from "@/app/data/plans";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
 import { HomeSheet } from "@/app/components/HomeSheet";
+import offlineMapImage from "@/imports/map.png";
 
 function ParticipantAvatarLine({ avatars }: { avatars: string[] }) {
   const visible = avatars.slice(0, 5);
@@ -38,26 +39,32 @@ function FeedAvatarStack({ avatars, label }: { avatars: string[]; label: string 
 }
 
 const OFFLINE_MAP_EVENTS = [
-  { id: "gorky-run", title: "Забег в Парке Горького", time: "Сб 09:00", left: 34, top: 58, planId: 1 },
-  { id: "sparrow-stretch", title: "Растяжка на Воробьёвых горах", time: "Вт 19:00", left: 24, top: 70 },
-  { id: "luzhniki-intervals", title: "Интервалы в Лужниках", time: "Чт 19:30", left: 43, top: 63, planId: 4 },
-  { id: "zaryadye-walk", title: "Прогулка в Зарядье", time: "Вс 11:00", left: 57, top: 45 },
-  { id: "sokolniki-yoga", title: "Йога в Сокольниках", time: "Ср 08:30", left: 70, top: 24 },
+  { id: "gorky-run", title: "Забег в Парке Горького", time: "Сб 09:00", planId: 1 },
+  { id: "sparrow-stretch", title: "Растяжка на Воробьёвых горах", time: "Вт 19:00" },
+  { id: "luzhniki-intervals", title: "Интервалы в Лужниках", time: "Чт 19:30", planId: 4 },
+  { id: "zaryadye-walk", title: "Прогулка в Зарядье", time: "Вс 11:00" },
+  { id: "sokolniki-yoga", title: "Йога в Сокольниках", time: "Ср 08:30" },
 ];
 
-function MapPreview({ compact = false }: { compact?: boolean }) {
+const createRandomMarkers = () => {
+  const count = 4 + Math.floor(Math.random() * 3);
+  return Array.from({ length: count }, (_, index) => ({
+    id: `marker-${index}`,
+    left: 14 + Math.random() * 72,
+    top: 16 + Math.random() * 68,
+  }));
+};
+
+function OfflineMapImage({ markers }: { markers: { id: string; left: number; top: number }[] }) {
   return (
-    <div className={`relative overflow-hidden rounded-2xl bg-muted ${compact ? "h-16 w-24" : "h-full w-full"}`}>
-      <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, #E8F5F4, #CDE9E5)" }} />
-      <div className="absolute left-[18%] top-0 h-full w-px bg-white/55 rotate-[28deg]" />
-      <div className="absolute left-[52%] top-0 h-full w-px bg-white/55 -rotate-[16deg]" />
-      <div className="absolute left-0 top-[46%] h-px w-full bg-white/70" />
-      <div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/35" />
-      {OFFLINE_MAP_EVENTS.slice(0, compact ? 3 : OFFLINE_MAP_EVENTS.length).map((event) => (
+    <div className="absolute inset-0">
+      <img src={offlineMapImage as unknown as string} alt="" className="h-full w-full object-cover" />
+      <div className="absolute inset-0 bg-black/45" />
+      {markers.map((marker) => (
         <span
-          key={event.id}
-          className="absolute flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-md"
-          style={{ left: `${event.left}%`, top: `${event.top}%` }}
+          key={marker.id}
+          className="absolute flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 shadow-md"
+          style={{ left: `${marker.left}%`, top: `${marker.top}%` }}
         >
           <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: GREEN }} />
         </span>
@@ -90,14 +97,16 @@ export function FeedEventCard({
   onAuthor,
   onShare,
   onAuthorMenu,
-  onMapOpen,
+  canDelete = false,
+  onDelete,
 }: {
   plan: HomeFeedPlan;
   onOpen: () => void;
   onAuthor: () => void;
   onShare: () => void;
   onAuthorMenu: () => void;
-  onMapOpen?: () => void;
+  canDelete?: boolean;
+  onDelete?: () => void;
 }) {
   const tag = normalizePlanTag(plan.tag);
 
@@ -130,15 +139,31 @@ export function FeedEventCard({
               {PLAN_TAG_LABELS[tag]}
             </span>
           </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onShare();
-            }}
-            className="flex h-[42px] w-[42px] flex-shrink-0 items-center justify-center rounded-full bg-black/45"
-          >
-            <Share2 size={18} strokeWidth={2} color="#fff" />
-          </button>
+          <div className="flex flex-shrink-0 items-center gap-2">
+            {canDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const confirmed = window.confirm("Удалить план полностью? Он исчезнет из ленты и у всех, кто к нему присоединился");
+                  if (confirmed) onDelete?.();
+                }}
+                className="flex h-[42px] w-[42px] items-center justify-center rounded-full bg-black/45"
+                aria-label="Удалить план"
+              >
+                <Trash2 size={18} strokeWidth={2} color="#fff" />
+              </button>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onShare();
+              }}
+              className="flex h-[42px] w-[42px] items-center justify-center rounded-full bg-black/45"
+              aria-label="Поделиться"
+            >
+              <Share2 size={18} strokeWidth={2} color="#fff" />
+            </button>
+          </div>
         </div>
 
         <div className="absolute bottom-8 left-5 right-5 flex flex-col items-center text-center">
@@ -157,18 +182,6 @@ export function FeedEventCard({
           <p className="mt-2 max-w-full truncate text-[16px] leading-6 text-white/75">{plan.timeDate}</p>
           {plan.address && (
             <p className="mt-0.5 max-w-full truncate text-[14px] text-white/65">{plan.address}</p>
-          )}
-          {plan.format === "offline" && (
-            <button
-              onClick={(event) => {
-                event.stopPropagation();
-                onMapOpen?.();
-              }}
-              className="mt-3 overflow-hidden rounded-2xl border border-white/70 bg-white/15 p-1"
-              aria-label="Открыть карту"
-            >
-              <MapPreview compact />
-            </button>
           )}
         </div>
       </div>
@@ -203,7 +216,7 @@ export function HomeScreen({
   const [tagFilter, setTagFilter] = useState<TagFilter>("all");
   const [sheet, setSheet] = useState<"map" | "share" | "author" | null>(null);
   const [activePlan, setActivePlan] = useState<HomeFeedPlan | null>(null);
-  const [activeMapEvent, setActiveMapEvent] = useState<(typeof OFFLINE_MAP_EVENTS)[number] | null>(null);
+  const [mapMarkers] = useState(createRandomMarkers);
   const [copied, setCopied] = useState(false);
   const plansWithTag = homeFeedPlans.map((plan) => ({
     ...plan,
@@ -267,17 +280,13 @@ export function HomeScreen({
 
         <button
           onClick={() => setSheet("map")}
-          className="relative flex h-28 w-full overflow-hidden rounded-2xl p-4 text-left active:opacity-90"
-          style={{ background: "linear-gradient(135deg, var(--secondary) 0%, var(--accent) 55%, var(--brand-dark) 100%)" }}
+          className="relative flex h-32 w-full overflow-hidden rounded-2xl p-4 text-left active:opacity-90"
         >
-          <div className="absolute right-3 top-3 h-20 w-28 overflow-hidden rounded-2xl border border-white/70">
-            <MapPreview compact />
-          </div>
-          <div className="relative z-10 mt-auto">
-            <p className="text-[17px] font-bold text-white">Офлайн-события рядом</p>
+          <OfflineMapImage markers={mapMarkers} />
+          <div className="relative z-10 mt-auto max-w-[240px]">
+            <p className="text-[18px] font-bold text-white">Офлайн события</p>
             <p className="mt-1 text-[13px] text-white/75">Посмотреть места на карте</p>
           </div>
-          <MapPin className="absolute right-4 top-4 text-white/80" size={22} strokeWidth={1.8} />
         </button>
 
         {visiblePlans.length > 0 ? (
@@ -289,10 +298,6 @@ export function HomeScreen({
               onAuthor={() => onAuthorOpen(plan.author.id ?? "gena")}
               onShare={() => openShare(plan)}
               onAuthorMenu={() => openAuthorMenu(plan)}
-              onMapOpen={() => {
-                setActiveMapEvent(null);
-                setSheet("map");
-              }}
             />
           ))
         ) : (
@@ -333,36 +338,27 @@ export function HomeScreen({
 
       {sheet === "map" && (
         <HomeSheet title="Офлайн-события" onClose={() => setSheet(null)}>
-          <div className="relative mb-4 h-[62vh] overflow-hidden rounded-2xl bg-gray-100">
-            <MapPreview />
+          <div className="relative mb-4 h-44 overflow-hidden rounded-2xl bg-gray-100">
+            <OfflineMapImage markers={mapMarkers} />
+          </div>
+          <div className="space-y-2">
             {OFFLINE_MAP_EVENTS.map((event) => (
               <button
                 key={event.id}
-                onClick={() => setActiveMapEvent(event)}
-                className="absolute flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-md"
-                style={{ left: `${event.left}%`, top: `${event.top}%` }}
+                onClick={() => {
+                  setSheet(null);
+                  if (event.planId) onPlanOpen(event.planId, "home");
+                }}
+                className="flex w-full items-center justify-between rounded-2xl bg-gray-100 px-4 py-3 text-left active:opacity-85"
               >
-                <MapPin size={17} strokeWidth={2.2} color={GREEN} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-semibold text-gray-900">{event.title}</span>
+                  <span className="mt-0.5 block text-[13px] text-gray-500">{event.time}</span>
+                </span>
+                <span className="ml-3 h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ backgroundColor: GREEN }} />
               </button>
             ))}
-            {activeMapEvent && (
-              <div className="absolute inset-x-3 bottom-3 rounded-2xl bg-white p-3 shadow-lg">
-                <p className="text-[15px] font-semibold text-gray-900">{activeMapEvent.title}</p>
-                <p className="mt-1 text-[13px] text-gray-500">{activeMapEvent.time} · Москва</p>
-                <button
-                  onClick={() => {
-                    if (activeMapEvent.planId) onPlanOpen(activeMapEvent.planId, "home");
-                    setSheet(null);
-                  }}
-                  className="mt-3 h-10 w-full rounded-xl text-[14px] font-semibold text-white"
-                  style={{ backgroundColor: GREEN }}
-                >
-                  Подробнее
-                </button>
-              </div>
-            )}
           </div>
-          <p className="text-[13px] leading-5 text-muted-foreground">Москва · центр карты — Красная площадь 55.7558, 37.6176. Точки — демо-события.</p>
         </HomeSheet>
       )}
 

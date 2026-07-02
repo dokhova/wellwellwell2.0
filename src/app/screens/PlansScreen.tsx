@@ -89,6 +89,7 @@ export function PlansScreen({
   checkedItemKeys,
   onToggleCheck,
   onRemoveParticipant,
+  onDeletePlan,
   preferredTab,
   highlightedPlanId,
 }: {
@@ -99,6 +100,7 @@ export function PlansScreen({
   checkedItemKeys: string[];
   onToggleCheck: (key: string) => void;
   onRemoveParticipant: (id: number) => void;
+  onDeletePlan: (id: number) => void;
   preferredTab?: "participant" | "author";
   highlightedPlanId?: number | null;
 }) {
@@ -199,18 +201,12 @@ export function PlansScreen({
   }
 
   return (
-    <div className="flex h-full flex-col bg-surface">
+    <div className="relative flex h-full flex-col bg-surface">
       <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-border px-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-[20px] font-bold leading-6 text-foreground">Мои планы</h1>
         </div>
-        <button
-          onClick={() => onNavigate(visibleTab === "participant" ? "addPlan" : "create", "plans")}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-foreground active:opacity-85"
-          aria-label={visibleTab === "participant" ? "Добавить план" : "Создать план"}
-        >
-          <Plus size={21} strokeWidth={2.1} />
-        </button>
+        {!hasAnyPlans && <div className="h-10 w-10" />}
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -240,8 +236,7 @@ export function PlansScreen({
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full" style={{ backgroundColor: GREEN_LIGHT }}>
               <CalendarPlus size={24} strokeWidth={1.9} color={GREEN} />
             </div>
-            <p className="text-[17px] font-semibold text-foreground">Здесь будут твои планы</p>
-            <p className="mt-2 text-[14px] leading-5 text-muted-foreground">Присоединяйся к чужим или создавай свои.</p>
+            <p className="text-[17px] font-semibold text-foreground">Планов пока нет</p>
             <button onClick={() => onNavigate("create", "plans")} className="mt-5 flex h-11 items-center gap-2 rounded-full px-5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
               <Plus size={16} strokeWidth={2.2} />
               Создать
@@ -257,6 +252,8 @@ export function PlansScreen({
                 onAuthor={() => onPlanOpen(plan.id)}
                 onShare={() => undefined}
                 onAuthorMenu={() => undefined}
+                canDelete
+                onDelete={() => onDeletePlan(plan.id)}
               />
             ))}
           </div>
@@ -322,6 +319,16 @@ export function PlansScreen({
           </>
         )}
       </div>
+      {hasAnyPlans && (
+        <button
+          onClick={() => onNavigate(visibleTab === "participant" ? "addPlan" : "create", "plans")}
+          className="absolute right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_10px_28px_rgba(0,0,0,0.22)] active:opacity-90"
+          style={{ top: "55%", backgroundColor: GREEN }}
+          aria-label={visibleTab === "participant" ? "Добавить план" : "Создать план"}
+        >
+          <Plus size={28} strokeWidth={2.2} />
+        </button>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, MessageCircle, Send } from "lucide-react";
+import { ArrowLeft, MessageCircle, Search, Send, X } from "lucide-react";
 import type { ChatMessage, ChatPeer, ChatThread } from "@/app/types";
 import { GREEN, GREEN_LIGHT, UNSPLASH } from "@/app/data/constants";
 
@@ -29,20 +29,62 @@ function PeerAvatar({ peer, size = 44 }: { peer: ChatPeer; size?: number }) {
 export function ChatsScreen({
   threads,
   onOpenThread,
+  availablePeers = [],
 }: {
   threads: ChatThread[];
   onOpenThread: (peer: ChatPeer) => void;
+  availablePeers?: ChatPeer[];
 }) {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
   const visibleThreads = [...threads].sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || b.updatedAt - a.updatedAt);
+  const matchingThreads = normalizedQuery
+    ? visibleThreads.filter((thread) => thread.peer.name.toLowerCase().includes(normalizedQuery))
+    : visibleThreads;
+  const existingPeerIds = new Set(threads.map((thread) => thread.peer.id));
+  const newPeerMatches = normalizedQuery
+    ? availablePeers
+        .filter((peer) => !existingPeerIds.has(peer.id))
+        .filter((peer) => peer.name.toLowerCase().includes(normalizedQuery))
+    : [];
 
   return (
     <div className="flex h-full flex-col bg-surface">
-      <div className="flex h-14 flex-shrink-0 items-center px-4">
+      <div className="flex h-14 flex-shrink-0 items-center gap-3 px-4">
         <h1 className="text-[24px] font-bold leading-7 text-foreground">Чаты</h1>
+        <div className="ml-auto flex min-w-0 items-center justify-end">
+          {searchOpen ? (
+            <div className="flex h-10 min-w-0 items-center gap-2 rounded-full bg-card px-3">
+              <Search size={17} strokeWidth={1.9} className="flex-shrink-0 text-muted-foreground" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Поиск"
+                className="w-[150px] min-w-0 bg-transparent text-[14px] outline-none placeholder:text-muted-foreground"
+              />
+              <button
+                onClick={() => {
+                  setQuery("");
+                  setSearchOpen(false);
+                }}
+                className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground"
+                aria-label="Закрыть поиск"
+              >
+                <X size={15} strokeWidth={2.1} />
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => setSearchOpen(true)} className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-foreground" aria-label="Поиск">
+              <Search size={20} strokeWidth={1.9} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-5">
-        {visibleThreads.length === 0 ? (
+        {visibleThreads.length === 0 && !normalizedQuery ? (
           <div className="flex min-h-[420px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full" style={{ backgroundColor: GREEN_LIGHT }}>
               <MessageCircle size={24} strokeWidth={1.9} color={GREEN} />
@@ -50,9 +92,9 @@ export function ChatsScreen({
             <p className="text-[17px] font-semibold text-foreground">Пока нет диалогов</p>
             <p className="mt-2 text-[14px] leading-5 text-muted-foreground">Напишите автору плана или участнику события, и чат появится здесь.</p>
           </div>
-        ) : (
+        ) : matchingThreads.length > 0 || newPeerMatches.length > 0 ? (
           <div className="space-y-2.5">
-            {visibleThreads.map((thread) => {
+            {matchingThreads.map((thread) => {
               const lastMessage = thread.messages[thread.messages.length - 1];
               return (
                 <button
@@ -73,6 +115,24 @@ export function ChatsScreen({
                 </button>
               );
             })}
+            {newPeerMatches.map((peer) => (
+              <button
+                key={peer.id}
+                onClick={() => onOpenThread(peer)}
+                className="flex w-full items-center gap-3 rounded-2xl bg-card px-3.5 py-3 text-left active:opacity-90"
+              >
+                <PeerAvatar peer={peer} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] font-semibold text-foreground">{peer.name}</p>
+                  <p className="mt-0.5 text-[13px] leading-4 text-muted-foreground">Начать новый чат</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-card px-6 py-12 text-center">
+            <p className="text-[16px] font-semibold text-foreground">Ничего не найдено</p>
+            <p className="mt-2 text-[14px] leading-5 text-muted-foreground">Попробуйте имя автора или участника.</p>
           </div>
         )}
       </div>

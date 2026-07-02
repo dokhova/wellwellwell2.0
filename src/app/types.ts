@@ -136,6 +136,8 @@ export interface EventDetailProps {
   participantItems?: ChatPeer[];
   onMessageParticipant?: (peer: ChatPeer) => void;
   programItems?: HomeFeedPlan[];
+  canDelete?: boolean;
+  onDelete?: () => void;
 }
 
 export type Period = "День" | "Неделя" | "Месяц";
