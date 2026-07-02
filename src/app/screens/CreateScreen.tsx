@@ -1,15 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import confetti from "canvas-confetti";
-import { ArrowLeft, CalendarDays, Check, ChevronDown, Clock, Copy, Eye, Image as ImageIcon, Layers3, Lock, MapPin, Plus, Repeat2, Sparkles, Users, Video, X } from "lucide-react";
-import type { HomeFeedPlan, PartOfDay, PlanRepeat, Schedule, Screen, TimeMode, Visibility } from "@/app/types";
+import { ArrowLeft, CalendarDays, Check, ChevronDown, Clock, Copy, Eye, Image as ImageIcon, Layers3, Lock, MapPin, PencilLine, Plus, Repeat2, Sparkles, UserCheck, Users, Video, X } from "lucide-react";
+import type { HomeFeedPlan, PartOfDay, PlanRepeat, Schedule, Screen, TimeMode, UserPlanRole, Visibility } from "@/app/types";
 import { ALL_DAYS, EVENT_PARTICIPANTS, GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES, WEEKDAY_VALUES } from "@/app/data/constants";
 import { DEFAULT_PLAN_AUTHOR, DEFAULT_PLAN_PARTICIPANTS, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
 
-type CreateStep = "welcome" | "countChoice" | "name" | "description" | "image" | "schedule" | "addAnother" | "finalOptions" | "success";
+type CreateStep = "welcome" | "countChoice" | "roleChoice" | "name" | "description" | "image" | "schedule" | "addAnother" | "finalOptions" | "success";
 type PlanDraft = { title: string; description: string; coverImage: string | null; schedule: Schedule };
 
 export type CreatedPlanResult = {
   countMode: "single" | "multiple";
+  role: UserPlanRole;
   plans: PlanDraft[];
   visibility: Visibility;
   participants: string[];
@@ -70,22 +71,25 @@ export function CreateScreen({
   onNavigate,
   backTo = "plans",
   onCreatePlan,
+  currentAuthor = DEFAULT_PLAN_AUTHOR,
 }: {
   onNavigate: (s: Screen) => void;
   backTo?: Screen;
   onCreatePlan: (plans: HomeFeedPlan[], result: CreatedPlanResult) => void;
+  currentAuthor?: HomeFeedPlan["author"];
 }) {
   const initialDateTime = useMemo(() => getLocalDateTime(), []);
   const [step, setStep] = useState<CreateStep>("welcome");
   const [history, setHistory] = useState<CreateStep[]>([]);
   const [countMode, setCountMode] = useState<"single" | "multiple" | null>(null);
+  const [role, setRole] = useState<UserPlanRole | null>(null);
   const [plans, setPlans] = useState<PlanDraft[]>([defaultPlan()]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showRepeatPicker, setShowRepeatPicker] = useState(false);
   const [untilWeek, setUntilWeek] = useState(4);
   const [titleError, setTitleError] = useState("");
   const [scheduleError, setScheduleError] = useState("");
-  const [visibility, setVisibility] = useState<Visibility>("all");
+  const [visibility, setVisibility] = useState<Visibility>("onlyMe");
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [showParticipantsPicker, setShowParticipantsPicker] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(false);
@@ -105,6 +109,11 @@ export function CreateScreen({
   const startParts = splitDateTime(exactStart);
   const endParts = splitDateTime(exactEnd);
   const selectedParticipantItems = EVENT_PARTICIPANTS.filter((participant) => selectedParticipants.includes(participant.id));
+
+  useEffect(() => {
+    if (role === "participant") setVisibility("onlyMe");
+    if (role === "author") setVisibility("all");
+  }, [role]);
 
   const goTo = (next: CreateStep) => {
     setHistory((items) => [...items, step]);
@@ -166,8 +175,23 @@ export function CreateScreen({
       participantsLabel: selectedParticipants.length > 0 ? `${selectedParticipants.length} чел.` : "Только я",
       timeDate: getTimeDate(draft.schedule),
       address: locationMode === "offline" && locationAddress.trim() ? locationAddress.trim() : undefined,
-      author: DEFAULT_PLAN_AUTHOR,
+      author: role === "author" ? currentAuthor : DEFAULT_PLAN_AUTHOR,
       shareUrl: `https://wellwellwell.app/plans/${id}`,
+    };
+  };
+
+  const buildProgramPlan = (items: HomeFeedPlan[]): HomeFeedPlan => {
+    const first = items[0];
+    const id = first.id;
+    return {
+      ...first,
+      id,
+      kind: "program",
+      duration: `${items.length} события`,
+      participantsLabel: selectedParticipants.length > 0 ? `${selectedParticipants.length} чел.` : first.participantsLabel,
+      timeDate: first.timeDate,
+      shareUrl: `https://wellwellwell.app/programs/${id}`,
+      items,
     };
   };
 
@@ -190,13 +214,17 @@ export function CreateScreen({
 
     const result: CreatedPlanResult = {
       countMode: countMode ?? "single",
+      role: role ?? "participant",
       plans: plans.map((plan) => ({ ...plan, title: plan.title.trim(), description: plan.description.trim() })),
       visibility,
       participants: selectedParticipants,
       location: locationMode === "online" ? "online" : locationAddress.trim() ? { address: locationAddress.trim(), lat: 55.7558, lng: 37.6176 } : null,
       videoMeeting: { enabled: videoEnabled, link: videoEnabled ? videoLink : "" },
     };
-    const createdPlans = result.plans.map(buildHomeFeedPlan);
+    const draftPlans = result.plans.map(buildHomeFeedPlan).map((plan) => ({ ...plan, kind: "plan" as const, visibility }));
+    const createdPlans = result.countMode === "multiple" && draftPlans.length > 1
+      ? [{ ...buildProgramPlan(draftPlans), visibility }]
+      : draftPlans;
     onCreatePlan(createdPlans, result);
     setStep("success");
     confetti({ particleCount: 70, spread: 60, origin: { y: 0.75 } });
@@ -225,8 +253,8 @@ export function CreateScreen({
   };
 
   const repeatLabel = repeat.type === "days" ? `${repeat.days} день` : repeat.type === "weekly" ? "Каждую неделю" : repeat.type === "untilWeek" ? `До недели ${repeat.week}` : "Бессрочно";
-  const progressSteps = countMode === "multiple" ? 7 : 6;
-  const progressIndex = ["welcome", "countChoice", "name", "description", "image", "schedule", "addAnother", "finalOptions", "success"].indexOf(step);
+  const progressSteps = countMode === "multiple" ? 8 : 7;
+  const progressIndex = ["welcome", "countChoice", "roleChoice", "name", "description", "image", "schedule", "addAnother", "finalOptions", "success"].indexOf(step);
 
   const renderProgress = () => (
     <div className="flex justify-center gap-1.5 px-4 pb-3">
@@ -343,7 +371,9 @@ export function CreateScreen({
       case "welcome":
         return <div className="flex min-h-full flex-col justify-center"><div className="mb-5 flex h-16 w-16 items-center justify-center rounded-3xl" style={{ backgroundColor: GREEN_LIGHT }}><Sparkles size={30} color={GREEN} /></div><h2 className="text-[32px] font-bold leading-[36px] text-foreground">Соберём твой план</h2><p className="mt-3 text-[16px] leading-6 text-muted-foreground">Пара шагов, немного расписания, и план уже в твоём списке.</p></div>;
       case "countChoice":
-        return <div className="pt-6"><h2 className="text-[28px] font-bold leading-[34px]">Создать один план или несколько?</h2><div className="mt-6 grid grid-cols-2 gap-3">{[{ mode: "single" as const, title: "Один", text: "быстро добавить план", Icon: CalendarDays }, { mode: "multiple" as const, title: "Несколько", text: "серия отдельных планов", Icon: Layers3 }].map(({ mode, title, text, Icon }) => <button key={mode} onClick={() => { setCountMode(mode); setPlans([defaultPlan()]); setCurrentIndex(0); goTo("name"); }} className="min-h-[150px] rounded-2xl bg-card p-4 text-left transition-transform active:scale-[0.97]"><Icon size={28} color={GREEN} /><h3 className="mt-5 text-[21px] font-bold">{title}</h3><p className="mt-2 text-[13px] leading-4 text-muted-foreground">{text}</p></button>)}</div></div>;
+        return <div className="pt-6"><h2 className="text-[28px] font-bold leading-[34px]">Создать один план или несколько?</h2><div className="mt-6 grid grid-cols-2 gap-3">{[{ mode: "single" as const, title: "Один", text: "быстро добавить план", Icon: CalendarDays }, { mode: "multiple" as const, title: "Несколько", text: "серия отдельных планов", Icon: Layers3 }].map(({ mode, title, text, Icon }) => <button key={mode} onClick={() => { setCountMode(mode); setPlans([defaultPlan()]); setCurrentIndex(0); goTo("roleChoice"); }} className="min-h-[150px] rounded-2xl bg-card p-4 text-left transition-transform active:scale-[0.97]"><Icon size={28} color={GREEN} /><h3 className="mt-5 text-[21px] font-bold">{title}</h3><p className="mt-2 text-[13px] leading-4 text-muted-foreground">{text}</p></button>)}</div></div>;
+      case "roleChoice":
+        return <div className="pt-6"><h2 className="text-[28px] font-bold leading-[34px]">Вы участник или автор?</h2><div className="mt-6 grid grid-cols-2 gap-3">{[{ value: "participant" as const, title: "Участник", text: "Буду выполнять сам(а)", Icon: UserCheck }, { value: "author" as const, title: "Автор", text: "Создаю для других", Icon: PencilLine }].map(({ value, title, text, Icon }) => <button key={value} onClick={() => { setRole(value); goTo("name"); }} className="min-h-[150px] rounded-2xl bg-card p-4 text-left transition-transform active:scale-[0.97]"><Icon size={28} color={GREEN} /><h3 className="mt-5 text-[21px] font-bold">{title}</h3><p className="mt-2 text-[13px] leading-4 text-muted-foreground">{text}</p></button>)}</div></div>;
       case "name":
         return <div className="pt-6 transition-all duration-200"><h2 className="mb-5 text-[28px] font-bold leading-[34px]">{countMode === "multiple" ? `План ${currentIndex + 1}: название` : "Название плана"}</h2><label><span className="mb-2 block text-[13px] text-muted-foreground">Название</span><input value={currentPlan.title} onChange={(e) => { updatePlan({ title: e.target.value }); setTitleError(""); }} placeholder="Например, вечерняя пробежка" className="h-14 w-full rounded-xl bg-card px-4 text-[16px] outline-none" autoFocus /></label>{titleError && <p className="mt-2 text-[12px] font-medium text-destructive">{titleError}</p>}</div>;
       case "description":
@@ -362,7 +392,7 @@ export function CreateScreen({
   };
 
   const renderFooter = () => {
-    if (step === "countChoice" || step === "addAnother" || step === "success") return null;
+    if (step === "countChoice" || step === "roleChoice" || step === "addAnother" || step === "success") return null;
     if (step === "welcome") return <button onClick={() => goTo("countChoice")} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Создать</button>;
     if (step === "description" || step === "image") return <div className="flex gap-3"><button onClick={() => goTo(step === "description" ? "image" : "schedule")} className="h-12 flex-1 rounded-xl bg-card text-[15px] font-semibold">Пропустить</button><button onClick={() => goTo(step === "description" ? "image" : "schedule")} className="h-12 flex-1 rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Далее</button></div>;
     const action = step === "name" ? continueFromName : step === "schedule" ? continueFromSchedule : handleCreate;

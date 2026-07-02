@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Copy, Filter, MapPin, MoreVertical, Search, Share2, Users } from "lucide-react";
-import type { HomeFeedPlan, Screen } from "@/app/types";
+import { Copy, Filter, MapPin, MoreVertical, Plus, Search, Share2, Users } from "lucide-react";
+import type { ChatPeer, HomeFeedPlan, Screen } from "@/app/types";
 import { CATEGORY_CHIPS, homeFeedPlans, normalizePlanTag, PLAN_TAG_LABELS } from "@/app/data/plans";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
 import { HomeSheet } from "@/app/components/HomeSheet";
@@ -150,10 +150,12 @@ export function HomeScreen({
   onNavigate,
   onPlanOpen,
   onAuthorOpen,
+  onMessagePeer,
 }: {
   onNavigate: (s: Screen, from?: Screen) => void;
   onPlanOpen: (id: number, from?: Screen) => void;
   onAuthorOpen: (expertId: string) => void;
+  onMessagePeer: (peer: ChatPeer) => void;
 }) {
   const [tagFilter, setTagFilter] = useState<TagFilter>("all");
   const [sheet, setSheet] = useState<"map" | "share" | "author" | null>(null);
@@ -205,7 +207,10 @@ export function HomeScreen({
 
   return (
     <div className="relative flex flex-col h-full bg-surface">
-      <div className="h-12 px-4 flex items-center justify-end">
+      <div className="h-12 px-4 flex items-center justify-between">
+        <button onClick={() => onNavigate("create", "home")} className="flex h-[28px] w-[28px] items-center justify-center rounded-full text-muted-foreground">
+          <Plus size={22} strokeWidth={1.9} />
+        </button>
         <div className="flex items-center gap-4 flex-shrink-0">
           <button onClick={() => onNavigate("search", "home")} className="w-[22px] h-[22px] flex items-center justify-center text-muted-foreground">
             <Search size={22} strokeWidth={1.8} />
@@ -338,6 +343,7 @@ export function HomeScreen({
         <HomeSheet title={activePlan.author.name} onClose={() => setSheet(null)}>
           <div className="space-y-2">
             <button onClick={() => { setSheet(null); onAuthorOpen(activePlan.author.id ?? "gena"); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Открыть профиль</button>
+            <button onClick={() => { setSheet(null); onMessagePeer({ id: activePlan.author.id ?? activePlan.author.name, name: activePlan.author.name, avatarUrl: activePlan.author.avatarUrl }); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Написать</button>
             <button onClick={() => setSheet(null)} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Пожаловаться</button>
           </div>
         </HomeSheet>

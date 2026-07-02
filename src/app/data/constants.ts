@@ -36,10 +36,10 @@ export const VISIBILITY_OPTIONS: { value: Visibility; label: string }[] = [
 ];
 
 export const EVENT_PARTICIPANTS = [
-  { id: "maria", name: "Мария", avatar: P_AVATARS.w1 },
-  { id: "dmitry", name: "Дмитрий", avatar: P_AVATARS.m1 },
-  { id: "anna", name: "Анна", avatar: P_AVATARS.w2 },
-  { id: "gena", name: "Гена", avatar: P_AVATARS.m2 },
+  { id: "maria", name: "Мария", avatar: P_AVATARS.w1, cannedReplies: ["Привет! Да, я уже в плане.", "Пока иду по расписанию, без пропусков.", "Увидимся на тренировке, я буду чуть раньше."] },
+  { id: "dmitry", name: "Дмитрий", avatar: P_AVATARS.m1, cannedReplies: ["Готов начать. Главное — не перегореть в первую неделю.", "План нормальный, держу спокойный темп.", "Если будет дождь, всё равно приду."] },
+  { id: "anna", name: "Анна", avatar: P_AVATARS.w2, cannedReplies: ["Привет! Я тоже начинаю с этой недели.", "План идёт хорошо, отмечаю выполнение каждый раз.", "Есть вопрос — пиши, разберёмся вместе."] },
+  { id: "gena", name: "Гена", avatar: P_AVATARS.m2, cannedReplies: ["Привет. Начинай спокойно и не пропускай разминку.", "Если тяжело, уменьши темп, но сохрани привычку.", "После тренировки напиши, как прошло."] },
 ];
 
-export const NO_BOTTOM_NAV: Screen[] = ["article", "search", "planEvent", "detail", "profileConnections", "editProfile", "addPlan"];
+export const NO_BOTTOM_NAV: Screen[] = ["article", "search", "planEvent", "detail", "profileConnections", "editProfile", "addPlan", "chat"];

@@ -1,7 +1,7 @@
-import { ArrowLeft, Calendar, CheckCircle2, Home, Plus, User } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2, Home, MessageCircle, Plus, User } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { Article, HomeFeedPlan, Screen } from "@/app/types";
-import { NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
+import type { Article, ChatMessage, ChatPeer, ChatThread, HomeFeedPlan, ParticipantPlanRef, Screen } from "@/app/types";
+import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
 import { formatNearestDate } from "@/app/data/calendar";
 import { experts, expertProfile, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
@@ -15,6 +15,7 @@ import { SearchScreen } from "@/app/screens/SearchScreen";
 import { ProfileConnectionsScreen, ProfileScreen, type ConnectionType } from "@/app/screens/ProfileScreen";
 import { EditProfileScreen } from "@/app/screens/EditProfileScreen";
 import { EventDetailScreen } from "@/app/screens/EventDetailScreen";
+import { ChatScreen, ChatsScreen } from "@/app/screens/ChatScreen";
 import { WorkInProgress } from "@/app/components/WorkInProgress";
 
 const readJson = <T,>(key: string, fallback: T): T => {
@@ -63,11 +64,13 @@ function AddPlanScreen({
   selectedPlanIds,
   onBack,
   onAddPlan,
+  onCreate,
 }: {
   plans: HomeFeedPlan[];
   selectedPlanIds: number[];
   onBack: () => void;
   onAddPlan: (id: number) => void;
+  onCreate: () => void;
 }) {
   const selected = new Set(selectedPlanIds);
 
@@ -82,6 +85,14 @@ function AddPlanScreen({
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-5">
+        <button
+          onClick={onCreate}
+          className="mb-4 flex h-11 w-full items-center justify-center gap-2 rounded-full text-[14px] font-semibold text-white"
+          style={{ backgroundColor: GREEN }}
+        >
+          <Plus size={16} strokeWidth={2.2} />
+          Создать
+        </button>
         <div className="space-y-2.5">
           {plans.map((plan) => {
             const isAdded = selected.has(plan.id);
@@ -126,6 +137,8 @@ export default function App() {
   const checkedItemsStorageKey = `${storagePrefix}:checkedItems`;
   const createdPlansStorageKey = `${storagePrefix}:createdPlans`;
   const followingStorageKey = `${storagePrefix}:following`;
+  const chatThreadIdsStorageKey = `${storagePrefix}:chatThreadIds`;
+  const chatThreadStorageKey = (peerId: string) => `${storagePrefix}:chat:${encodeURIComponent(peerId)}`;
 
   const [screen, setScreen] = useState<Screen>("home");
   const [detailOrigin, setDetailOrigin] = useState<Screen>("plans");
@@ -133,6 +146,7 @@ export default function App() {
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
   const [articleOrigin, setArticleOrigin] = useState<Screen>("home");
   const [activePlanId, setActivePlanId] = useState<number>(1);
+  const [activeChatPeer, setActiveChatPeer] = useState<ChatPeer | null>(null);
   const [planEventOrigin, setPlanEventOrigin] = useState<Screen>("plans");
   const [previousScreen, setPreviousScreen] = useState<Screen>("plans");
   const [profileConnectionsType, setProfileConnectionsType] = useState<ConnectionType>("followers");
@@ -142,13 +156,42 @@ export default function App() {
   const [editableProfile, setEditableProfile] = useState<ExpertProfile>(() =>
     normalizeProfile(readJson(profileStorageKey, buildTelegramProfile(telegramUser)))
   );
-  const [myPlanIds, setMyPlanIds] = useState<number[]>(() => readJson(myPlansStorageKey, []));
+  const [myParticipantIds, setMyParticipantIds] = useState<ParticipantPlanRef[]>(() => {
+    const stored = readJson<Array<number | ParticipantPlanRef>>(myPlansStorageKey, []);
+    return stored.map((item) => typeof item === "number" ? { kind: "plan", id: item } : item);
+  });
   const [checkedItemKeys, setCheckedItemKeys] = useState<string[]>(() => readJson(checkedItemsStorageKey, []));
   const [createdPlans, setCreatedPlans] = useState<HomeFeedPlan[]>(() => readJson(createdPlansStorageKey, []));
   const [myFollowing, setMyFollowing] = useState<ExpertConnection[]>(() => readJson(followingStorageKey, []));
+  const [chatThreads, setChatThreads] = useState<ChatThread[]>(() => {
+    const ids = readJson<string[]>(chatThreadIdsStorageKey, []);
+    return ids
+      .map((id) => readJson<ChatThread | null>(chatThreadStorageKey(id), null))
+      .filter((thread): thread is ChatThread => Boolean(thread?.peer && Array.isArray(thread.messages)));
+  });
   const currentUserId = editableProfile.id;
+  const currentAuthor = {
+    id: currentUserId,
+    name: editableProfile.name,
+    avatarUrl: editableProfile.photoUrl,
+  };
   const allPlans = [...createdPlans, ...homeFeedPlans];
-  const myPlans = allPlans.filter((plan) => myPlanIds.includes(plan.id));
+  const allPlanDetails = [
+    ...createdPlans.flatMap((plan) => plan.items?.length ? plan.items : []),
+    ...createdPlans,
+    ...homeFeedPlans,
+  ];
+  const participantKey = (ref: ParticipantPlanRef) => `${ref.kind}:${ref.id}`;
+  const myParticipantKeys = new Set(myParticipantIds.map(participantKey));
+  const myPlans = allPlans.filter((plan) => myParticipantKeys.has(participantKey({ kind: plan.kind ?? "plan", id: plan.id })));
+  const myAuthorPlans = allPlans.filter((plan) => plan.author.id === currentUserId);
+  const publicPlans = allPlans.filter((plan) => (plan.visibility ?? "all") === "all" && plan.author.id !== currentUserId);
+  const participantChatPeers: ChatPeer[] = EVENT_PARTICIPANTS.map((participant) => ({
+    id: participant.id,
+    name: participant.name,
+    avatarUrl: participant.avatar,
+    cannedReplies: participant.cannedReplies,
+  }));
 
   useEffect(() => initTelegram(), []);
 
@@ -157,9 +200,9 @@ export default function App() {
   }, [editableProfile, profileStorageKey]);
 
   useEffect(() => {
-    writeJson(myPlansStorageKey, myPlanIds);
-    setEditableProfile((profile) => ({ ...profile, plansCount: myPlanIds.length }));
-  }, [myPlanIds, myPlansStorageKey]);
+    writeJson(myPlansStorageKey, myParticipantIds);
+    setEditableProfile((profile) => ({ ...profile, plansCount: myParticipantIds.length }));
+  }, [myParticipantIds, myPlansStorageKey]);
 
   useEffect(() => {
     writeJson(checkedItemsStorageKey, checkedItemKeys);
@@ -173,6 +216,11 @@ export default function App() {
     writeJson(followingStorageKey, myFollowing);
     setEditableProfile((profile) => ({ ...profile, followersCount: 0, followingCount: myFollowing.length }));
   }, [followingStorageKey, myFollowing]);
+
+  useEffect(() => {
+    writeJson(chatThreadIdsStorageKey, chatThreads.map((thread) => thread.peer.id));
+    chatThreads.forEach((thread) => writeJson(chatThreadStorageKey(thread.peer.id), thread));
+  }, [chatThreadIdsStorageKey, chatThreads]);
 
   const navigate = (s: Screen, from?: Screen) => {
     if (s === "detail" && from) setDetailOrigin(from);
@@ -202,6 +250,44 @@ export default function App() {
     setScreen("profile");
   };
 
+  const getCannedPeer = (peer: ChatPeer): ChatPeer => {
+    const expert = experts.find((item) => item.id === peer.id);
+    if (expert) {
+      return { id: expert.id, name: peer.name || expert.name, avatarUrl: peer.avatarUrl ?? expert.photoUrl, cannedReplies: expert.cannedReplies };
+    }
+    const participant = participantChatPeers.find((item) => item.id === peer.id);
+    if (participant) return participant;
+    return peer;
+  };
+
+  const openChatWithPeer = (peer: ChatPeer) => {
+    const nextPeer = getCannedPeer(peer);
+    setActiveChatPeer(nextPeer);
+    setPreviousScreen(screen);
+    setScreen("chat");
+  };
+
+  const sendChatMessage = (peer: ChatPeer, text: string, sender: ChatMessage["sender"]) => {
+    const body = text.trim();
+    if (!body) return;
+    const normalizedPeer = getCannedPeer(peer);
+    const message: ChatMessage = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      sender,
+      text: body,
+      createdAt: Date.now(),
+    };
+    setChatThreads((threads) => {
+      const existing = threads.find((thread) => thread.peer.id === normalizedPeer.id);
+      if (existing) {
+        return threads.map((thread) => thread.peer.id === normalizedPeer.id
+          ? { ...thread, peer: normalizedPeer, messages: [...thread.messages, message], updatedAt: message.createdAt }
+          : thread);
+      }
+      return [{ peer: normalizedPeer, messages: [message], updatedAt: message.createdAt }, ...threads];
+    });
+  };
+
   const openProfileConnections = (type: ConnectionType, ownerIsCurrentUser = false) => {
     setProfileConnectionsType(type);
     setProfileConnectionsCanEditFollowing(ownerIsCurrentUser);
@@ -210,17 +296,20 @@ export default function App() {
   };
 
   const addCatalogPlanToRoutine = (id: number) => {
-    setMyPlanIds((ids) => ids.includes(id) ? ids : [id, ...ids]);
+    const plan = allPlans.find((item) => item.id === id);
+    const ref = { kind: plan?.kind ?? "plan", id } satisfies ParticipantPlanRef;
+    const key = participantKey(ref);
+    setMyParticipantIds((ids) => ids.some((item) => participantKey(item) === key) ? ids : [ref, ...ids]);
   };
 
   const addPlanToMine = (id: number) => {
     addCatalogPlanToRoutine(id);
     setViewingOwnProfile(true);
-    setScreen("profile");
+    setScreen(previousScreen === "profile" ? "profile" : "plans");
   };
 
   const removePlanFromMine = (id: number) => {
-    setMyPlanIds((ids) => ids.filter((planId) => planId !== id));
+    setMyParticipantIds((ids) => ids.filter((item) => item.id !== id));
     setCheckedItemKeys((keys) => keys.filter((key) => !key.endsWith(`:${id}`)));
   };
 
@@ -229,10 +318,13 @@ export default function App() {
   };
 
   const createPlan = (plans: HomeFeedPlan[], result: CreatedPlanResult) => {
-    console.log(result);
     const ids = plans.map((plan) => plan.id);
     setCreatedPlans((items) => [...plans, ...items.filter((item) => !ids.includes(item.id))]);
-    setMyPlanIds((items) => [...ids, ...items.filter((id) => !ids.includes(id))]);
+    if (result.role === "participant") {
+      const ref = { kind: result.plans.length > 1 ? "program" : "plan", id: ids[0] } satisfies ParticipantPlanRef;
+      const key = participantKey(ref);
+      setMyParticipantIds((items) => items.some((item) => participantKey(item) === key) ? items : [ref, ...items]);
+    }
     setViewingOwnProfile(true);
   };
 
@@ -247,19 +339,34 @@ export default function App() {
   const renderScreen = () => {
     switch (screen) {
       case "home":
-        return <HomeScreen onNavigate={navigate} onPlanOpen={openPlanEvent} onAuthorOpen={openExpertProfile} />;
+        return <HomeScreen onNavigate={navigate} onPlanOpen={openPlanEvent} onAuthorOpen={openExpertProfile} onMessagePeer={openChatWithPeer} />;
       case "plans":
         return (
           <PlansScreen
             onNavigate={navigate}
             onPlanOpen={openPlanEvent}
-            plans={myPlans}
+            participantPlans={myPlans}
+            authorPlans={myAuthorPlans}
             checkedItemKeys={checkedItemKeys}
             onToggleCheck={toggleCheckedItem}
           />
         );
       case "create":
-        return <CreateScreen onNavigate={navigate} backTo={createOrigin} onCreatePlan={createPlan} />;
+        return <CreateScreen onNavigate={navigate} backTo={createOrigin} onCreatePlan={createPlan} currentAuthor={currentAuthor} />;
+      case "chats":
+        return <ChatsScreen threads={chatThreads} onOpenThread={openChatWithPeer} />;
+      case "chat": {
+        if (!activeChatPeer) return <ChatsScreen threads={chatThreads} onOpenThread={openChatWithPeer} />;
+        const thread = chatThreads.find((item) => item.peer.id === activeChatPeer.id);
+        return (
+          <ChatScreen
+            peer={getCannedPeer(activeChatPeer)}
+            messages={thread?.messages ?? []}
+            onBack={() => setScreen(previousScreen === "chat" ? "chats" : previousScreen)}
+            onSendMessage={sendChatMessage}
+          />
+        );
+      }
       case "detail":
         return <DetailScreen onNavigate={navigate} backTo={detailOrigin} />;
       case "article":
@@ -287,7 +394,10 @@ export default function App() {
             onConnectionsOpen={(type) => openProfileConnections(type, isCurrentUserProfile)}
             onEdit={() => setScreen("editProfile")}
             onBack={() => setScreen(previousScreen)}
-            onAddPlan={() => setScreen("addPlan")}
+            onAddPlan={() => {
+              setPreviousScreen("profile");
+              setScreen("addPlan");
+            }}
             onRemovePlan={removePlanFromMine}
             onToggleFollow={toggleFollowing}
             profile={viewedProfile}
@@ -309,10 +419,14 @@ export default function App() {
       case "addPlan":
         return (
           <AddPlanScreen
-            plans={allPlans}
-            selectedPlanIds={myPlanIds}
-            onBack={() => setScreen("profile")}
+            plans={publicPlans}
+            selectedPlanIds={myParticipantIds.map((item) => item.id)}
+            onBack={() => setScreen(previousScreen)}
             onAddPlan={addPlanToMine}
+            onCreate={() => {
+              setCreateOrigin("plans");
+              setScreen("create");
+            }}
           />
         );
       case "profileConnections":
@@ -328,7 +442,7 @@ export default function App() {
           />
         );
       case "planEvent": {
-        const feedPlan = allPlans.find(plan => plan.id === activePlanId);
+        const feedPlan = allPlanDetails.find(plan => plan.id === activePlanId);
         if (feedPlan) {
           const participantsCount = Number.parseInt(feedPlan.participantsLabel, 10) || feedPlan.participants.length;
           return (
@@ -343,6 +457,7 @@ export default function App() {
               participantsLabel={feedPlan.participantsLabel}
               authorName={feedPlan.author.name}
               authorAvatarUrl={feedPlan.author.avatarUrl}
+              authorId={feedPlan.author.id}
               badgeDate={feedPlan.timeDate}
               paragraphs={[feedPlan.description]}
               meta={{
@@ -358,10 +473,13 @@ export default function App() {
               duration={feedPlan.duration}
               onBack={() => setScreen(planEventOrigin)}
               planId={feedPlan.id}
-              initiallyJoined={myPlanIds.includes(feedPlan.id)}
+              initiallyJoined={myParticipantIds.some((item) => item.id === feedPlan.id)}
               onJoin={addCatalogPlanToRoutine}
               onLeave={removePlanFromMine}
               onProfile={() => openExpertProfile(feedPlan.author.id ?? "gena")}
+              onMessageAuthor={(peer) => openChatWithPeer({ ...peer, id: feedPlan.author.id ?? peer.id })}
+              participantItems={participantChatPeers}
+              onMessageParticipant={openChatWithPeer}
             />
           );
         }
@@ -387,7 +505,7 @@ export default function App() {
           {([
             { id: "home" as Screen, label: "Главная", Icon: Home },
             { id: "plans" as Screen, label: "Мои планы", Icon: Calendar },
-            { id: "create" as Screen, label: "Создать", Icon: Plus },
+            { id: "chats" as Screen, label: "Чаты", Icon: MessageCircle },
             { id: "profile" as Screen, label: "Профиль", Icon: User },
           ] as { id: Screen; label: string; Icon: React.FC<{ size: number; strokeWidth: number; color: string }> }[]).map(({ id, label, Icon }) => {
             const isActive = screen === id || (id === "plans" && (screen === "detail" || screen === "planEvent")) || (id === "home" && screen === "search");

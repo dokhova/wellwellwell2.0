@@ -68,6 +68,7 @@ export interface ExpertProfile {
   plansCount: number;
   isFollowedByMe: boolean;
   isMe: boolean;
+  cannedReplies?: string[];
 }
 
 export const profileFollowers: ExpertConnection[] = [
@@ -130,6 +131,11 @@ export const expertProfile: ExpertProfile = {
   plansCount: expertPlans.length,
   isFollowedByMe: false,
   isMe: false,
+  cannedReplies: [
+    "Привет. Начни спокойно, без гонки за темпом.",
+    "Главное — регулярность. Если пропустишь день, просто возвращайся к плану.",
+    "После тренировки запиши ощущения, по ним проще корректировать нагрузку.",
+  ],
 };
 
 export const experts: ExpertProfile[] = [
@@ -146,6 +152,11 @@ export const experts: ExpertProfile[] = [
     plansCount: 3,
     isFollowedByMe: false,
     isMe: false,
+    cannedReplies: [
+      "Привет! Первые недели держим разговорный темп.",
+      "Если тяжело, снизь скорость, но сохрани регулярность.",
+      "На тренировке увидимся у старта, приходи за 10 минут.",
+    ],
   },
   {
     id: "dmitry-orlov",
@@ -159,6 +170,11 @@ export const experts: ExpertProfile[] = [
     plansCount: 3,
     isFollowedByMe: false,
     isMe: false,
+    cannedReplies: [
+      "План проходит нормально, если пульс не улетает в первые минуты.",
+      "Смотри не на разовый результат, а на динамику за неделю.",
+      "Вопрос по плану лучше решать через нагрузку и восстановление, не через мотивацию.",
+    ],
   },
   {
     id: "svetlana-voronova",
@@ -172,6 +188,11 @@ export const experts: ExpertProfile[] = [
     plansCount: 3,
     isFollowedByMe: false,
     isMe: false,
+    cannedReplies: [
+      "Начинаем мягко. Первые тренировки должны казаться слишком лёгкими.",
+      "Если сбилось дыхание, переходи на шаг и возвращайся к бегу позже.",
+      "На 5 км важнее ровность, чем быстрый первый километр.",
+    ],
   },
   {
     id: "alexey-petrov",
@@ -185,6 +206,11 @@ export const experts: ExpertProfile[] = [
     plansCount: 3,
     isFollowedByMe: false,
     isMe: false,
+    cannedReplies: [
+      "Проверь технику на разминке: корпус ровный, шаг короткий.",
+      "Боль игнорировать не надо. Лучше снизить объём и сохранить движение.",
+      "Если есть вопрос по механике, опиши, где именно тянет или зажимает.",
+    ],
   },
   {
     id: "yulia-belova",
@@ -198,6 +224,11 @@ export const experts: ExpertProfile[] = [
     plansCount: 3,
     isFollowedByMe: false,
     isMe: false,
+    cannedReplies: [
+      "Привет. В этом плане важна терпеливая работа, без резких скачков.",
+      "Если тренировка прошла тяжело, следующий день делаем легче.",
+      "Увидимся на тренировке. Разберём темп по факту самочувствия.",
+    ],
   },
 ];
 

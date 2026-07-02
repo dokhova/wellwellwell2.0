@@ -95,6 +95,7 @@ export function EventDetailScreen({
   title, coverSrc, backgroundGradient, authorName, authorAvatarUrl, authorVerified,
   readTime, badgeDate, paragraphs, meta, format = "offline", duration, tag, schedule, shareUrl,
   participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, planId, onJoin, onLeave, onProfile,
+  authorId, onMessageAuthor, participantItems, onMessageParticipant,
 }: EventDetailProps) {
   void authorVerified;
   void readTime;
@@ -275,13 +276,24 @@ export function EventDetailScreen({
                 <AuthorAvatar name={authorName} avatarUrl={authorAvatarUrl} />
                 <span className="truncate text-[15px] font-medium text-foreground">{authorName}</span>
               </button>
-              <button
-                onClick={() => setSubscribed((value) => !value)}
-                className="flex-shrink-0 rounded-full border px-3 py-1.5 text-[12px] font-semibold"
-                style={{ borderColor: GREEN, color: GREEN }}
-              >
-                {subscribed ? "Подписан" : "Подписаться"}
-              </button>
+              <div className="flex flex-shrink-0 items-center gap-2">
+                {onMessageAuthor && (
+                  <button
+                    onClick={() => onMessageAuthor({ id: authorId ?? authorName, name: authorName, avatarUrl: authorAvatarUrl })}
+                    className="rounded-full border px-3 py-1.5 text-[12px] font-semibold"
+                    style={{ borderColor: GREEN, color: GREEN }}
+                  >
+                    Написать
+                  </button>
+                )}
+                <button
+                  onClick={() => setSubscribed((value) => !value)}
+                  className="rounded-full border px-3 py-1.5 text-[12px] font-semibold"
+                  style={{ borderColor: GREEN, color: GREEN }}
+                >
+                  {subscribed ? "Подписан" : "Подписаться"}
+                </button>
+              </div>
             </div>
 
             <div className="mb-4 text-[14px] leading-[1.5] text-muted-foreground">
@@ -364,12 +376,27 @@ export function EventDetailScreen({
       {sheet === "participants" && (
         <HomeSheet title="Участники" onClose={() => setSheet(null)}>
           <div className="space-y-2">
-            {participantAvatars.map((url, i) => (
-              <button key={i} className="w-full rounded-2xl bg-gray-100 px-4 py-3 flex items-center gap-3 text-left">
-                <img src={url} alt="" className="w-9 h-9 rounded-full object-cover" />
-                <span className="text-[15px] font-medium text-gray-900">Участник {i + 1}</span>
-              </button>
-            ))}
+            {participantAvatars.map((url, i) => {
+              const participant = participantItems?.[i] ?? { id: `participant-${i}`, name: `Участник ${i + 1}`, avatarUrl: url };
+              return (
+                <div key={`${participant.id}-${i}`} className="flex w-full items-center gap-3 rounded-2xl bg-gray-100 px-4 py-3 text-left">
+                  <img src={participant.avatarUrl ?? url} alt="" className="h-9 w-9 rounded-full object-cover" />
+                  <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-gray-900">{participant.name}</span>
+                  {onMessageParticipant && (
+                    <button
+                      onClick={() => {
+                        setSheet(null);
+                        onMessageParticipant(participant);
+                      }}
+                      className="flex-shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold text-white"
+                      style={{ backgroundColor: GREEN }}
+                    >
+                      Написать
+                    </button>
+                  )}
+                </div>
+              );
+            })}
             <p className="pt-2 text-center text-[13px] text-gray-400">И ещё {meta.plusN} участников</p>
           </div>
         </HomeSheet>

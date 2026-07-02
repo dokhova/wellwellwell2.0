@@ -1,4 +1,4 @@
-export type Screen = "home" | "plans" | "create" | "detail" | "article" | "search" | "planEvent" | "profile" | "profileConnections" | "editProfile" | "addPlan";
+export type Screen = "home" | "plans" | "create" | "chats" | "chat" | "detail" | "article" | "search" | "planEvent" | "profile" | "profileConnections" | "editProfile" | "addPlan";
 
 export interface Article {
   id: number;
@@ -19,6 +19,29 @@ export type TagFilter = PlanTag | "all";
 export type TimeMode = "exact" | "partOfDay";
 export type PartOfDay = "morning" | "day" | "evening";
 export type Visibility = "all" | "onlyMe";
+export type PlanKind = "plan" | "program";
+export type UserPlanRole = "participant" | "author";
+export type ParticipantPlanRef = { kind: PlanKind; id: number };
+
+export interface ChatPeer {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  cannedReplies?: string[];
+}
+
+export interface ChatMessage {
+  id: string;
+  sender: "me" | "peer";
+  text: string;
+  createdAt: number;
+}
+
+export interface ChatThread {
+  peer: ChatPeer;
+  messages: ChatMessage[];
+  updatedAt: number;
+}
 export type PlanRepeat =
   | { type: "days"; days: number }
   | { type: "weekly" }
@@ -43,6 +66,8 @@ export interface Schedule {
 
 export interface HomeFeedPlan {
   id: number;
+  kind?: PlanKind;
+  visibility?: Visibility;
   tag?: PlanTag;
   isChallenge?: boolean;
   format?: "online" | "offline";
@@ -68,6 +93,7 @@ export interface HomeFeedPlan {
     avatarUrl: string | null;
   };
   shareUrl: string;
+  items?: HomeFeedPlan[];
 }
 
 export interface EventMeta {
@@ -104,6 +130,10 @@ export interface EventDetailProps {
   onJoin?: (planId: number) => void;
   onLeave?: (planId: number) => void;
   onProfile?: () => void;
+  authorId?: string;
+  onMessageAuthor?: (peer: ChatPeer) => void;
+  participantItems?: ChatPeer[];
+  onMessageParticipant?: (peer: ChatPeer) => void;
 }
 
 export type Period = "День" | "Неделя" | "Месяц";
