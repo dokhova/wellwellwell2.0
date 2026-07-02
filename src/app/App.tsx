@@ -2,7 +2,7 @@ import { ArrowLeft, Calendar, CheckCircle2, Home, MessageCircle, Plus, User } fr
 import { useEffect, useMemo, useState } from "react";
 import type { Article, ChatMessage, ChatPeer, ChatThread, HomeFeedPlan, ParticipantPlanRef, Screen } from "@/app/types";
 import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
-import { formatNearestDate } from "@/app/data/calendar";
+import { formatNearestDate, getNextOccurrence } from "@/app/data/calendar";
 import { experts, expertProfile, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
 import { getTelegramUser, initTelegram } from "@/app/lib/telegram";
@@ -215,7 +215,11 @@ export default function App() {
   const participantKey = (ref: ParticipantPlanRef) => `${ref.kind}:${ref.id}`;
   const myParticipantKeys = new Set(myParticipantIds.map(participantKey));
   const myPlans = allPlans.filter((plan) => myParticipantKeys.has(participantKey({ kind: plan.kind ?? "plan", id: plan.id })));
-  const publicPlans = allPlans.filter((plan) => (plan.visibility ?? "all") === "all" && plan.author.id !== currentUserId);
+  const catalogPublicPlans = homeFeedPlans
+    .filter((plan) => !deletedPlanIdSet.has(plan.id) && (plan.visibility ?? "all") === "all")
+    .sort((a, b) => getNextOccurrence(a.schedule).getTime() - getNextOccurrence(b.schedule).getTime());
+  const justCreatedPublicPlans = createdPlans.filter((plan) => !deletedPlanIdSet.has(plan.id) && (plan.visibility ?? "all") === "all");
+  const publicPlans = [...catalogPublicPlans, ...justCreatedPublicPlans];
   const participantChatPeers: ChatPeer[] = EVENT_PARTICIPANTS.map((participant) => ({
     id: participant.id,
     name: participant.name,
@@ -353,9 +357,13 @@ export default function App() {
     setScreen(previousScreen === "profile" ? "profile" : "plans");
   };
 
-  const removePlanFromMine = (id: number) => {
-    setMyParticipantIds((ids) => ids.filter((item) => item.id !== id));
-    setCheckedItemKeys((keys) => keys.filter((key) => !key.endsWith(`:${id}`)));
+  const removePlanFromMine = (id: number, scope: "single" | "program" = "single") => {
+    const plan = allPlans.find((item) => item.id === id);
+    const idsToRemove = scope === "program" && plan?.items?.length
+      ? new Set([id, ...plan.items.map((item) => item.id)])
+      : new Set([id]);
+    setMyParticipantIds((ids) => ids.filter((item) => !idsToRemove.has(item.id)));
+    setCheckedItemKeys((keys) => keys.filter((key) => !Array.from(idsToRemove).some((planId) => key.endsWith(`:${planId}`))));
   };
 
   const deletePlan = (id: number) => {
@@ -417,6 +425,7 @@ export default function App() {
           <ChatScreen
             peer={getCannedPeer(activeChatPeer)}
             messages={thread?.messages ?? []}
+            myAvatarUrl={editableProfile.photoUrl}
             onBack={() => setScreen(previousScreen === "chat" ? "chats" : previousScreen)}
             onSendMessage={sendChatMessage}
           />

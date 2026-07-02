@@ -211,12 +211,12 @@ export function HomeScreen({
   return (
     <div className="relative flex flex-col h-full bg-surface">
       <div className="h-12 px-4 flex items-center justify-between">
-        <button onClick={() => onNavigate("create", "home")} className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-foreground active:opacity-85">
-          <Plus size={22} strokeWidth={1.9} />
+        <button onClick={() => onNavigate("search", "home")} className="w-[22px] h-[22px] flex items-center justify-center text-muted-foreground">
+          <Search size={22} strokeWidth={1.8} />
         </button>
         <div className="flex items-center gap-4 flex-shrink-0">
-          <button onClick={() => onNavigate("search", "home")} className="w-[22px] h-[22px] flex items-center justify-center text-muted-foreground">
-            <Search size={22} strokeWidth={1.8} />
+          <button onClick={() => onNavigate("create", "home")} className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-foreground active:opacity-85">
+            <Plus size={22} strokeWidth={1.9} />
           </button>
         </div>
       </div>

@@ -1,8 +1,10 @@
 import { CalendarPlus, Check, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import type { HomeFeedPlan, Screen } from "@/app/types";
 import { normalizePlanTag, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
 import { GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES } from "@/app/data/constants";
 import { getPlanWeekItems } from "@/app/lib/planProgress";
+import { HomeSheet } from "@/app/components/HomeSheet";
 
 export function PlanListCard({
   plan,
@@ -93,10 +95,11 @@ export function PlansScreen({
   participantPlans: HomeFeedPlan[];
   checkedItemKeys: string[];
   onToggleCheck: (key: string) => void;
-  onRemoveParticipant: (id: number) => void;
+  onRemoveParticipant: (id: number, scope?: "single" | "program") => void;
   highlightedPlanId?: number | null;
 }) {
   const isEmpty = participantPlans.length === 0;
+  const [removingPlan, setRemovingPlan] = useState<HomeFeedPlan | null>(null);
 
   const todayIndex = 0;
   const monthShort = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
@@ -153,6 +156,10 @@ export function PlansScreen({
   return (
     <div className="flex h-full flex-col bg-surface">
       <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-border px-4">
+        <div className="h-10 w-10" />
+        <div className="min-w-0 flex-1 text-center">
+          <h1 className="text-[20px] font-semibold leading-6 text-foreground">Мои планы</h1>
+        </div>
         {!isEmpty ? (
           <button
             onClick={() => onNavigate("create", "plans")}
@@ -164,10 +171,6 @@ export function PlansScreen({
         ) : (
           <div className="h-10 w-10" />
         )}
-        <div className="min-w-0 flex-1 text-center">
-          <h1 className="text-[20px] font-bold leading-6 text-foreground">Мои планы</h1>
-        </div>
-        <div className="h-10 w-10" />
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -225,7 +228,7 @@ export function PlansScreen({
                     <button
                       onClick={(event) => {
                         event.stopPropagation();
-                        onRemoveParticipant(plan.id);
+                        setRemovingPlan(plan);
                       }}
                       className="absolute right-11 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-card text-muted-foreground active:opacity-80"
                       aria-label="Убрать из моих планов"
@@ -239,6 +242,46 @@ export function PlansScreen({
           </>
         )}
       </div>
+      {removingPlan && (
+        <HomeSheet title="Удаление" onClose={() => setRemovingPlan(null)}>
+          {removingPlan.items?.length ? (
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  onRemoveParticipant(removingPlan.id, "single");
+                  setRemovingPlan(null);
+                }}
+                className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900"
+              >
+                Удалить только это событие
+              </button>
+              <button
+                onClick={() => {
+                  onRemoveParticipant(removingPlan.id, "program");
+                  setRemovingPlan(null);
+                }}
+                className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900"
+              >
+                Удалить всю программу
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                const confirmed = window.confirm("Удалить план?");
+                if (confirmed) {
+                  onRemoveParticipant(removingPlan.id, "single");
+                  setRemovingPlan(null);
+                }
+              }}
+              className="h-12 w-full rounded-2xl text-[15px] font-semibold text-white"
+              style={{ backgroundColor: GREEN }}
+            >
+              Удалить план
+            </button>
+          )}
+        </HomeSheet>
+      )}
     </div>
   );
 }

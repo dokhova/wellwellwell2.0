@@ -50,9 +50,9 @@ export function ChatsScreen({
     : [];
 
   return (
-    <div className="flex h-full flex-col bg-surface">
+      <div className="flex h-full flex-col bg-surface">
       <div className="flex h-14 flex-shrink-0 items-center gap-3 px-4">
-        <h1 className="text-[24px] font-bold leading-7 text-foreground">Чаты</h1>
+        <h1 className="text-[24px] font-semibold leading-7 text-foreground">Чаты</h1>
         <div className="ml-auto flex min-w-0 items-center justify-end">
           {searchOpen ? (
             <div className="flex h-10 min-w-0 items-center gap-2 rounded-full bg-card px-3">
@@ -76,8 +76,8 @@ export function ChatsScreen({
               </button>
             </div>
           ) : (
-            <button onClick={() => setSearchOpen(true)} className="flex h-10 w-10 items-center justify-center rounded-full bg-card text-foreground" aria-label="Поиск">
-              <Search size={20} strokeWidth={1.9} />
+            <button onClick={() => setSearchOpen(true)} className="w-[22px] h-[22px] flex items-center justify-center text-muted-foreground" aria-label="Поиск">
+              <Search size={22} strokeWidth={1.8} />
             </button>
           )}
         </div>
@@ -143,11 +143,13 @@ export function ChatsScreen({
 export function ChatScreen({
   peer,
   messages,
+  myAvatarUrl,
   onBack,
   onSendMessage,
 }: {
   peer: ChatPeer;
   messages: ChatMessage[];
+  myAvatarUrl: string | null;
   onBack: () => void;
   onSendMessage: (peer: ChatPeer, text: string, sender: ChatMessage["sender"]) => void;
 }) {
@@ -202,8 +204,10 @@ export function ChatScreen({
         <div className="space-y-2.5">
           {messages.map((message) => {
             const mine = message.sender === "me";
+            const myPeer: ChatPeer = { id: "me", name: "Вы", avatarUrl: myAvatarUrl };
             return (
-              <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+              <div key={message.id} className={`flex items-end gap-2 ${mine ? "justify-end" : "justify-start"}`}>
+                {!mine && <PeerAvatar peer={peer} size={28} />}
                 <div
                   className="max-w-[78%] rounded-2xl px-3.5 py-2.5"
                   style={mine ? { backgroundColor: GREEN, color: "#fff" } : { backgroundColor: "var(--card)", color: "var(--foreground)" }}
@@ -211,6 +215,7 @@ export function ChatScreen({
                   <p className="text-[14px] leading-5">{message.text}</p>
                   <p className={`mt-1 text-right text-[10px] ${mine ? "text-white/70" : "text-muted-foreground"}`}>{formatChatTime(message.createdAt)}</p>
                 </div>
+                {mine && <PeerAvatar peer={myPeer} size={28} />}
               </div>
             );
           })}
@@ -238,7 +243,7 @@ export function ChatScreen({
           </div>
         </div>
         <div className="flex items-center gap-2 rounded-full bg-input px-3 py-2">
-          <img src={UNSPLASH.userAvatar} alt="" className="h-8 w-8 flex-shrink-0 rounded-full object-cover" />
+          <PeerAvatar peer={{ id: "me", name: "Вы", avatarUrl: myAvatarUrl ?? UNSPLASH.userAvatar }} size={32} />
           <input
             value={text}
             onChange={(event) => setText(event.target.value)}
