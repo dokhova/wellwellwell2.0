@@ -94,7 +94,7 @@ function AuthorAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl:
 export function EventDetailScreen({
   title, coverSrc, backgroundGradient, authorName, authorAvatarUrl, authorVerified,
   readTime, badgeDate, paragraphs, meta, format = "offline", duration, tag, schedule, shareUrl,
-  participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, onProfile,
+  participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, planId, onJoin, onLeave, onProfile,
 }: EventDetailProps) {
   void authorVerified;
   void readTime;
@@ -161,11 +161,13 @@ export function EventDetailScreen({
 
   const joinPlan = () => {
     setJoined(true);
+    if (planId !== undefined) onJoin?.(planId);
     showJoinToast();
   };
 
   const cancelJoin = () => {
     setJoined(false);
+    if (planId !== undefined) onLeave?.(planId);
   };
 
   const toggleJoin = () => {

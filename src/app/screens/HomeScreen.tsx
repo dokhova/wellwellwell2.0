@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Check, Copy, Filter, MoreVertical, Search, Share2, Users } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Copy, Filter, MapPin, MoreVertical, Search, Share2, Users } from "lucide-react";
 import type { HomeFeedPlan, Screen } from "@/app/types";
 import { CATEGORY_CHIPS, homeFeedPlans, normalizePlanTag, PLAN_TAG_LABELS } from "@/app/data/plans";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
@@ -156,9 +156,25 @@ export function HomeScreen({
   onAuthorOpen: (expertId: string) => void;
 }) {
   const [tagFilter, setTagFilter] = useState<TagFilter>("all");
-  const [sheet, setSheet] = useState<"filter" | "share" | "author" | null>(null);
+  const [sheet, setSheet] = useState<"map" | "share" | "author" | null>(null);
   const [activePlan, setActivePlan] = useState<HomeFeedPlan | null>(null);
   const [copied, setCopied] = useState(false);
+  const mapMarkers = useMemo(() => {
+    const center = { lat: 55.7558, lng: 37.6176 };
+    return Array.from({ length: 6 }, (_, index) => {
+      const angle = Math.random() * Math.PI * 2;
+      const radiusKm = 1 + Math.random() * 4;
+      const lat = center.lat + Math.cos(angle) * radiusKm / 111;
+      const lng = center.lng + Math.sin(angle) * radiusKm / (111 * Math.cos(center.lat * Math.PI / 180));
+      return {
+        id: index,
+        lat,
+        lng,
+        left: 50 + (lng - center.lng) * 280,
+        top: 50 - (lat - center.lat) * 520,
+      };
+    });
+  }, []);
 
   const plansWithTag = homeFeedPlans.map((plan) => ({
     ...plan,
@@ -191,9 +207,6 @@ export function HomeScreen({
     <div className="relative flex flex-col h-full bg-surface">
       <div className="h-12 px-4 flex items-center justify-end">
         <div className="flex items-center gap-4 flex-shrink-0">
-          <button onClick={() => setSheet("filter")} className="w-[22px] h-[22px] flex items-center justify-center text-muted-foreground">
-            <Filter size={22} strokeWidth={1.8} />
-          </button>
           <button onClick={() => onNavigate("search", "home")} className="w-[22px] h-[22px] flex items-center justify-center text-muted-foreground">
             <Search size={22} strokeWidth={1.8} />
           </button>
@@ -202,6 +215,45 @@ export function HomeScreen({
 
       {/* Feed */}
       <div className="flex-1 overflow-y-auto px-4 pt-2 pb-6 space-y-6">
+        <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex gap-2">
+            {CATEGORY_CHIPS.map((chip) => {
+              const active = tagFilter === chip.value;
+              return (
+                <button
+                  key={chip.value}
+                  onClick={() => setTagFilter(chip.value)}
+                  className="flex-shrink-0 rounded-full px-4 py-2 text-[14px] font-semibold"
+                  style={active ? { backgroundColor: GREEN_LIGHT, color: GREEN } : { backgroundColor: "var(--card)", color: "var(--foreground)" }}
+                >
+                  {chip.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <button
+          onClick={() => setSheet("map")}
+          className="relative flex h-28 w-full overflow-hidden rounded-2xl p-4 text-left active:opacity-90"
+          style={{ background: "linear-gradient(135deg, var(--secondary) 0%, var(--accent) 55%, var(--brand-dark) 100%)" }}
+        >
+          {[18, 42, 71].map((left, index) => (
+            <span
+              key={left}
+              className="absolute flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-md"
+              style={{ left: `${left}%`, top: `${26 + index * 17}%` }}
+            >
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: GREEN }} />
+            </span>
+          ))}
+          <div className="relative z-10 mt-auto">
+            <p className="text-[17px] font-bold text-white">Офлайн-события рядом</p>
+            <p className="mt-1 text-[13px] text-white/75">Посмотреть места на карте</p>
+          </div>
+          <MapPin className="absolute right-4 top-4 text-white/80" size={22} strokeWidth={1.8} />
+        </button>
+
         {visiblePlans.length > 0 ? (
           visiblePlans.map((plan) => (
             <FeedEventCard
@@ -249,27 +301,22 @@ export function HomeScreen({
         )}
       </div>
 
-      {sheet === "filter" && (
-        <HomeSheet title="Фильтры" onClose={() => setSheet(null)}>
-          <div className="space-y-2">
-            {CATEGORY_CHIPS.map((chip) => {
-              const active = tagFilter === chip.value;
-              return (
-              <button
-                key={chip.value}
-                onClick={() => {
-                  setTagFilter(chip.value);
-                  setSheet(null);
-                }}
-                className="w-full rounded-xl px-4 py-3 text-left text-[15px] font-medium flex items-center justify-between"
-                style={active ? { backgroundColor: GREEN_LIGHT, color: GREEN } : { backgroundColor: "var(--muted)", color: "var(--foreground)" }}
+      {sheet === "map" && (
+        <HomeSheet title="Офлайн-события" onClose={() => setSheet(null)}>
+          <div className="relative mb-4 h-56 overflow-hidden rounded-2xl bg-gray-100">
+            <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, #E8F5F4, #CDE9E5)" }} />
+            <div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/35" />
+            {mapMarkers.map((marker) => (
+              <span
+                key={marker.id}
+                className="absolute flex h-7 w-7 items-center justify-center rounded-full bg-white shadow-md"
+                style={{ left: `${marker.left}%`, top: `${marker.top}%` }}
               >
-                <span>{chip.label}</span>
-                {active && <Check size={18} strokeWidth={2.2} />}
-              </button>
-              );
-            })}
+                <MapPin size={16} strokeWidth={2.2} color={GREEN} />
+              </span>
+            ))}
           </div>
+          <p className="text-[13px] leading-5 text-muted-foreground">Москва · Красная площадь 55.7558, 37.6176. Точки случайно раскиданы в радиусе около 5 км.</p>
         </HomeSheet>
       )}
 

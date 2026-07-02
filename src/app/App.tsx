@@ -2,7 +2,8 @@ import { ArrowLeft, Calendar, CheckCircle2, Home, Plus, User } from "lucide-reac
 import { useEffect, useMemo, useState } from "react";
 import type { Article, HomeFeedPlan, Screen } from "@/app/types";
 import { NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
-import { experts, expertProfile, type ExpertProfile } from "@/app/data/profile";
+import { formatNearestDate } from "@/app/data/calendar";
+import { experts, expertProfile, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
 import { getTelegramUser, initTelegram } from "@/app/lib/telegram";
 import { HomeScreen } from "@/app/screens/HomeScreen";
@@ -82,14 +83,15 @@ function AddPlanScreen({
 
       <div className="flex-1 overflow-y-auto px-4 pb-5">
         <div className="space-y-2.5">
-          {plans.map((plan, index) => {
+          {plans.map((plan) => {
             const isAdded = selected.has(plan.id);
+            const nearestDate = formatNearestDate(plan.schedule);
             return (
               <div key={plan.id} className="relative">
                 <PlanListCard
                   plan={plan}
-                  dayNumber={index + 1}
-                  monthLabel="План"
+                  dayNumber={nearestDate.dayNumber}
+                  monthLabel={nearestDate.monthLabel}
                   scheduleMeta={plan.timeDate}
                   showToggle={false}
                   onOpen={() => {
@@ -123,6 +125,7 @@ export default function App() {
   const myPlansStorageKey = `${storagePrefix}:myPlans`;
   const checkedItemsStorageKey = `${storagePrefix}:checkedItems`;
   const createdPlansStorageKey = `${storagePrefix}:createdPlans`;
+  const followingStorageKey = `${storagePrefix}:following`;
 
   const [screen, setScreen] = useState<Screen>("home");
   const [detailOrigin, setDetailOrigin] = useState<Screen>("plans");
@@ -142,6 +145,7 @@ export default function App() {
   const [myPlanIds, setMyPlanIds] = useState<number[]>(() => readJson(myPlansStorageKey, []));
   const [checkedItemKeys, setCheckedItemKeys] = useState<string[]>(() => readJson(checkedItemsStorageKey, []));
   const [createdPlans, setCreatedPlans] = useState<HomeFeedPlan[]>(() => readJson(createdPlansStorageKey, []));
+  const [myFollowing, setMyFollowing] = useState<ExpertConnection[]>(() => readJson(followingStorageKey, []));
   const currentUserId = editableProfile.id;
   const allPlans = [...createdPlans, ...homeFeedPlans];
   const myPlans = allPlans.filter((plan) => myPlanIds.includes(plan.id));
@@ -164,6 +168,11 @@ export default function App() {
   useEffect(() => {
     writeJson(createdPlansStorageKey, createdPlans);
   }, [createdPlans, createdPlansStorageKey]);
+
+  useEffect(() => {
+    writeJson(followingStorageKey, myFollowing);
+    setEditableProfile((profile) => ({ ...profile, followersCount: 0, followingCount: myFollowing.length }));
+  }, [followingStorageKey, myFollowing]);
 
   const navigate = (s: Screen, from?: Screen) => {
     if (s === "detail" && from) setDetailOrigin(from);
@@ -200,8 +209,12 @@ export default function App() {
     setScreen("profileConnections");
   };
 
+  const addCatalogPlanToRoutine = (id: number) => {
+    setMyPlanIds((ids) => ids.includes(id) ? ids : [id, ...ids]);
+  };
+
   const addPlanToMine = (id: number) => {
-    setMyPlanIds((ids) => ids.includes(id) ? ids : [...ids, id]);
+    addCatalogPlanToRoutine(id);
     setViewingOwnProfile(true);
     setScreen("profile");
   };
@@ -215,11 +228,20 @@ export default function App() {
     setCheckedItemKeys((keys) => keys.includes(key) ? keys.filter((item) => item !== key) : [...keys, key]);
   };
 
-  const createPlan = (plan: HomeFeedPlan, result: CreatedPlanResult) => {
+  const createPlan = (plans: HomeFeedPlan[], result: CreatedPlanResult) => {
     console.log(result);
-    setCreatedPlans((plans) => [plan, ...plans.filter((item) => item.id !== plan.id)]);
-    setMyPlanIds((ids) => ids.includes(plan.id) ? ids : [plan.id, ...ids]);
+    const ids = plans.map((plan) => plan.id);
+    setCreatedPlans((items) => [...plans, ...items.filter((item) => !ids.includes(item.id))]);
+    setMyPlanIds((items) => [...ids, ...items.filter((id) => !ids.includes(id))]);
     setViewingOwnProfile(true);
+  };
+
+  const toggleFollowing = (profile: ExpertProfile, nextFollowed: boolean) => {
+    setMyFollowing((items) => {
+      if (!nextFollowed) return items.filter((item) => item.id !== profile.id);
+      if (items.some((item) => item.id === profile.id)) return items;
+      return [{ id: profile.id, name: profile.name, avatarUrl: profile.photoUrl, isFollowedByMe: true }, ...items];
+    });
   };
 
   const renderScreen = () => {
@@ -247,9 +269,12 @@ export default function App() {
       case "search":
         return <SearchScreen onBack={() => setScreen("home")} onArticle={a => openArticle(a, "search")} />;
       case "profile":
-        const viewedProfile = viewingOwnProfile
+        const baseViewedProfile = viewingOwnProfile
           ? editableProfile
           : experts.find((expert) => expert.id === viewingExpertId) ?? expertProfile;
+        const viewedProfile = viewingOwnProfile
+          ? baseViewedProfile
+          : { ...baseViewedProfile, isFollowedByMe: myFollowing.some((item) => item.id === baseViewedProfile.id) };
         const isCurrentUserProfile = viewedProfile.id === currentUserId;
         const viewedPlans = isCurrentUserProfile
           ? myPlans
@@ -264,6 +289,7 @@ export default function App() {
             onBack={() => setScreen(previousScreen)}
             onAddPlan={() => setScreen("addPlan")}
             onRemovePlan={removePlanFromMine}
+            onToggleFollow={toggleFollowing}
             profile={viewedProfile}
             plans={viewedPlans}
             isMe={isCurrentUserProfile}
@@ -296,6 +322,9 @@ export default function App() {
             onBack={() => setScreen(previousScreen)}
             onProfileOpen={() => setScreen("profile")}
             canEditFollowing={profileConnectionsCanEditFollowing}
+            followerItems={profileConnectionsCanEditFollowing ? [] : undefined}
+            followingItems={myFollowing}
+            onToggleFollowing={(id) => setMyFollowing((items) => items.filter((item) => item.id !== id))}
           />
         );
       case "planEvent": {
@@ -328,7 +357,10 @@ export default function App() {
               format={feedPlan.format}
               duration={feedPlan.duration}
               onBack={() => setScreen(planEventOrigin)}
-              initiallyJoined={false}
+              planId={feedPlan.id}
+              initiallyJoined={myPlanIds.includes(feedPlan.id)}
+              onJoin={addCatalogPlanToRoutine}
+              onLeave={removePlanFromMine}
               onProfile={() => openExpertProfile(feedPlan.author.id ?? "gena")}
             />
           );
@@ -354,7 +386,7 @@ export default function App() {
         >
           {([
             { id: "home" as Screen, label: "Главная", Icon: Home },
-            { id: "plans" as Screen, label: "Планы", Icon: Calendar },
+            { id: "plans" as Screen, label: "Мои планы", Icon: Calendar },
             { id: "create" as Screen, label: "Создать", Icon: Plus },
             { id: "profile" as Screen, label: "Профиль", Icon: User },
           ] as { id: Screen; label: string; Icon: React.FC<{ size: number; strokeWidth: number; color: string }> }[]).map(({ id, label, Icon }) => {

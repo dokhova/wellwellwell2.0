@@ -60,6 +60,8 @@ export interface HomeFeedPlan {
   participantsLabel: string;
   timeDate: string;
   address?: string;
+  lat?: number;
+  lng?: number;
   author: {
     id?: string;
     name: string;
@@ -98,6 +100,9 @@ export interface EventDetailProps {
   duration?: string;
   onBack: () => void;
   initiallyJoined?: boolean;
+  planId?: number;
+  onJoin?: (planId: number) => void;
+  onLeave?: (planId: number) => void;
   onProfile?: () => void;
 }
 

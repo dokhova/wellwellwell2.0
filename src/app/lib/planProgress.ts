@@ -1,7 +1,8 @@
 import type { HomeFeedPlan } from "@/app/types";
 import { weekDateMonths, weekDates } from "@/app/data/calendar";
 
-export const PLAN_START_DATE = new Date("2026-07-01T00:00:00");
+export const PLAN_START_DATE = new Date();
+PLAN_START_DATE.setHours(0, 0, 0, 0);
 
 export const getDateKey = (date: Date) => date.toISOString().slice(0, 10);
 

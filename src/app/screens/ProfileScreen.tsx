@@ -98,17 +98,23 @@ export function ProfileConnectionsScreen({
   onBack,
   onProfileOpen,
   canEditFollowing,
+  followerItems,
+  followingItems,
+  onToggleFollowing,
 }: {
   type: ConnectionType;
   onBack: () => void;
   onProfileOpen: () => void;
   canEditFollowing: boolean;
+  followerItems?: ExpertConnection[];
+  followingItems?: ExpertConnection[];
+  onToggleFollowing?: (id: string) => void;
 }) {
   const [followers, setFollowers] = useState(profileFollowers);
   const [following, setFollowing] = useState(profileFollowing);
   const isFollowers = type === "followers";
   const title = isFollowers ? "Подписчики" : "Подписки";
-  const people = isFollowers ? followers : following;
+  const people = isFollowers ? followerItems ?? followers : followingItems ?? following;
   const emptyText = isFollowers ? "Пока никто не подписался" : "Вы ни на кого не подписаны";
   const canEditConnections = canEditFollowing && !isFollowers;
 
@@ -118,6 +124,8 @@ export function ProfileConnectionsScreen({
 
     if (isFollowers) {
       setFollowers(update);
+    } else if (onToggleFollowing) {
+      onToggleFollowing(id);
     } else {
       setFollowing(update);
     }
@@ -164,6 +172,7 @@ export function ProfileScreen(props: {
   onBack?: () => void;
   onAddPlan: () => void;
   onRemovePlan: (id: number) => void;
+  onToggleFollow?: (profile: ExpertProfile, nextFollowed: boolean) => void;
   profile: ExpertProfile;
   plans: HomeFeedPlan[];
   isMe: boolean;
@@ -215,6 +224,10 @@ export function ProfileScreen(props: {
     emblaApi.on("select", onPhotoSelect);
     emblaApi.on("reInit", onPhotoSelect);
   }, [emblaApi, onPhotoSelect]);
+
+  useEffect(() => {
+    setIsFollowed(props.profile.isFollowedByMe);
+  }, [props.profile.id, props.profile.isFollowedByMe]);
 
   return (
     <div className="h-full overflow-y-auto bg-card">
@@ -286,15 +299,6 @@ export function ProfileScreen(props: {
             >
               {props.profile.bio}
             </p>
-            {props.isMe && (
-              <button
-                onClick={props.onEdit}
-                className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground active:opacity-80"
-                aria-label="Редактировать описание"
-              >
-                <Edit3 size={15} strokeWidth={2} />
-              </button>
-            )}
           </div>
           {shouldShowBioToggle && (
             <button
@@ -314,7 +318,10 @@ export function ProfileScreen(props: {
 
           {!props.isMe && (
             <button
-              onClick={() => setIsFollowed((value) => !value)}
+              onClick={() => setIsFollowed((value) => {
+                props.onToggleFollow?.(props.profile, !value);
+                return !value;
+              })}
               className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl border text-[15px] font-semibold active:opacity-90"
               style={isFollowed ? { backgroundColor: "var(--muted)", borderColor: "var(--border)", color: "var(--foreground)" } : { backgroundImage: "linear-gradient(90deg, #00887F, #00A99D, #4DD0C4)", borderColor: GREEN, color: "#fff" }}
             >
@@ -370,14 +377,14 @@ export function ProfileScreen(props: {
                   )}
                 </div>
               ) : (
-                <div className="rounded-xl bg-muted px-4 py-8 text-center">
-                  <p className="text-[14px] leading-5 text-muted-foreground">Пока нет добавленных планов</p>
+                <div className="flex justify-end">
                   <button
                     onClick={props.onAddPlan}
-                    className="mt-4 h-11 rounded-xl px-5 text-[14px] font-semibold text-white active:opacity-90"
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-white active:opacity-90"
                     style={{ backgroundColor: GREEN }}
+                    aria-label="Добавить план"
                   >
-                    Добавить план
+                    <Plus size={17} strokeWidth={2.4} />
                   </button>
                 </div>
               )}

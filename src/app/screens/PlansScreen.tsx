@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Check, ChevronRight } from "lucide-react";
+import { CalendarPlus, Check, ChevronRight, Plus } from "lucide-react";
 import type { HomeFeedPlan, Screen } from "@/app/types";
 import { normalizePlanTag, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
-import { GREEN, PART_OF_DAY_RANGES } from "@/app/data/constants";
+import { GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES } from "@/app/data/constants";
 import { AnalyticsScreen } from "@/app/screens/AnalyticsScreen";
 import { getPlanWeekItems } from "@/app/lib/planProgress";
 
@@ -13,6 +13,7 @@ export function PlanListCard({
   scheduleMeta,
   done = false,
   showToggle = true,
+  badge,
   onOpen,
   onToggle,
 }: {
@@ -22,6 +23,7 @@ export function PlanListCard({
   scheduleMeta: string;
   done?: boolean;
   showToggle?: boolean;
+  badge?: string;
   onOpen: () => void;
   onToggle?: () => void;
 }) {
@@ -51,7 +53,14 @@ export function PlanListCard({
         >
           {plan.title}
         </h3>
-        <p className="mt-0.5 truncate text-[13px] leading-4 text-muted-foreground">{scheduleMeta}</p>
+        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+          {badge && (
+            <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ backgroundColor: GREEN_LIGHT, color: GREEN }}>
+              {badge}
+            </span>
+          )}
+          <p className="min-w-0 truncate text-[13px] leading-4 text-muted-foreground">{scheduleMeta}</p>
+        </div>
       </div>
       {showToggle && (
         <span
@@ -85,7 +94,6 @@ export function PlansScreen({
   checkedItemKeys: string[];
   onToggleCheck: (key: string) => void;
 }) {
-  void onNavigate;
   const [activeTab, setActiveTab] = useState<"plans" | "analytics">("plans");
 
   const todayIndex = 0;
@@ -144,7 +152,7 @@ export function PlansScreen({
     <div className="flex h-full flex-col bg-surface">
       <div className="flex flex-shrink-0 border-b border-border px-4">
         {[
-          { id: "plans" as const, label: "Планы" },
+          { id: "plans" as const, label: "Мои планы" },
           { id: "analytics" as const, label: "Аналитика" },
         ].map((tab) => {
           const active = activeTab === tab.id;
@@ -166,6 +174,24 @@ export function PlansScreen({
         <AnalyticsScreen plans={plans} checkedItemKeys={checkedItemKeys} />
       ) : (
         <div className="flex-1 overflow-y-auto px-4 py-4">
+          {plans.length === 0 ? (
+            <div className="flex min-h-[420px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full" style={{ backgroundColor: GREEN_LIGHT }}>
+                <CalendarPlus size={24} strokeWidth={1.9} color={GREEN} />
+              </div>
+              <p className="text-[17px] font-semibold text-foreground">Мои планы пусты</p>
+              <p className="mt-2 text-[14px] leading-5 text-muted-foreground">Создайте план или присоединитесь к событию, чтобы видеть расписание здесь.</p>
+              <button
+                onClick={() => onNavigate("create", "plans")}
+                className="mt-5 flex h-11 items-center gap-2 rounded-full px-5 text-[14px] font-semibold text-white"
+                style={{ backgroundColor: GREEN }}
+              >
+                <Plus size={16} strokeWidth={2.2} />
+                Добавить план
+              </button>
+            </div>
+          ) : (
+            <>
           {nextItem && (
             <button
               onClick={() => onPlanOpen(nextItem.plan.id)}
@@ -205,13 +231,9 @@ export function PlansScreen({
                 />
               );
             })}
-            {planItems.length === 0 && (
-              <div className="flex min-h-[280px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center">
-                <p className="text-[16px] font-semibold text-foreground">Пока нет добавленных планов</p>
-                <p className="mt-1 text-[14px] leading-5 text-muted-foreground">Добавьте план в профиле, и расписание появится здесь.</p>
-              </div>
-            )}
           </div>
+            </>
+          )}
         </div>
       )}
     </div>
