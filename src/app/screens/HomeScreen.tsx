@@ -4,7 +4,6 @@ import type { ChatPeer, HomeFeedPlan, Screen, TagFilter } from "@/app/types";
 import { CATEGORY_CHIPS, homeFeedPlans, normalizePlanTag, PLAN_TAG_LABELS } from "@/app/data/plans";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
 import { HomeSheet } from "@/app/components/HomeSheet";
-import offlineMapImage from "@/imports/map.png";
 
 function ParticipantAvatarLine({ avatars }: { avatars: string[] }) {
   const visible = avatars.slice(0, 5);
@@ -34,41 +33,6 @@ function FeedAvatarStack({ avatars, label }: { avatars: string[]; label: string 
     <div className="flex flex-col items-center">
       <ParticipantAvatarLine avatars={avatars} />
       <span className="mt-1.5 text-[13px] font-medium leading-4 text-white/85">{label}</span>
-    </div>
-  );
-}
-
-const OFFLINE_MAP_EVENTS = [
-  { id: "gorky-run", title: "Забег в Парке Горького", time: "Сб 09:00", planId: 1 },
-  { id: "sparrow-stretch", title: "Растяжка на Воробьёвых горах", time: "Вт 19:00" },
-  { id: "luzhniki-intervals", title: "Интервалы в Лужниках", time: "Чт 19:30", planId: 4 },
-  { id: "zaryadye-walk", title: "Прогулка в Зарядье", time: "Вс 11:00" },
-  { id: "sokolniki-yoga", title: "Йога в Сокольниках", time: "Ср 08:30" },
-];
-
-const createRandomMarkers = () => {
-  const count = 4 + Math.floor(Math.random() * 3);
-  return Array.from({ length: count }, (_, index) => ({
-    id: `marker-${index}`,
-    left: 14 + Math.random() * 72,
-    top: 16 + Math.random() * 68,
-  }));
-};
-
-function OfflineMapImage({ markers }: { markers: { id: string; left: number; top: number }[] }) {
-  return (
-    <div className="absolute inset-0">
-      <img src={offlineMapImage as unknown as string} alt="" className="h-full w-full object-cover" />
-      <div className="absolute inset-0 bg-black/45" />
-      {markers.map((marker) => (
-        <span
-          key={marker.id}
-          className="absolute flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 shadow-md"
-          style={{ left: `${marker.left}%`, top: `${marker.top}%` }}
-        >
-          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: GREEN }} />
-        </span>
-      ))}
     </div>
   );
 }
@@ -214,9 +178,8 @@ export function HomeScreen({
   onMessagePeer: (peer: ChatPeer) => void;
 }) {
   const [tagFilter, setTagFilter] = useState<TagFilter>("all");
-  const [sheet, setSheet] = useState<"map" | "share" | "author" | null>(null);
+  const [sheet, setSheet] = useState<"share" | "author" | null>(null);
   const [activePlan, setActivePlan] = useState<HomeFeedPlan | null>(null);
-  const [mapMarkers] = useState(createRandomMarkers);
   const [copied, setCopied] = useState(false);
   const plansWithTag = homeFeedPlans.map((plan) => ({
     ...plan,
@@ -278,17 +241,6 @@ export function HomeScreen({
           </div>
         </div>
 
-        <button
-          onClick={() => setSheet("map")}
-          className="relative flex h-32 w-full overflow-hidden rounded-2xl p-4 text-left active:opacity-90"
-        >
-          <OfflineMapImage markers={mapMarkers} />
-          <div className="relative z-10 mt-auto max-w-[240px]">
-            <p className="text-[18px] font-bold text-white">Офлайн события</p>
-            <p className="mt-1 text-[13px] text-white/75">Посмотреть места на карте</p>
-          </div>
-        </button>
-
         {visiblePlans.length > 0 ? (
           visiblePlans.map((plan) => (
             <FeedEventCard
@@ -335,32 +287,6 @@ export function HomeScreen({
           </div>
         )}
       </div>
-
-      {sheet === "map" && (
-        <HomeSheet title="Офлайн-события" onClose={() => setSheet(null)}>
-          <div className="relative mb-4 h-44 overflow-hidden rounded-2xl bg-gray-100">
-            <OfflineMapImage markers={mapMarkers} />
-          </div>
-          <div className="space-y-2">
-            {OFFLINE_MAP_EVENTS.map((event) => (
-              <button
-                key={event.id}
-                onClick={() => {
-                  setSheet(null);
-                  if (event.planId) onPlanOpen(event.planId, "home");
-                }}
-                className="flex w-full items-center justify-between rounded-2xl bg-gray-100 px-4 py-3 text-left active:opacity-85"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold text-gray-900">{event.title}</span>
-                  <span className="mt-0.5 block text-[13px] text-gray-500">{event.time}</span>
-                </span>
-                <span className="ml-3 h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ backgroundColor: GREEN }} />
-              </button>
-            ))}
-          </div>
-        </HomeSheet>
-      )}
 
       {sheet === "share" && activePlan && (
         <HomeSheet title="Поделиться" onClose={() => setSheet(null)}>

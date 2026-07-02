@@ -169,7 +169,6 @@ export default function App() {
   const [previousScreen, setPreviousScreen] = useState<Screen>("plans");
   const [profileConnectionsType, setProfileConnectionsType] = useState<ConnectionType>("followers");
   const [profileConnectionsCanEditFollowing, setProfileConnectionsCanEditFollowing] = useState(false);
-  const [plansPreferredTab, setPlansPreferredTab] = useState<"participant" | "author">("participant");
   const [highlightedPlanId, setHighlightedPlanId] = useState<number | null>(null);
   const [viewingOwnProfile, setViewingOwnProfile] = useState(true);
   const [viewingExpertId, setViewingExpertId] = useState("gena");
@@ -216,7 +215,6 @@ export default function App() {
   const participantKey = (ref: ParticipantPlanRef) => `${ref.kind}:${ref.id}`;
   const myParticipantKeys = new Set(myParticipantIds.map(participantKey));
   const myPlans = allPlans.filter((plan) => myParticipantKeys.has(participantKey({ kind: plan.kind ?? "plan", id: plan.id })));
-  const myAuthorPlans = allPlans.filter((plan) => plan.author.id === currentUserId);
   const publicPlans = allPlans.filter((plan) => (plan.visibility ?? "all") === "all" && plan.author.id !== currentUserId);
   const participantChatPeers: ChatPeer[] = EVENT_PARTICIPANTS.map((participant) => ({
     id: participant.id,
@@ -350,7 +348,6 @@ export default function App() {
   const addPlanToMine = (id: number) => {
     addCatalogPlanToRoutine(id);
     setViewingOwnProfile(true);
-    setPlansPreferredTab("participant");
     setHighlightedPlanId(id);
     window.setTimeout(() => setHighlightedPlanId(null), 1500);
     setScreen(previousScreen === "profile" ? "profile" : "plans");
@@ -366,7 +363,6 @@ export default function App() {
     setCreatedPlans((plans) => plans.filter((plan) => plan.id !== id));
     setMyParticipantIds((ids) => ids.filter((item) => item.id !== id));
     setCheckedItemKeys((keys) => keys.filter((key) => !key.endsWith(`:${id}`)));
-    setPlansPreferredTab("author");
     setScreen("plans");
   };
 
@@ -375,18 +371,14 @@ export default function App() {
   };
 
   const createPlan = (plans: HomeFeedPlan[], result: CreatedPlanResult) => {
+    void result;
     const ids = plans.map((plan) => plan.id);
     setCreatedPlans((items) => [...plans, ...items.filter((item) => !ids.includes(item.id))]);
-    if (result.role === "participant") {
-      const ref = { kind: result.plans.length > 1 ? "program" : "plan", id: ids[0] } satisfies ParticipantPlanRef;
-      const key = participantKey(ref);
-      setMyParticipantIds((items) => items.some((item) => participantKey(item) === key) ? items : [ref, ...items]);
-      setPlansPreferredTab("participant");
-      setHighlightedPlanId(ids[0]);
-      window.setTimeout(() => setHighlightedPlanId(null), 1500);
-    } else {
-      setPlansPreferredTab("author");
-    }
+    const ref = { kind: "plan", id: ids[0] } satisfies ParticipantPlanRef;
+    const key = participantKey(ref);
+    setMyParticipantIds((items) => items.some((item) => participantKey(item) === key) ? items : [ref, ...items]);
+    setHighlightedPlanId(ids[0]);
+    window.setTimeout(() => setHighlightedPlanId(null), 1500);
     setViewingOwnProfile(true);
   };
 
@@ -408,12 +400,9 @@ export default function App() {
             onNavigate={navigate}
             onPlanOpen={openPlanEvent}
             participantPlans={myPlans}
-            authorPlans={myAuthorPlans}
             checkedItemKeys={checkedItemKeys}
             onToggleCheck={toggleCheckedItem}
             onRemoveParticipant={removePlanFromMine}
-            onDeletePlan={deletePlan}
-            preferredTab={plansPreferredTab}
             highlightedPlanId={highlightedPlanId}
           />
         );
@@ -547,7 +536,6 @@ export default function App() {
               onMessageAuthor={(peer) => openChatWithPeer({ ...peer, id: feedPlan.author.id ?? peer.id })}
               participantItems={participantChatPeers}
               onMessageParticipant={openChatWithPeer}
-              programItems={feedPlan.items}
               canDelete={feedPlan.author.id === currentUserId}
               onDelete={() => deletePlan(feedPlan.id)}
             />

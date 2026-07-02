@@ -1,10 +1,8 @@
-import { useState } from "react";
-import { ArrowLeft, CalendarPlus, Check, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { CalendarPlus, Check, ChevronRight, Plus, Trash2 } from "lucide-react";
 import type { HomeFeedPlan, Screen } from "@/app/types";
 import { normalizePlanTag, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
 import { GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES } from "@/app/data/constants";
 import { getPlanWeekItems } from "@/app/lib/planProgress";
-import { FeedEventCard } from "@/app/screens/HomeScreen";
 
 export function PlanListCard({
   plan,
@@ -85,30 +83,20 @@ export function PlansScreen({
   onNavigate,
   onPlanOpen,
   participantPlans,
-  authorPlans,
   checkedItemKeys,
   onToggleCheck,
   onRemoveParticipant,
-  onDeletePlan,
-  preferredTab,
   highlightedPlanId,
 }: {
   onNavigate: (s: Screen, from?: Screen) => void;
   onPlanOpen: (id: number) => void;
   participantPlans: HomeFeedPlan[];
-  authorPlans: HomeFeedPlan[];
   checkedItemKeys: string[];
   onToggleCheck: (key: string) => void;
   onRemoveParticipant: (id: number) => void;
-  onDeletePlan: (id: number) => void;
-  preferredTab?: "participant" | "author";
   highlightedPlanId?: number | null;
 }) {
-  const [activeTab, setActiveTab] = useState<"participant" | "author">(preferredTab ?? "participant");
-  const [activeProgram, setActiveProgram] = useState<HomeFeedPlan | null>(null);
-  const hasAuthorPlans = authorPlans.length > 0;
-  const hasAnyPlans = participantPlans.length > 0 || authorPlans.length > 0;
-  const visibleTab = hasAuthorPlans ? activeTab : "participant";
+  const isEmpty = participantPlans.length === 0;
 
   const todayIndex = 0;
   const monthShort = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
@@ -127,8 +115,7 @@ export function PlansScreen({
     декабря: 11,
   };
 
-  const plans = visibleTab === "participant" ? participantPlans : authorPlans;
-  const planItems = getPlanWeekItems(plans);
+  const planItems = getPlanWeekItems(participantPlans);
   const nextItem = planItems.find((item) => item.dayIndex >= todayIndex) ?? planItems[0];
 
   const getStatus = (progressKey: string, dayIndex: number) => {
@@ -163,110 +150,44 @@ export function PlansScreen({
 
   const getGradient = (plan: HomeFeedPlan) => plan.gradient ?? PLAN_TAG_GRADIENTS[normalizePlanTag(plan.tag)];
 
-  if (activeProgram?.items?.length) {
-    return (
-      <div className="flex h-full flex-col bg-surface">
-        <div className="flex h-14 flex-shrink-0 items-center px-4">
-          <button onClick={() => setActiveProgram(null)} className="flex items-center gap-1.5 text-[15px] font-medium text-foreground active:opacity-80">
-            <ArrowLeft size={20} strokeWidth={2} />
-            <span>Назад</span>
-          </button>
-          <h1 className="ml-4 min-w-0 truncate text-[18px] font-bold text-foreground">{activeProgram.title}</h1>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 pb-5">
-          <div className="mb-3 inline-flex rounded-full px-2.5 py-1 text-[12px] font-semibold" style={{ backgroundColor: GREEN_LIGHT, color: GREEN }}>
-            Программа
-          </div>
-          <div className="space-y-2.5">
-            {activeProgram.items.map((plan) => {
-              const nearestItem = getPlanWeekItems([plan])[0];
-              const monthIndex = monthNumberByName[nearestItem?.monthName ?? ""] ?? 0;
-              return (
-                <PlanListCard
-                  key={plan.id}
-                  plan={plan}
-                  dayNumber={nearestItem?.dayNumber ?? ""}
-                  monthLabel={monthShort[monthIndex]}
-                  scheduleMeta={plan.timeDate}
-                  showToggle={false}
-                  onOpen={() => onPlanOpen(plan.id)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="relative flex h-full flex-col bg-surface">
+    <div className="flex h-full flex-col bg-surface">
       <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-border px-4">
-        <div className="min-w-0 flex-1">
+        {!isEmpty ? (
+          <button
+            onClick={() => onNavigate("create", "plans")}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-foreground active:opacity-85"
+            aria-label="Создать план"
+          >
+            <Plus size={22} strokeWidth={1.9} />
+          </button>
+        ) : (
+          <div className="h-10 w-10" />
+        )}
+        <div className="min-w-0 flex-1 text-center">
           <h1 className="text-[20px] font-bold leading-6 text-foreground">Мои планы</h1>
         </div>
-        {!hasAnyPlans && <div className="h-10 w-10" />}
+        <div className="h-10 w-10" />
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        {hasAuthorPlans && (
-          <div className="mb-4 flex rounded-2xl bg-muted p-1">
-            {[
-              { id: "participant" as const, label: "Участник" },
-              { id: "author" as const, label: "Автор" },
-            ].map((tab) => {
-              const active = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className="h-10 flex-1 rounded-xl text-[15px] font-semibold"
-                  style={active ? { backgroundColor: "var(--card)", color: "var(--foreground)" } : { color: "var(--muted-foreground)" }}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {!hasAnyPlans ? (
+        {isEmpty ? (
           <div className="flex min-h-[420px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full" style={{ backgroundColor: GREEN_LIGHT }}>
               <CalendarPlus size={24} strokeWidth={1.9} color={GREEN} />
             </div>
             <p className="text-[17px] font-semibold text-foreground">Планов пока нет</p>
+            <p className="mt-2 text-[14px] leading-5 text-muted-foreground">Присоединяйся к планам или создавай свои — они появятся здесь</p>
             <button onClick={() => onNavigate("create", "plans")} className="mt-5 flex h-11 items-center gap-2 rounded-full px-5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
               <Plus size={16} strokeWidth={2.2} />
               Создать
             </button>
           </div>
-        ) : visibleTab === "author" ? (
-          <div className="space-y-6">
-            {authorPlans.map((plan) => (
-              <FeedEventCard
-                key={plan.id}
-                plan={plan}
-                onOpen={() => plan.kind === "program" && plan.items?.length ? setActiveProgram(plan) : onPlanOpen(plan.id)}
-                onAuthor={() => onPlanOpen(plan.id)}
-                onShare={() => undefined}
-                onAuthorMenu={() => undefined}
-                canDelete
-                onDelete={() => onDeletePlan(plan.id)}
-              />
-            ))}
-          </div>
-        ) : plans.length === 0 ? (
-          <div className="rounded-2xl bg-card px-6 py-12 text-center">
-            <p className="text-[16px] font-semibold text-foreground">Планов участника пока нет</p>
-            <p className="mt-2 text-[14px] leading-5 text-muted-foreground">Нажми плюс, чтобы присоединиться или создать план.</p>
-          </div>
         ) : (
           <>
             {nextItem && (
               <button
-                onClick={() => nextItem.plan.kind === "program" && nextItem.plan.items?.length ? setActiveProgram(nextItem.plan) : onPlanOpen(nextItem.plan.id)}
+                onClick={() => onPlanOpen(nextItem.plan.id)}
                 className="mb-4 flex w-full items-center gap-3 rounded-[16px] p-3.5 text-left active:opacity-90"
                 style={{ backgroundColor: "var(--brand-dark)" }}
               >
@@ -298,8 +219,7 @@ export function PlansScreen({
                       monthLabel={monthShort[monthIndex]}
                       scheduleMeta={scheduleMeta}
                       done={done}
-                      badge={plan.kind === "program" ? "Программа" : undefined}
-                      onOpen={() => plan.kind === "program" && plan.items?.length ? setActiveProgram(plan) : onPlanOpen(plan.id)}
+                      onOpen={() => onPlanOpen(plan.id)}
                       onToggle={() => onToggleCheck(progressKey)}
                     />
                     <button
@@ -319,16 +239,6 @@ export function PlansScreen({
           </>
         )}
       </div>
-      {hasAnyPlans && (
-        <button
-          onClick={() => onNavigate(visibleTab === "participant" ? "addPlan" : "create", "plans")}
-          className="absolute right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_10px_28px_rgba(0,0,0,0.22)] active:opacity-90"
-          style={{ top: "55%", backgroundColor: GREEN }}
-          aria-label={visibleTab === "participant" ? "Добавить план" : "Создать план"}
-        >
-          <Plus size={28} strokeWidth={2.2} />
-        </button>
-      )}
     </div>
   );
 }

@@ -1,20 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import confetti from "canvas-confetti";
-import { ArrowLeft, CalendarDays, Check, ChevronDown, Clock, Copy, Eye, Image as ImageIcon, Layers3, Lock, MapPin, PencilLine, Plus, Repeat2, Sparkles, UserCheck, Users, Video, X } from "lucide-react";
-import type { HomeFeedPlan, PartOfDay, PlanRepeat, Schedule, Screen, TimeMode, UserPlanRole, Visibility } from "@/app/types";
+import { ArrowLeft, Check, ChevronDown, Clock, Copy, Eye, Image as ImageIcon, Lock, MapPin, Plus, Repeat2, Search, Sparkles, Users, Video, X } from "lucide-react";
+import type { HomeFeedPlan, PartOfDay, PlanRepeat, Schedule, Screen, TimeMode, Visibility } from "@/app/types";
 import { ALL_DAYS, EVENT_PARTICIPANTS, GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES, WEEKDAY_VALUES } from "@/app/data/constants";
-import { DEFAULT_PLAN_AUTHOR, DEFAULT_PLAN_PARTICIPANTS, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
+import { DEFAULT_PLAN_AUTHOR, DEFAULT_PLAN_PARTICIPANTS, homeFeedPlans, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
+import { HomeSheet } from "@/app/components/HomeSheet";
 
-type CreateStep = "welcome" | "countChoice" | "roleChoice" | "name" | "description" | "image" | "schedule" | "addAnother" | "finalOptions" | "success";
+type CreateStep = "welcome" | "name" | "description" | "image" | "schedule" | "finalOptions" | "success";
 type PlanDraft = { title: string; description: string; coverImage: string | null; schedule: Schedule };
+type Person = { id: string; name: string; avatarUrl: string | null };
 
 export type CreatedPlanResult = {
-  countMode: "single" | "multiple";
-  role: UserPlanRole;
-  plans: PlanDraft[];
+  plan: PlanDraft;
   visibility: Visibility;
   participants: string[];
-  location: { address: string; lat: number; lng: number } | "online" | null;
+  location: { address: string } | "online" | null;
   videoMeeting: { enabled: boolean; link: string };
 };
 
@@ -30,7 +30,7 @@ function OptionRow({ icon, label, subtitle, control, onClick }: {
       <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-secondary">{icon}</div>
       <div className="min-w-0 flex-1">
         <p className="text-[15px] font-medium text-foreground">{label}</p>
-        {subtitle && <p className="mt-0.5 text-[12px] leading-4 text-muted-foreground">{subtitle}</p>}
+        {subtitle && <p className="mt-0.5 truncate text-[12px] leading-4 text-muted-foreground">{subtitle}</p>}
       </div>
       {control}
     </button>
@@ -59,14 +59,6 @@ const defaultSchedule = (): Schedule => ({
 
 const defaultPlan = (): PlanDraft => ({ title: "", description: "", coverImage: null, schedule: defaultSchedule() });
 
-const readFileAsDataUrl = (file: File) =>
-  new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-
 export function CreateScreen({
   onNavigate,
   backTo = "plans",
@@ -79,27 +71,40 @@ export function CreateScreen({
   currentAuthor?: HomeFeedPlan["author"];
 }) {
   const initialDateTime = useMemo(() => getLocalDateTime(), []);
+  const allPeople = useMemo<Person[]>(() => {
+    const people = [
+      ...homeFeedPlans.map((plan) => ({
+        id: plan.author.id ?? plan.author.name,
+        name: plan.author.name,
+        avatarUrl: plan.author.avatarUrl,
+      })),
+      ...EVENT_PARTICIPANTS.map((participant) => ({
+        id: participant.id,
+        name: participant.name,
+        avatarUrl: participant.avatar,
+      })),
+    ];
+    return Array.from(new Map(people.map((person) => [person.id, person])).values());
+  }, []);
+
   const [step, setStep] = useState<CreateStep>("welcome");
   const [history, setHistory] = useState<CreateStep[]>([]);
-  const [countMode, setCountMode] = useState<"single" | "multiple" | null>(null);
-  const [role, setRole] = useState<UserPlanRole | null>(null);
-  const [plans, setPlans] = useState<PlanDraft[]>([defaultPlan()]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [draft, setDraft] = useState<PlanDraft>(defaultPlan());
   const [showRepeatPicker, setShowRepeatPicker] = useState(false);
   const [untilWeek, setUntilWeek] = useState(4);
   const [titleError, setTitleError] = useState("");
   const [scheduleError, setScheduleError] = useState("");
-  const [visibility, setVisibility] = useState<Visibility>("onlyMe");
+  const [visibility, setVisibility] = useState<Visibility>("all");
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
-  const [showParticipantsPicker, setShowParticipantsPicker] = useState(false);
+  const [participantsOpen, setParticipantsOpen] = useState(false);
+  const [participantQuery, setParticipantQuery] = useState("");
   const [videoEnabled, setVideoEnabled] = useState(false);
   const [videoLink, setVideoLink] = useState("");
   const [videoCopied, setVideoCopied] = useState(false);
-  const [locationMode, setLocationMode] = useState<"offline" | "online">("offline");
+  const [locationMode, setLocationMode] = useState<"online" | "offline">("online");
   const [locationAddress, setLocationAddress] = useState("");
 
-  const currentPlan = plans[currentIndex] ?? defaultPlan();
-  const currentSchedule = currentPlan.schedule;
+  const currentSchedule = draft.schedule;
   const timeMode: TimeMode = currentSchedule.timeMode ?? currentSchedule.mode ?? "partOfDay";
   const partOfDay = currentSchedule.partOfDay;
   const selectedDays = currentSchedule.weekdays;
@@ -108,12 +113,8 @@ export function CreateScreen({
   const repeat = currentSchedule.repeat ?? { type: "days", days: 21 };
   const startParts = splitDateTime(exactStart);
   const endParts = splitDateTime(exactEnd);
-  const selectedParticipantItems = EVENT_PARTICIPANTS.filter((participant) => selectedParticipants.includes(participant.id));
-
-  useEffect(() => {
-    if (role === "participant") setVisibility("onlyMe");
-    if (role === "author") setVisibility("all");
-  }, [role]);
+  const selectedParticipantItems = allPeople.filter((person) => selectedParticipants.includes(person.id));
+  const filteredPeople = allPeople.filter((person) => person.name.toLowerCase().includes(participantQuery.trim().toLowerCase()));
 
   const goTo = (next: CreateStep) => {
     setHistory((items) => [...items, step]);
@@ -134,10 +135,7 @@ export function CreateScreen({
     setScheduleError("");
   };
 
-  const updatePlan = (next: Partial<PlanDraft>) => {
-    setPlans((items) => items.map((item, index) => index === currentIndex ? { ...item, ...next } : item));
-  };
-
+  const updatePlan = (next: Partial<PlanDraft>) => setDraft((item) => ({ ...item, ...next }));
   const updateSchedule = (next: Partial<Schedule>) => updatePlan({ schedule: { ...currentSchedule, ...next } });
 
   const validateSchedule = (schedule: Schedule) => {
@@ -158,12 +156,30 @@ export function CreateScreen({
     return schedule.partOfDay ? PART_OF_DAY_RANGES[schedule.partOfDay].label : "Расписание";
   };
 
-  const buildHomeFeedPlan = (draft: PlanDraft, index: number): HomeFeedPlan => {
-    const id = Date.now() + index;
-    return {
+  const handleCreate = () => {
+    if (!draft.title.trim()) {
+      setTitleError("Введите название");
+      setStep("name");
+      return;
+    }
+
+    const invalidSchedule = validateSchedule(draft.schedule);
+    if (invalidSchedule) {
+      setScheduleError(invalidSchedule);
+      setStep("schedule");
+      return;
+    }
+
+    const id = Date.now();
+    const selectedAvatars = selectedParticipantItems.map((person) => person.avatarUrl).filter((url): url is string => Boolean(url));
+    const participantAvatars = [currentAuthor.avatarUrl, ...selectedAvatars, ...DEFAULT_PLAN_PARTICIPANTS].filter((url): url is string => Boolean(url));
+    const participantCount = Math.max(1, new Set([currentAuthor.id ?? "me", ...selectedParticipants]).size);
+    const newPlan: HomeFeedPlan = {
       id,
+      kind: "plan",
+      visibility,
       tag: "other",
-      format: locationMode === "online" || videoEnabled ? "online" : "offline",
+      format: locationMode,
       duration: "План",
       title: draft.title.trim(),
       description: draft.description.trim(),
@@ -171,68 +187,29 @@ export function CreateScreen({
       coverUrl: draft.coverImage ?? undefined,
       gradient: PLAN_TAG_GRADIENTS.other,
       schedule: draft.schedule,
-      participants: DEFAULT_PLAN_PARTICIPANTS,
-      participantsLabel: selectedParticipants.length > 0 ? `${selectedParticipants.length} чел.` : "Только я",
+      participants: Array.from(new Set(participantAvatars)),
+      participantsLabel: participantCount === 1 ? "Только я" : `${participantCount} чел.`,
       timeDate: getTimeDate(draft.schedule),
       address: locationMode === "offline" && locationAddress.trim() ? locationAddress.trim() : undefined,
-      author: role === "author" ? currentAuthor : DEFAULT_PLAN_AUTHOR,
+      author: currentAuthor,
       shareUrl: `https://wellwellwell.app/plans/${id}`,
     };
-  };
-
-  const buildProgramPlan = (items: HomeFeedPlan[]): HomeFeedPlan => {
-    const first = items[0];
-    const id = first.id;
-    return {
-      ...first,
-      id,
-      kind: "program",
-      duration: `${items.length} события`,
-      participantsLabel: selectedParticipants.length > 0 ? `${selectedParticipants.length} чел.` : first.participantsLabel,
-      timeDate: first.timeDate,
-      shareUrl: `https://wellwellwell.app/programs/${id}`,
-      items,
-    };
-  };
-
-  const handleCreate = () => {
-    const invalidTitle = plans.findIndex((plan) => !plan.title.trim());
-    if (invalidTitle >= 0) {
-      setCurrentIndex(invalidTitle);
-      setTitleError("Введите название");
-      setStep("name");
-      return;
-    }
-
-    const invalidSchedule = plans.findIndex((plan) => validateSchedule(plan.schedule));
-    if (invalidSchedule >= 0) {
-      setCurrentIndex(invalidSchedule);
-      setScheduleError(validateSchedule(plans[invalidSchedule].schedule));
-      setStep("schedule");
-      return;
-    }
-
     const result: CreatedPlanResult = {
-      countMode: countMode ?? "single",
-      role: role ?? "participant",
-      plans: plans.map((plan) => ({ ...plan, title: plan.title.trim(), description: plan.description.trim() })),
+      plan: { ...draft, title: draft.title.trim(), description: draft.description.trim() },
       visibility,
       participants: selectedParticipants,
-      location: locationMode === "online" ? "online" : locationAddress.trim() ? { address: locationAddress.trim(), lat: 55.7558, lng: 37.6176 } : null,
+      location: locationMode === "online" ? "online" : locationAddress.trim() ? { address: locationAddress.trim() } : null,
       videoMeeting: { enabled: videoEnabled, link: videoEnabled ? videoLink : "" },
     };
-    const draftPlans = result.plans.map(buildHomeFeedPlan).map((plan) => ({ ...plan, kind: "plan" as const, visibility }));
-    const createdPlans = result.countMode === "multiple" && draftPlans.length > 1
-      ? [{ ...buildProgramPlan(draftPlans), visibility }]
-      : draftPlans;
-    onCreatePlan(createdPlans, result);
+
+    onCreatePlan([newPlan], result);
     setStep("success");
     confetti({ particleCount: 70, spread: 60, origin: { y: 0.75 } });
-    window.setTimeout(() => onNavigate(result.role === "participant" ? "plans" : backTo), 750);
+    window.setTimeout(() => onNavigate("plans"), 750);
   };
 
   const continueFromName = () => {
-    if (!currentPlan.title.trim()) {
+    if (!draft.title.trim()) {
       setTitleError("Введите название");
       return;
     }
@@ -240,21 +217,15 @@ export function CreateScreen({
   };
 
   const continueFromSchedule = () => {
-    const error = validateSchedule(currentPlan.schedule);
+    const error = validateSchedule(currentSchedule);
     setScheduleError(error);
     if (error) return;
-    goTo(countMode === "multiple" ? "addAnother" : "finalOptions");
-  };
-
-  const addAnotherPlan = () => {
-    setPlans((items) => [...items, defaultPlan()]);
-    setCurrentIndex((index) => index + 1);
-    goTo("name");
+    goTo("finalOptions");
   };
 
   const repeatLabel = repeat.type === "days" ? `${repeat.days} день` : repeat.type === "weekly" ? "Каждую неделю" : repeat.type === "untilWeek" ? `До недели ${repeat.week}` : "Бессрочно";
-  const progressSteps = countMode === "multiple" ? 8 : 7;
-  const progressIndex = ["welcome", "countChoice", "roleChoice", "name", "description", "image", "schedule", "addAnother", "finalOptions", "success"].indexOf(step);
+  const progressSteps = 6;
+  const progressIndex = ["welcome", "name", "description", "image", "schedule", "finalOptions", "success"].indexOf(step);
 
   const renderProgress = () => (
     <div className="flex justify-center gap-1.5 px-4 pb-3">
@@ -357,9 +328,20 @@ export function CreateScreen({
         <span className="flex-1 text-[15px] font-medium">Видимость</span>
         <span className="text-[14px] text-muted-foreground">{visibility === "all" ? "Все" : "Только я"}</span>
       </button>
-      <OptionRow icon={<Users size={17} color={GREEN} />} label="Участники" onClick={() => setShowParticipantsPicker((show) => !show)} control={selectedParticipantItems.length > 0 ? <div className="flex -space-x-2">{selectedParticipantItems.slice(0, 4).map((participant) => <img key={participant.id} src={participant.avatar} alt={participant.name} className="h-7 w-7 rounded-full border-2 border-card object-cover" />)}</div> : <Plus size={18} color={GREEN} />} />
-      {showParticipantsPicker && <div className="space-y-1 rounded-xl bg-card p-2">{EVENT_PARTICIPANTS.map((participant) => { const active = selectedParticipants.includes(participant.id); return <button key={participant.id} onClick={() => setSelectedParticipants((items) => active ? items.filter((id) => id !== participant.id) : [...items, participant.id])} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left" style={active ? { backgroundColor: GREEN_LIGHT } : undefined}><img src={participant.avatar} alt={participant.name} className="h-8 w-8 rounded-full object-cover" /><span className="flex-1 text-[14px] font-medium">{participant.name}</span>{active && <Check size={16} color={GREEN} />}</button>; })}</div>}
-      <OptionRow icon={<MapPin size={17} color={GREEN} />} label="Локация" subtitle={locationMode === "online" ? "Онлайн" : locationAddress || "Адрес не выбран"} onClick={() => setLocationMode((mode) => mode === "online" ? "offline" : "online")} control={<span className="text-[13px] font-semibold" style={{ color: GREEN }}>{locationMode === "online" ? "Офлайн" : "Онлайн"}</span>} />
+      <OptionRow
+        icon={<Users size={17} color={GREEN} />}
+        label="Участники"
+        subtitle={selectedParticipantItems.length ? `${selectedParticipantItems.length} выбрано` : "Выбрать участников"}
+        onClick={() => setParticipantsOpen(true)}
+        control={selectedParticipantItems.length > 0 ? <div className="flex -space-x-2">{selectedParticipantItems.slice(0, 4).map((person) => person.avatarUrl ? <img key={person.id} src={person.avatarUrl} alt={person.name} className="h-7 w-7 rounded-full border-2 border-card object-cover" /> : <span key={person.id} className="h-7 w-7 rounded-full border-2 border-card bg-secondary" />)}</div> : <Plus size={18} color={GREEN} />}
+      />
+      <OptionRow
+        icon={<MapPin size={17} color={GREEN} />}
+        label="Локация"
+        subtitle={locationMode === "online" ? "Онлайн" : locationAddress || "Адрес не указан"}
+        onClick={() => setLocationMode((mode) => mode === "online" ? "offline" : "online")}
+        control={<span className="text-[13px] font-semibold" style={{ color: GREEN }}>{locationMode === "online" ? "Офлайн" : "Онлайн"}</span>}
+      />
       {locationMode === "offline" && <input value={locationAddress} onChange={(event) => setLocationAddress(event.target.value)} placeholder="Адрес места проведения" className="h-12 w-full rounded-xl bg-card px-4 text-[14px] outline-none placeholder:text-muted-foreground" />}
       <OptionRow icon={<Video size={17} color={GREEN} />} label="Видеовстреча" subtitle={videoEnabled ? "Ссылка прикреплена" : undefined} onClick={() => setVideoEnabled((enabled) => { const next = !enabled; if (next && !videoLink) setVideoLink("https://meet.wellwellwell.local/plan"); return next; })} control={<div className="h-6 w-11 rounded-full p-0.5" style={{ backgroundColor: videoEnabled ? "var(--component-switch-on)" : "var(--component-switch-off)" }}><div className="h-5 w-5 rounded-full bg-card transition-transform" style={{ transform: videoEnabled ? "translateX(20px)" : "translateX(0)" }} /></div>} />
       {videoEnabled && <div className="rounded-xl bg-card px-4 py-3"><div className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-[14px]">{videoLink}</span><button onClick={async () => { await navigator.clipboard?.writeText(videoLink); setVideoCopied(true); window.setTimeout(() => setVideoCopied(false), 1200); }} className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold" style={{ color: GREEN }}><Copy size={13} />{videoCopied ? "Скопировано" : "Копировать"}</button></div></div>}
@@ -370,30 +352,24 @@ export function CreateScreen({
     switch (step) {
       case "welcome":
         return <div className="flex min-h-full flex-col justify-center"><div className="mb-5 flex h-16 w-16 items-center justify-center rounded-3xl" style={{ backgroundColor: GREEN_LIGHT }}><Sparkles size={30} color={GREEN} /></div><h2 className="text-[32px] font-bold leading-[36px] text-foreground">Соберём твой план</h2><p className="mt-3 text-[16px] leading-6 text-muted-foreground">Пара шагов, немного расписания, и план уже в твоём списке.</p></div>;
-      case "countChoice":
-        return <div className="pt-6"><h2 className="text-[28px] font-bold leading-[34px]">Создать один план или несколько?</h2><div className="mt-6 grid grid-cols-2 gap-3">{[{ mode: "single" as const, title: "Один", text: "быстро добавить план", Icon: CalendarDays }, { mode: "multiple" as const, title: "Несколько", text: "серия отдельных планов", Icon: Layers3 }].map(({ mode, title, text, Icon }) => <button key={mode} onClick={() => { setCountMode(mode); setPlans([defaultPlan()]); setCurrentIndex(0); goTo("roleChoice"); }} className="min-h-[150px] rounded-2xl bg-card p-4 text-left transition-transform active:scale-[0.97]"><Icon size={28} color={GREEN} /><h3 className="mt-5 text-[21px] font-bold">{title}</h3><p className="mt-2 text-[13px] leading-4 text-muted-foreground">{text}</p></button>)}</div></div>;
-      case "roleChoice":
-        return <div className="pt-6"><h2 className="text-[28px] font-bold leading-[34px]">Вы участник или автор?</h2><div className="mt-6 grid grid-cols-2 gap-3">{[{ value: "participant" as const, title: "Участник", text: "Буду выполнять сам(а)", Icon: UserCheck }, { value: "author" as const, title: "Автор", text: "Создаю для других", Icon: PencilLine }].map(({ value, title, text, Icon }) => <button key={value} onClick={() => { setRole(value); goTo("name"); }} className="min-h-[150px] rounded-2xl bg-card p-4 text-left transition-transform active:scale-[0.97]"><Icon size={28} color={GREEN} /><h3 className="mt-5 text-[21px] font-bold">{title}</h3><p className="mt-2 text-[13px] leading-4 text-muted-foreground">{text}</p></button>)}</div></div>;
       case "name":
-        return <div className="pt-6 transition-all duration-200"><h2 className="mb-5 text-[28px] font-bold leading-[34px]">{countMode === "multiple" ? `План ${currentIndex + 1}: название` : "Название плана"}</h2><label><span className="mb-2 block text-[13px] text-muted-foreground">Название</span><input value={currentPlan.title} onChange={(e) => { updatePlan({ title: e.target.value }); setTitleError(""); }} placeholder="Например, вечерняя пробежка" className="h-14 w-full rounded-xl bg-card px-4 text-[16px] outline-none" autoFocus /></label>{titleError && <p className="mt-2 text-[12px] font-medium text-destructive">{titleError}</p>}</div>;
+        return <div className="pt-6 transition-all duration-200"><h2 className="mb-5 text-[28px] font-bold leading-[34px]">Название плана</h2><label><span className="mb-2 block text-[13px] text-muted-foreground">Название</span><input value={draft.title} onChange={(e) => { updatePlan({ title: e.target.value }); setTitleError(""); }} placeholder="Например, вечерняя пробежка" className="h-14 w-full rounded-xl bg-card px-4 text-[16px] outline-none" autoFocus /></label>{titleError && <p className="mt-2 text-[12px] font-medium text-destructive">{titleError}</p>}</div>;
       case "description":
-        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Описание</h2><textarea value={currentPlan.description} onChange={(e) => updatePlan({ description: e.target.value })} placeholder="Что будет в плане и зачем он нужен" rows={5} className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none" /></div>;
+        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Описание</h2><textarea value={draft.description} onChange={(e) => updatePlan({ description: e.target.value })} placeholder="Что будет в плане и зачем он нужен" rows={5} className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none" /></div>;
       case "image":
-        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Обложка</h2><label className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center active:opacity-90">{currentPlan.coverImage ? <img src={currentPlan.coverImage} alt="" className="mb-4 h-28 w-28 rounded-xl object-cover" /> : <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary"><ImageIcon size={28} color={GREEN} /></div>}<p className="text-[16px] font-semibold">Добавь обложку</p><span className="mt-4 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Загрузить</span><input type="file" accept="image/*" className="hidden" onChange={async (event) => { const file = event.target.files?.[0]; if (file) updatePlan({ coverImage: await readFileAsDataUrl(file) }); event.target.value = ""; }} /></label></div>;
+        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Обложка</h2><label className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center active:opacity-90">{draft.coverImage ? <img src={draft.coverImage} alt="" className="mb-4 h-28 w-28 rounded-xl object-cover" /> : <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary"><ImageIcon size={28} color={GREEN} /></div>}<p className="text-[16px] font-semibold">Добавь обложку</p><span className="mt-4 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Загрузить</span><input type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) updatePlan({ coverImage: URL.createObjectURL(file) }); event.target.value = ""; }} /></label></div>;
       case "schedule":
         return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Дата и время</h2>{renderSchedule()}</div>;
-      case "addAnother":
-        return <div className="flex min-h-full flex-col justify-center"><h2 className="text-[28px] font-bold leading-[34px]">Добавить ещё?</h2><p className="mt-3 text-[15px] text-muted-foreground">Уже готово: {plans.length}</p><div className="mt-6 grid grid-cols-2 gap-3"><button onClick={addAnotherPlan} className="h-12 rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Добавить ещё</button><button onClick={() => goTo("finalOptions")} className="h-12 rounded-xl bg-card text-[15px] font-semibold">Готово</button></div></div>;
       case "finalOptions":
-        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Финальные штрихи</h2>{renderFinalOptions()}</div>;
+        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Финальные настройки</h2>{renderFinalOptions()}</div>;
       case "success":
         return <div className="flex min-h-full flex-col items-center justify-center text-center"><div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full" style={{ backgroundColor: GREEN_LIGHT }}><Check size={38} color={GREEN} /></div><h2 className="text-[28px] font-bold">План создан</h2></div>;
     }
   };
 
   const renderFooter = () => {
-    if (step === "countChoice" || step === "roleChoice" || step === "addAnother" || step === "success") return null;
-    if (step === "welcome") return <button onClick={() => goTo("countChoice")} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Создать</button>;
+    if (step === "success") return null;
+    if (step === "welcome") return <button onClick={() => goTo("name")} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Создать</button>;
     if (step === "description" || step === "image") return <div className="flex gap-3"><button onClick={() => goTo(step === "description" ? "image" : "schedule")} className="h-12 flex-1 rounded-xl bg-card text-[15px] font-semibold">Пропустить</button><button onClick={() => goTo(step === "description" ? "image" : "schedule")} className="h-12 flex-1 rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Далее</button></div>;
     const action = step === "name" ? continueFromName : step === "schedule" ? continueFromSchedule : handleCreate;
     return <button onClick={action} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>{step === "finalOptions" ? "Создать" : "Далее"}</button>;
@@ -411,6 +387,36 @@ export function CreateScreen({
       {renderProgress()}
       <div className="flex-1 overflow-y-auto px-4 pb-4 transition-all duration-200">{renderStep()}</div>
       {footer && <div className="flex-shrink-0 border-t border-border bg-card px-4 pb-4 pt-3">{footer}</div>}
+      {participantsOpen && (
+        <HomeSheet title="Участники" onClose={() => setParticipantsOpen(false)}>
+          <div className="mb-3 flex h-11 items-center gap-2 rounded-xl bg-gray-100 px-3">
+            <Search size={17} strokeWidth={1.9} className="text-gray-500" />
+            <input
+              value={participantQuery}
+              onChange={(event) => setParticipantQuery(event.target.value)}
+              placeholder="Поиск по имени"
+              className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400"
+            />
+          </div>
+          <div className="space-y-1">
+            {filteredPeople.map((person) => {
+              const active = selectedParticipants.includes(person.id);
+              return (
+                <button
+                  key={person.id}
+                  onClick={() => setSelectedParticipants((items) => active ? items.filter((id) => id !== person.id) : [...items, person.id])}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left"
+                  style={active ? { backgroundColor: GREEN_LIGHT } : { backgroundColor: "var(--card)" }}
+                >
+                  {person.avatarUrl ? <img src={person.avatarUrl} alt={person.name} className="h-9 w-9 rounded-full object-cover" /> : <span className="h-9 w-9 rounded-full bg-secondary" />}
+                  <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{person.name}</span>
+                  {active && <Check size={16} color={GREEN} />}
+                </button>
+              );
+            })}
+          </div>
+        </HomeSheet>
+      )}
     </div>
   );
 }

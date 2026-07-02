@@ -19,8 +19,7 @@ export type TagFilter = PlanTag | "all";
 export type TimeMode = "exact" | "partOfDay";
 export type PartOfDay = "morning" | "day" | "evening";
 export type Visibility = "all" | "onlyMe";
-export type PlanKind = "plan" | "program";
-export type UserPlanRole = "participant" | "author";
+export type PlanKind = "plan";
 export type ParticipantPlanRef = { kind: PlanKind; id: number };
 
 export interface ChatPeer {
@@ -135,7 +134,6 @@ export interface EventDetailProps {
   onMessageAuthor?: (peer: ChatPeer) => void;
   participantItems?: ChatPeer[];
   onMessageParticipant?: (peer: ChatPeer) => void;
-  programItems?: HomeFeedPlan[];
   canDelete?: boolean;
   onDelete?: () => void;
 }
