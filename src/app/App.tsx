@@ -7,7 +7,7 @@ import { homeFeedPlans } from "@/app/data/plans";
 import { getTelegramUser, initTelegram } from "@/app/lib/telegram";
 import { HomeScreen } from "@/app/screens/HomeScreen";
 import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
-import { CreateScreen } from "@/app/screens/CreateScreen";
+import { CreateScreen, type CreatedPlanResult } from "@/app/screens/CreateScreen";
 import { DetailScreen } from "@/app/screens/DetailScreen";
 import { ArticleScreen } from "@/app/screens/ArticleScreen";
 import { SearchScreen } from "@/app/screens/SearchScreen";
@@ -58,10 +58,12 @@ const buildTelegramProfile = (telegramUser: ReturnType<typeof getTelegramUser>):
 };
 
 function AddPlanScreen({
+  plans,
   selectedPlanIds,
   onBack,
   onAddPlan,
 }: {
+  plans: HomeFeedPlan[];
   selectedPlanIds: number[];
   onBack: () => void;
   onAddPlan: (id: number) => void;
@@ -80,7 +82,7 @@ function AddPlanScreen({
 
       <div className="flex-1 overflow-y-auto px-4 pb-5">
         <div className="space-y-2.5">
-          {homeFeedPlans.map((plan, index) => {
+          {plans.map((plan, index) => {
             const isAdded = selected.has(plan.id);
             return (
               <div key={plan.id} className="relative">
@@ -120,6 +122,7 @@ export default function App() {
   const profileStorageKey = `${storagePrefix}:profile`;
   const myPlansStorageKey = `${storagePrefix}:myPlans`;
   const checkedItemsStorageKey = `${storagePrefix}:checkedItems`;
+  const createdPlansStorageKey = `${storagePrefix}:createdPlans`;
 
   const [screen, setScreen] = useState<Screen>("home");
   const [detailOrigin, setDetailOrigin] = useState<Screen>("plans");
@@ -138,8 +141,10 @@ export default function App() {
   );
   const [myPlanIds, setMyPlanIds] = useState<number[]>(() => readJson(myPlansStorageKey, []));
   const [checkedItemKeys, setCheckedItemKeys] = useState<string[]>(() => readJson(checkedItemsStorageKey, []));
+  const [createdPlans, setCreatedPlans] = useState<HomeFeedPlan[]>(() => readJson(createdPlansStorageKey, []));
   const currentUserId = editableProfile.id;
-  const myPlans = homeFeedPlans.filter((plan) => myPlanIds.includes(plan.id));
+  const allPlans = [...createdPlans, ...homeFeedPlans];
+  const myPlans = allPlans.filter((plan) => myPlanIds.includes(plan.id));
 
   useEffect(() => initTelegram(), []);
 
@@ -155,6 +160,10 @@ export default function App() {
   useEffect(() => {
     writeJson(checkedItemsStorageKey, checkedItemKeys);
   }, [checkedItemKeys, checkedItemsStorageKey]);
+
+  useEffect(() => {
+    writeJson(createdPlansStorageKey, createdPlans);
+  }, [createdPlans, createdPlansStorageKey]);
 
   const navigate = (s: Screen, from?: Screen) => {
     if (s === "detail" && from) setDetailOrigin(from);
@@ -206,6 +215,13 @@ export default function App() {
     setCheckedItemKeys((keys) => keys.includes(key) ? keys.filter((item) => item !== key) : [...keys, key]);
   };
 
+  const createPlan = (plan: HomeFeedPlan, result: CreatedPlanResult) => {
+    console.log(result);
+    setCreatedPlans((plans) => [plan, ...plans.filter((item) => item.id !== plan.id)]);
+    setMyPlanIds((ids) => ids.includes(plan.id) ? ids : [plan.id, ...ids]);
+    setViewingOwnProfile(true);
+  };
+
   const renderScreen = () => {
     switch (screen) {
       case "home":
@@ -221,7 +237,7 @@ export default function App() {
           />
         );
       case "create":
-        return <CreateScreen onNavigate={navigate} backTo={createOrigin} />;
+        return <CreateScreen onNavigate={navigate} backTo={createOrigin} onCreatePlan={createPlan} />;
       case "detail":
         return <DetailScreen onNavigate={navigate} backTo={detailOrigin} />;
       case "article":
@@ -237,7 +253,7 @@ export default function App() {
         const isCurrentUserProfile = viewedProfile.id === currentUserId;
         const viewedPlans = isCurrentUserProfile
           ? myPlans
-          : homeFeedPlans.filter((plan) => (plan.author.id ?? currentUserId) === viewedProfile.id);
+          : allPlans.filter((plan) => (plan.author.id ?? currentUserId) === viewedProfile.id);
         return (
           <ProfileScreen
             onNavigate={navigate}
@@ -267,6 +283,7 @@ export default function App() {
       case "addPlan":
         return (
           <AddPlanScreen
+            plans={allPlans}
             selectedPlanIds={myPlanIds}
             onBack={() => setScreen("profile")}
             onAddPlan={addPlanToMine}
@@ -282,7 +299,7 @@ export default function App() {
           />
         );
       case "planEvent": {
-        const feedPlan = homeFeedPlans.find(plan => plan.id === activePlanId);
+        const feedPlan = allPlans.find(plan => plan.id === activePlanId);
         if (feedPlan) {
           const participantsCount = Number.parseInt(feedPlan.participantsLabel, 10) || feedPlan.participants.length;
           return (
