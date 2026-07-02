@@ -41,6 +41,7 @@ export interface ChatThread {
   peer: ChatPeer;
   messages: ChatMessage[];
   updatedAt: number;
+  pinned?: boolean;
 }
 export type PlanRepeat =
   | { type: "days"; days: number }
@@ -134,6 +135,7 @@ export interface EventDetailProps {
   onMessageAuthor?: (peer: ChatPeer) => void;
   participantItems?: ChatPeer[];
   onMessageParticipant?: (peer: ChatPeer) => void;
+  programItems?: HomeFeedPlan[];
 }
 
 export type Period = "День" | "Неделя" | "Месяц";

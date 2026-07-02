@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Copy, Filter, MapPin, MoreVertical, Plus, Search, Share2, Users } from "lucide-react";
 import type { ChatPeer, HomeFeedPlan, Screen } from "@/app/types";
 import { CATEGORY_CHIPS, homeFeedPlans, normalizePlanTag, PLAN_TAG_LABELS } from "@/app/data/plans";
@@ -37,6 +37,35 @@ function FeedAvatarStack({ avatars, label }: { avatars: string[]; label: string 
   );
 }
 
+const OFFLINE_MAP_EVENTS = [
+  { id: "gorky-run", title: "Забег в Парке Горького", time: "Сб 09:00", left: 34, top: 58, planId: 1 },
+  { id: "sparrow-stretch", title: "Растяжка на Воробьёвых горах", time: "Вт 19:00", left: 24, top: 70 },
+  { id: "luzhniki-intervals", title: "Интервалы в Лужниках", time: "Чт 19:30", left: 43, top: 63, planId: 4 },
+  { id: "zaryadye-walk", title: "Прогулка в Зарядье", time: "Вс 11:00", left: 57, top: 45 },
+  { id: "sokolniki-yoga", title: "Йога в Сокольниках", time: "Ср 08:30", left: 70, top: 24 },
+];
+
+function MapPreview({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={`relative overflow-hidden rounded-2xl bg-muted ${compact ? "h-16 w-24" : "h-full w-full"}`}>
+      <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, #E8F5F4, #CDE9E5)" }} />
+      <div className="absolute left-[18%] top-0 h-full w-px bg-white/55 rotate-[28deg]" />
+      <div className="absolute left-[52%] top-0 h-full w-px bg-white/55 -rotate-[16deg]" />
+      <div className="absolute left-0 top-[46%] h-px w-full bg-white/70" />
+      <div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/35" />
+      {OFFLINE_MAP_EVENTS.slice(0, compact ? 3 : OFFLINE_MAP_EVENTS.length).map((event) => (
+        <span
+          key={event.id}
+          className="absolute flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-md"
+          style={{ left: `${event.left}%`, top: `${event.top}%` }}
+        >
+          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: GREEN }} />
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function AuthorAvatar({ name, avatarUrl }: { name: string; avatarUrl: string | null }) {
   if (avatarUrl) {
     return <img src={avatarUrl} alt={name} className="h-9 w-9 flex-shrink-0 rounded-full object-cover" />;
@@ -55,18 +84,20 @@ function AuthorAvatar({ name, avatarUrl }: { name: string; avatarUrl: string | n
   );
 }
 
-function FeedEventCard({
+export function FeedEventCard({
   plan,
   onOpen,
   onAuthor,
   onShare,
   onAuthorMenu,
+  onMapOpen,
 }: {
   plan: HomeFeedPlan;
   onOpen: () => void;
   onAuthor: () => void;
   onShare: () => void;
   onAuthorMenu: () => void;
+  onMapOpen?: () => void;
 }) {
   const tag = normalizePlanTag(plan.tag);
 
@@ -127,6 +158,18 @@ function FeedEventCard({
           {plan.address && (
             <p className="mt-0.5 max-w-full truncate text-[14px] text-white/65">{plan.address}</p>
           )}
+          {plan.format === "offline" && (
+            <button
+              onClick={(event) => {
+                event.stopPropagation();
+                onMapOpen?.();
+              }}
+              className="mt-3 overflow-hidden rounded-2xl border border-white/70 bg-white/15 p-1"
+              aria-label="Открыть карту"
+            >
+              <MapPreview compact />
+            </button>
+          )}
         </div>
       </div>
 
@@ -160,24 +203,8 @@ export function HomeScreen({
   const [tagFilter, setTagFilter] = useState<TagFilter>("all");
   const [sheet, setSheet] = useState<"map" | "share" | "author" | null>(null);
   const [activePlan, setActivePlan] = useState<HomeFeedPlan | null>(null);
+  const [activeMapEvent, setActiveMapEvent] = useState<(typeof OFFLINE_MAP_EVENTS)[number] | null>(null);
   const [copied, setCopied] = useState(false);
-  const mapMarkers = useMemo(() => {
-    const center = { lat: 55.7558, lng: 37.6176 };
-    return Array.from({ length: 6 }, (_, index) => {
-      const angle = Math.random() * Math.PI * 2;
-      const radiusKm = 1 + Math.random() * 4;
-      const lat = center.lat + Math.cos(angle) * radiusKm / 111;
-      const lng = center.lng + Math.sin(angle) * radiusKm / (111 * Math.cos(center.lat * Math.PI / 180));
-      return {
-        id: index,
-        lat,
-        lng,
-        left: 50 + (lng - center.lng) * 280,
-        top: 50 - (lat - center.lat) * 520,
-      };
-    });
-  }, []);
-
   const plansWithTag = homeFeedPlans.map((plan) => ({
     ...plan,
     tag: normalizePlanTag(plan.tag),
@@ -208,7 +235,7 @@ export function HomeScreen({
   return (
     <div className="relative flex flex-col h-full bg-surface">
       <div className="h-12 px-4 flex items-center justify-between">
-        <button onClick={() => onNavigate("create", "home")} className="flex h-[28px] w-[28px] items-center justify-center rounded-full text-muted-foreground">
+        <button onClick={() => onNavigate("create", "home")} className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-foreground active:opacity-85">
           <Plus size={22} strokeWidth={1.9} />
         </button>
         <div className="flex items-center gap-4 flex-shrink-0">
@@ -243,15 +270,9 @@ export function HomeScreen({
           className="relative flex h-28 w-full overflow-hidden rounded-2xl p-4 text-left active:opacity-90"
           style={{ background: "linear-gradient(135deg, var(--secondary) 0%, var(--accent) 55%, var(--brand-dark) 100%)" }}
         >
-          {[18, 42, 71].map((left, index) => (
-            <span
-              key={left}
-              className="absolute flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-md"
-              style={{ left: `${left}%`, top: `${26 + index * 17}%` }}
-            >
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: GREEN }} />
-            </span>
-          ))}
+          <div className="absolute right-3 top-3 h-20 w-28 overflow-hidden rounded-2xl border border-white/70">
+            <MapPreview compact />
+          </div>
           <div className="relative z-10 mt-auto">
             <p className="text-[17px] font-bold text-white">Офлайн-события рядом</p>
             <p className="mt-1 text-[13px] text-white/75">Посмотреть места на карте</p>
@@ -268,6 +289,10 @@ export function HomeScreen({
               onAuthor={() => onAuthorOpen(plan.author.id ?? "gena")}
               onShare={() => openShare(plan)}
               onAuthorMenu={() => openAuthorMenu(plan)}
+              onMapOpen={() => {
+                setActiveMapEvent(null);
+                setSheet("map");
+              }}
             />
           ))
         ) : (
@@ -308,20 +333,36 @@ export function HomeScreen({
 
       {sheet === "map" && (
         <HomeSheet title="Офлайн-события" onClose={() => setSheet(null)}>
-          <div className="relative mb-4 h-56 overflow-hidden rounded-2xl bg-gray-100">
-            <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, #E8F5F4, #CDE9E5)" }} />
-            <div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/35" />
-            {mapMarkers.map((marker) => (
-              <span
-                key={marker.id}
-                className="absolute flex h-7 w-7 items-center justify-center rounded-full bg-white shadow-md"
-                style={{ left: `${marker.left}%`, top: `${marker.top}%` }}
+          <div className="relative mb-4 h-[62vh] overflow-hidden rounded-2xl bg-gray-100">
+            <MapPreview />
+            {OFFLINE_MAP_EVENTS.map((event) => (
+              <button
+                key={event.id}
+                onClick={() => setActiveMapEvent(event)}
+                className="absolute flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-md"
+                style={{ left: `${event.left}%`, top: `${event.top}%` }}
               >
-                <MapPin size={16} strokeWidth={2.2} color={GREEN} />
-              </span>
+                <MapPin size={17} strokeWidth={2.2} color={GREEN} />
+              </button>
             ))}
+            {activeMapEvent && (
+              <div className="absolute inset-x-3 bottom-3 rounded-2xl bg-white p-3 shadow-lg">
+                <p className="text-[15px] font-semibold text-gray-900">{activeMapEvent.title}</p>
+                <p className="mt-1 text-[13px] text-gray-500">{activeMapEvent.time} · Москва</p>
+                <button
+                  onClick={() => {
+                    if (activeMapEvent.planId) onPlanOpen(activeMapEvent.planId, "home");
+                    setSheet(null);
+                  }}
+                  className="mt-3 h-10 w-full rounded-xl text-[14px] font-semibold text-white"
+                  style={{ backgroundColor: GREEN }}
+                >
+                  Подробнее
+                </button>
+              </div>
+            )}
           </div>
-          <p className="text-[13px] leading-5 text-muted-foreground">Москва · Красная площадь 55.7558, 37.6176. Точки случайно раскиданы в радиусе около 5 км.</p>
+          <p className="text-[13px] leading-5 text-muted-foreground">Москва · центр карты — Красная площадь 55.7558, 37.6176. Точки — демо-события.</p>
         </HomeSheet>
       )}
 

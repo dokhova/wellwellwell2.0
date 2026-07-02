@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import useEmblaCarousel from "embla-carousel-react";
-import { ArrowLeft, Check, Edit3, Plus, Trash2, UserPlus } from "lucide-react";
-import type { Article, HomeFeedPlan, Screen } from "@/app/types";
+import { ArrowLeft, Check, Edit3, MessageCircle, Plus, Trash2, UserPlus } from "lucide-react";
+import type { Article, ChatPeer, HomeFeedPlan, Screen } from "@/app/types";
 import { weekDates, weekDateMonths } from "@/app/data/calendar";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
 import { profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
@@ -173,6 +173,7 @@ export function ProfileScreen(props: {
   onAddPlan: () => void;
   onRemovePlan: (id: number) => void;
   onToggleFollow?: (profile: ExpertProfile, nextFollowed: boolean) => void;
+  onMessageProfile?: (peer: ChatPeer) => void;
   profile: ExpertProfile;
   plans: HomeFeedPlan[];
   isMe: boolean;
@@ -317,77 +318,36 @@ export function ProfileScreen(props: {
           </div>
 
           {!props.isMe && (
-            <button
-              onClick={() => setIsFollowed((value) => {
-                props.onToggleFollow?.(props.profile, !value);
-                return !value;
-              })}
-              className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl border text-[15px] font-semibold active:opacity-90"
-              style={isFollowed ? { backgroundColor: "var(--muted)", borderColor: "var(--border)", color: "var(--foreground)" } : { backgroundImage: "linear-gradient(90deg, #00887F, #00A99D, #4DD0C4)", borderColor: GREEN, color: "#fff" }}
-            >
-              {isFollowed ? <Check size={18} strokeWidth={2.4} /> : <UserPlus size={18} strokeWidth={2.2} />}
-              {isFollowed ? "Вы подписаны" : "Подписаться"}
-            </button>
+            <div className="mt-5 grid grid-cols-[1fr_1.25fr] gap-2.5">
+              <button
+                onClick={() => props.onMessageProfile?.({ id: props.profile.id, name: props.profile.name, avatarUrl: props.profile.photoUrl, cannedReplies: props.profile.cannedReplies })}
+                className="flex h-12 items-center justify-center gap-2 rounded-xl border text-[15px] font-semibold active:opacity-90"
+                style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+              >
+                <MessageCircle size={18} strokeWidth={2.1} />
+                Написать
+              </button>
+              <button
+                onClick={() => setIsFollowed((value) => {
+                  props.onToggleFollow?.(props.profile, !value);
+                  return !value;
+                })}
+                className="flex h-12 items-center justify-center gap-2 rounded-xl border text-[15px] font-semibold active:opacity-90"
+                style={isFollowed ? { backgroundColor: "var(--muted)", borderColor: "var(--border)", color: "var(--foreground)" } : { backgroundImage: "linear-gradient(90deg, #00887F, #00A99D, #4DD0C4)", borderColor: GREEN, color: "#fff" }}
+              >
+                {isFollowed ? <Check size={18} strokeWidth={2.4} /> : <UserPlus size={18} strokeWidth={2.2} />}
+                {isFollowed ? "Вы подписаны" : "Подписаться"}
+              </button>
+            </div>
           )}
 
           {props.isMe ? (
             <div className="mt-7">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-[19px] font-bold leading-6 text-foreground">Мои планы</h2>
-                <button
-                  onClick={props.onAddPlan}
-                  className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold text-white active:opacity-90"
-                  style={{ backgroundColor: GREEN }}
-                >
-                  <Plus size={15} strokeWidth={2.4} />
-                  Добавить
-                </button>
+              <h2 className="mb-3 text-[19px] font-bold leading-6 text-foreground">Аналитика</h2>
+              <div className="rounded-2xl bg-muted px-4 py-8 text-center">
+                <p className="text-[15px] font-semibold text-foreground">Аналитика появится здесь скоро</p>
+                <p className="mt-2 text-[14px] leading-5 text-muted-foreground">Мы собираем прогресс по планам и выполнению.</p>
               </div>
-              {props.plans.length > 0 ? (
-                <div className="space-y-2.5">
-                  {visiblePlans.map((plan, index) => (
-                    <div key={plan.id} className="relative">
-                      <PlanListCard
-                        plan={plan}
-                        dayNumber={weekDates[index % weekDates.length]}
-                        monthLabel={monthShortByName[weekDateMonths[index % weekDateMonths.length]] ?? weekDateMonths[index % weekDateMonths.length]}
-                        scheduleMeta={`${plan.timeDate} · Активен`}
-                        onOpen={() => props.onPlanOpen(plan.id)}
-                        showToggle={false}
-                      />
-                      <button
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          props.onRemovePlan(plan.id);
-                        }}
-                        className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-card text-muted-foreground active:opacity-80"
-                        aria-label="Удалить план"
-                      >
-                        <Trash2 size={16} strokeWidth={2} />
-                      </button>
-                    </div>
-                  ))}
-                  {hasMorePlans && (
-                    <button
-                      onClick={() => setShowAllPlans(true)}
-                      className="mt-1 flex h-11 w-full items-center justify-center rounded-xl bg-muted text-[14px] font-semibold text-foreground active:opacity-85"
-                    >
-                      Все планы
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="flex justify-end">
-                  <button
-                    onClick={props.onAddPlan}
-                    className="flex h-9 w-9 items-center justify-center rounded-full text-white active:opacity-90"
-                    style={{ backgroundColor: GREEN }}
-                    aria-label="Добавить план"
-                  >
-                    <Plus size={17} strokeWidth={2.4} />
-                  </button>
-                </div>
-              )}
             </div>
           ) : (
             <div className="mt-7">

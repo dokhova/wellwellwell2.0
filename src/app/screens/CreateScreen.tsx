@@ -228,7 +228,7 @@ export function CreateScreen({
     onCreatePlan(createdPlans, result);
     setStep("success");
     confetti({ particleCount: 70, spread: 60, origin: { y: 0.75 } });
-    window.setTimeout(() => onNavigate(backTo), 750);
+    window.setTimeout(() => onNavigate(result.role === "participant" ? "plans" : backTo), 750);
   };
 
   const continueFromName = () => {

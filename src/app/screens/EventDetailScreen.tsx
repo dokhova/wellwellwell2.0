@@ -89,6 +89,22 @@ function AuthorAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl:
   );
 }
 
+function StaticMapPreview() {
+  return (
+    <div className="relative mt-2 h-24 overflow-hidden rounded-2xl bg-muted">
+      <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, #E8F5F4, #CDE9E5)" }} />
+      <div className="absolute left-[24%] top-0 h-full w-px rotate-[25deg] bg-white/60" />
+      <div className="absolute left-[58%] top-0 h-full w-px -rotate-[18deg] bg-white/60" />
+      <div className="absolute left-0 top-[48%] h-px w-full bg-white/70" />
+      {[["42%", "58%"], ["56%", "44%"], ["68%", "30%"]].map(([left, top]) => (
+        <span key={`${left}-${top}`} className="absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-md" style={{ left, top }}>
+          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: GREEN }} />
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // ─── Unified EventDetailScreen ────────────────────────────────────────────────
 
 export function EventDetailScreen({
@@ -96,6 +112,7 @@ export function EventDetailScreen({
   readTime, badgeDate, paragraphs, meta, format = "offline", duration, tag, schedule, shareUrl,
   participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, planId, onJoin, onLeave, onProfile,
   authorId, onMessageAuthor, participantItems, onMessageParticipant,
+  programItems,
 }: EventDetailProps) {
   void authorVerified;
   void readTime;
@@ -281,7 +298,7 @@ export function EventDetailScreen({
                   <button
                     onClick={() => onMessageAuthor({ id: authorId ?? authorName, name: authorName, avatarUrl: authorAvatarUrl })}
                     className="rounded-full border px-3 py-1.5 text-[12px] font-semibold"
-                    style={{ borderColor: GREEN, color: GREEN }}
+                    style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
                   >
                     Написать
                   </button>
@@ -289,7 +306,7 @@ export function EventDetailScreen({
                 <button
                   onClick={() => setSubscribed((value) => !value)}
                   className="rounded-full border px-3 py-1.5 text-[12px] font-semibold"
-                  style={{ borderColor: GREEN, color: GREEN }}
+                  style={subscribed ? { borderColor: "var(--border)", color: "var(--foreground)" } : { borderColor: GREEN, backgroundColor: GREEN, color: "#fff" }}
                 >
                   {subscribed ? "Подписан" : "Подписаться"}
                 </button>
@@ -319,6 +336,23 @@ export function EventDetailScreen({
               )}
             </div>
 
+            {programItems?.length ? (
+              <div className="mb-5 rounded-2xl bg-muted p-3">
+                <p className="mb-2 px-1 text-[14px] font-semibold text-foreground">События программы</p>
+                <div className="space-y-2">
+                  {programItems.map((item, index) => (
+                    <div key={item.id} className="flex items-center gap-3 rounded-xl bg-card px-3 py-2.5">
+                      <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[12px] font-bold" style={{ backgroundColor: "var(--secondary)", color: GREEN }}>{index + 1}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[14px] font-medium text-foreground">{item.title}</p>
+                        <p className="truncate text-[12px] text-muted-foreground">{item.timeDate}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             <div className="space-y-3.5 pb-5">
               <div className="flex items-start gap-3">
                 <Calendar size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
@@ -340,8 +374,9 @@ export function EventDetailScreen({
 
               <div className="flex items-start gap-3">
                 <Video size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="text-[14px] leading-5 text-foreground">{formatLabel}</p>
+                  {format === "offline" && <StaticMapPreview />}
                 </div>
               </div>
 

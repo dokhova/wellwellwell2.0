@@ -33,7 +33,7 @@ export function ChatsScreen({
   threads: ChatThread[];
   onOpenThread: (peer: ChatPeer) => void;
 }) {
-  const visibleThreads = [...threads].sort((a, b) => b.updatedAt - a.updatedAt);
+  const visibleThreads = [...threads].sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || b.updatedAt - a.updatedAt);
 
   return (
     <div className="flex h-full flex-col bg-surface">

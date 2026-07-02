@@ -17,6 +17,7 @@ import { EditProfileScreen } from "@/app/screens/EditProfileScreen";
 import { EventDetailScreen } from "@/app/screens/EventDetailScreen";
 import { ChatScreen, ChatsScreen } from "@/app/screens/ChatScreen";
 import { WorkInProgress } from "@/app/components/WorkInProgress";
+import appLogo from "@/imports/avatar-brand.png";
 
 const readJson = <T,>(key: string, fallback: T): T => {
   try {
@@ -30,6 +31,18 @@ const readJson = <T,>(key: string, fallback: T): T => {
 const writeJson = (key: string, value: unknown) => {
   window.localStorage.setItem(key, JSON.stringify(value));
 };
+
+const SUPPORT_PEER: ChatPeer = {
+  id: "wellwellwell-support",
+  name: "Well Well Well",
+  avatarUrl: appLogo as unknown as string,
+  cannedReplies: [
+    "Спасибо за сообщение. В демо-версии команда ответит здесь позже.",
+    "Мы уже собираем обратную связь по планам и чатам.",
+  ],
+};
+
+const SUPPORT_MESSAGE = "Привет! Well Well Well помогает собирать привычки и планы тренировок — создавай свои события или присоединяйся к чужим, зови друзей в чат. Если возникнут вопросы — пишите сюда, наша команда ответит";
 
 const normalizeProfile = (profile: ExpertProfile): ExpertProfile => {
   const photoUrls = profile.photoUrls?.length ? profile.photoUrls : profile.photoUrl ? [profile.photoUrl] : [];
@@ -151,6 +164,8 @@ export default function App() {
   const [previousScreen, setPreviousScreen] = useState<Screen>("plans");
   const [profileConnectionsType, setProfileConnectionsType] = useState<ConnectionType>("followers");
   const [profileConnectionsCanEditFollowing, setProfileConnectionsCanEditFollowing] = useState(false);
+  const [plansPreferredTab, setPlansPreferredTab] = useState<"participant" | "author">("participant");
+  const [highlightedPlanId, setHighlightedPlanId] = useState<number | null>(null);
   const [viewingOwnProfile, setViewingOwnProfile] = useState(true);
   const [viewingExpertId, setViewingExpertId] = useState("gena");
   const [editableProfile, setEditableProfile] = useState<ExpertProfile>(() =>
@@ -165,9 +180,19 @@ export default function App() {
   const [myFollowing, setMyFollowing] = useState<ExpertConnection[]>(() => readJson(followingStorageKey, []));
   const [chatThreads, setChatThreads] = useState<ChatThread[]>(() => {
     const ids = readJson<string[]>(chatThreadIdsStorageKey, []);
-    return ids
+    const storedThreads = ids
       .map((id) => readJson<ChatThread | null>(chatThreadStorageKey(id), null))
       .filter((thread): thread is ChatThread => Boolean(thread?.peer && Array.isArray(thread.messages)));
+    if (storedThreads.some((thread) => thread.peer.id === SUPPORT_PEER.id)) return storedThreads;
+    return [
+      {
+        peer: SUPPORT_PEER,
+        pinned: true,
+        updatedAt: Date.now(),
+        messages: [{ id: "support-welcome", sender: "peer", text: SUPPORT_MESSAGE, createdAt: Date.now() }],
+      },
+      ...storedThreads,
+    ];
   });
   const currentUserId = editableProfile.id;
   const currentAuthor = {
@@ -305,6 +330,9 @@ export default function App() {
   const addPlanToMine = (id: number) => {
     addCatalogPlanToRoutine(id);
     setViewingOwnProfile(true);
+    setPlansPreferredTab("participant");
+    setHighlightedPlanId(id);
+    window.setTimeout(() => setHighlightedPlanId(null), 1500);
     setScreen(previousScreen === "profile" ? "profile" : "plans");
   };
 
@@ -324,6 +352,11 @@ export default function App() {
       const ref = { kind: result.plans.length > 1 ? "program" : "plan", id: ids[0] } satisfies ParticipantPlanRef;
       const key = participantKey(ref);
       setMyParticipantIds((items) => items.some((item) => participantKey(item) === key) ? items : [ref, ...items]);
+      setPlansPreferredTab("participant");
+      setHighlightedPlanId(ids[0]);
+      window.setTimeout(() => setHighlightedPlanId(null), 1500);
+    } else {
+      setPlansPreferredTab("author");
     }
     setViewingOwnProfile(true);
   };
@@ -349,6 +382,9 @@ export default function App() {
             authorPlans={myAuthorPlans}
             checkedItemKeys={checkedItemKeys}
             onToggleCheck={toggleCheckedItem}
+            onRemoveParticipant={removePlanFromMine}
+            preferredTab={plansPreferredTab}
+            highlightedPlanId={highlightedPlanId}
           />
         );
       case "create":
@@ -400,6 +436,7 @@ export default function App() {
             }}
             onRemovePlan={removePlanFromMine}
             onToggleFollow={toggleFollowing}
+            onMessageProfile={openChatWithPeer}
             profile={viewedProfile}
             plans={viewedPlans}
             isMe={isCurrentUserProfile}
@@ -480,6 +517,7 @@ export default function App() {
               onMessageAuthor={(peer) => openChatWithPeer({ ...peer, id: feedPlan.author.id ?? peer.id })}
               participantItems={participantChatPeers}
               onMessageParticipant={openChatWithPeer}
+              programItems={feedPlan.items}
             />
           );
         }
