@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { ArrowLeft, Check, Edit3, UserPlus } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import useEmblaCarousel from "embla-carousel-react";
+import { ArrowLeft, Check, Edit3, Plus, Trash2, UserPlus } from "lucide-react";
 import type { Article, HomeFeedPlan, Screen } from "@/app/types";
 import { weekDates, weekDateMonths } from "@/app/data/calendar";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
@@ -161,6 +162,8 @@ export function ProfileScreen(props: {
   onConnectionsOpen: (type: ConnectionType) => void;
   onEdit: () => void;
   onBack?: () => void;
+  onAddPlan: () => void;
+  onRemovePlan: (id: number) => void;
   profile: ExpertProfile;
   plans: HomeFeedPlan[];
   isMe: boolean;
@@ -170,9 +173,17 @@ export function ProfileScreen(props: {
   const [isFollowed, setIsFollowed] = useState(props.profile.isFollowedByMe);
   const [isBioExpanded, setIsBioExpanded] = useState(false);
   const [showAllPlans, setShowAllPlans] = useState(false);
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
+  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false });
   const shouldShowBioToggle = props.profile.bio.length > 100;
   const visiblePlans = showAllPlans ? props.plans : props.plans.slice(0, 3);
   const hasMorePlans = props.plans.length > visiblePlans.length;
+  const photoUrls = props.profile.photoUrls?.length
+    ? props.profile.photoUrls
+    : props.profile.photoUrl
+      ? [props.profile.photoUrl]
+      : [];
+  const hasPhotos = photoUrls.length > 0;
   const monthShortByName: Record<string, string> = {
     января: "Янв",
     февраля: "Фев",
@@ -193,18 +204,54 @@ export function ProfileScreen(props: {
     .slice(0, 2)
     .join("");
 
+  const onPhotoSelect = useCallback(() => {
+    if (!emblaApi) return;
+    setSelectedPhotoIndex(emblaApi.selectedScrollSnap());
+  }, [emblaApi]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    onPhotoSelect();
+    emblaApi.on("select", onPhotoSelect);
+    emblaApi.on("reInit", onPhotoSelect);
+  }, [emblaApi, onPhotoSelect]);
+
   return (
     <div className="h-full overflow-y-auto bg-card">
       <div className="relative flex min-h-full flex-col">
         <div className={`relative w-full overflow-hidden bg-gray-300 ${props.isMe ? "h-[56dvh] min-h-[430px] max-h-[560px]" : "h-[280px]"}`}>
-          {props.profile.photoUrl ? (
-            <img src={props.profile.photoUrl} alt={props.profile.name} className="h-full w-full object-cover" />
+          {hasPhotos ? (
+            <div ref={emblaRef} className="h-full overflow-hidden">
+              <div className="flex h-full">
+                {photoUrls.map((photoUrl, index) => (
+                  <div key={`${photoUrl}-${index}`} className="min-w-0 flex-[0_0_100%]">
+                    <img src={photoUrl} alt={props.profile.name} className="h-full w-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : (
             <div className="flex h-full w-full items-center justify-center" style={{ background: "linear-gradient(135deg, var(--secondary) 0%, var(--brand-bright) 100%)" }}>
               <span className="text-[62px] font-bold" style={{ color: GREEN }}>{heroInitials}</span>
             </div>
           )}
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/42" />
+          {photoUrls.length > 1 && (
+            <div className="absolute bottom-16 left-1/2 z-10 flex -translate-x-1/2 gap-1.5">
+              {photoUrls.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => emblaApi?.scrollTo(index)}
+                  className="h-1.5 rounded-full transition-all"
+                  style={{
+                    width: selectedPhotoIndex === index ? 18 : 6,
+                    backgroundColor: selectedPhotoIndex === index ? "#fff" : "rgba(255,255,255,0.55)",
+                  }}
+                  aria-label={`Фото ${index + 1}`}
+                />
+              ))}
+            </div>
+          )}
           {!props.isMe && props.onBack && (
             <button
               onClick={props.onBack}
@@ -276,7 +323,66 @@ export function ProfileScreen(props: {
             </button>
           )}
 
-          {!props.isMe && (
+          {props.isMe ? (
+            <div className="mt-7">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-[19px] font-bold leading-6 text-foreground">Мои планы</h2>
+                <button
+                  onClick={props.onAddPlan}
+                  className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold text-white active:opacity-90"
+                  style={{ backgroundColor: GREEN }}
+                >
+                  <Plus size={15} strokeWidth={2.4} />
+                  Добавить
+                </button>
+              </div>
+              {props.plans.length > 0 ? (
+                <div className="space-y-2.5">
+                  {visiblePlans.map((plan, index) => (
+                    <div key={plan.id} className="relative">
+                      <PlanListCard
+                        plan={plan}
+                        dayNumber={weekDates[index % weekDates.length]}
+                        monthLabel={monthShortByName[weekDateMonths[index % weekDateMonths.length]] ?? weekDateMonths[index % weekDateMonths.length]}
+                        scheduleMeta={`${plan.timeDate} · Активен`}
+                        onOpen={() => props.onPlanOpen(plan.id)}
+                        showToggle={false}
+                      />
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          props.onRemovePlan(plan.id);
+                        }}
+                        className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-card text-muted-foreground active:opacity-80"
+                        aria-label="Удалить план"
+                      >
+                        <Trash2 size={16} strokeWidth={2} />
+                      </button>
+                    </div>
+                  ))}
+                  {hasMorePlans && (
+                    <button
+                      onClick={() => setShowAllPlans(true)}
+                      className="mt-1 flex h-11 w-full items-center justify-center rounded-xl bg-muted text-[14px] font-semibold text-foreground active:opacity-85"
+                    >
+                      Все планы
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-xl bg-muted px-4 py-8 text-center">
+                  <p className="text-[14px] leading-5 text-muted-foreground">Пока нет добавленных планов</p>
+                  <button
+                    onClick={props.onAddPlan}
+                    className="mt-4 h-11 rounded-xl px-5 text-[14px] font-semibold text-white active:opacity-90"
+                    style={{ backgroundColor: GREEN }}
+                  >
+                    Добавить план
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
             <div className="mt-7">
               <h2 className="mb-3 text-[19px] font-bold leading-6 text-foreground">Планы</h2>
               {props.plans.length > 0 ? (

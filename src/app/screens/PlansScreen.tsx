@@ -1,25 +1,10 @@
 import { useState } from "react";
-import { Activity, Calendar, Check, ChevronDown, ChevronRight } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import type { HomeFeedPlan, Screen } from "@/app/types";
-import { chartData, PERIODS, weekDates, weekDateMonths, weekDays, weekRanges } from "@/app/data/calendar";
-import { homeFeedPlans, normalizePlanTag, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
+import { normalizePlanTag, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
 import { GREEN, PART_OF_DAY_RANGES } from "@/app/data/constants";
-
-const PLAN_START_DATE = new Date("2026-07-01T00:00:00");
-const LATEST_PLAN_SET_COUNT = 6;
-
-const calendarDays = weekDates.map((dayNumber, index) => {
-  const date = new Date(PLAN_START_DATE);
-  date.setDate(PLAN_START_DATE.getDate() + index);
-  const jsDay = date.getDay();
-  return {
-    date,
-    dayIndex: index,
-    dayNumber,
-    monthName: weekDateMonths[index],
-    weekday: jsDay === 0 ? 7 : jsDay,
-  };
-});
+import { AnalyticsScreen } from "@/app/screens/AnalyticsScreen";
+import { getPlanWeekItems } from "@/app/lib/planProgress";
 
 export function PlanListCard({
   plan,
@@ -87,16 +72,21 @@ export function PlanListCard({
   );
 }
 
-export function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen, from?: Screen) => void; onPlanOpen: (id: number) => void }) {
+export function PlansScreen({
+  onNavigate,
+  onPlanOpen,
+  plans,
+  checkedItemKeys,
+  onToggleCheck,
+}: {
+  onNavigate: (s: Screen, from?: Screen) => void;
+  onPlanOpen: (id: number) => void;
+  plans: HomeFeedPlan[];
+  checkedItemKeys: string[];
+  onToggleCheck: (key: string) => void;
+}) {
   void onNavigate;
   const [activeTab, setActiveTab] = useState<"plans" | "analytics">("plans");
-  const [checkedItems, setCheckedItems] = useState<number[]>([]);
-
-  const toggleCheck = (id: number) => {
-    setCheckedItems((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  };
 
   const todayIndex = 0;
   const monthShort = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
@@ -115,35 +105,11 @@ export function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen
     декабря: 11,
   };
 
-  const partOfDayOrder: Record<string, number> = { morning: 0, day: 1, noon: 1, evening: 2 };
-  const latestPlanSets = homeFeedPlans.slice(0, LATEST_PLAN_SET_COUNT);
-  const sourceOrder = new Map(latestPlanSets.map((plan, index) => [plan.id, index]));
-  const planItems = latestPlanSets
-    .flatMap((plan) => {
-      const weekdays = plan.schedule.weekdays.length ? plan.schedule.weekdays : [calendarDays[0].weekday];
-      const matchingDays = calendarDays.filter((day) => weekdays.includes(day.weekday));
-      return matchingDays.map((day) => ({
-        plan,
-        dayIndex: day.dayIndex,
-        dayNumber: day.dayNumber,
-        monthName: day.monthName,
-        sortKey: day.dayIndex,
-      }));
-    })
-    .sort((a, b) => {
-      const aTime = a.plan.schedule.partOfDay ? partOfDayOrder[a.plan.schedule.partOfDay] ?? 3 : 3;
-      const bTime = b.plan.schedule.partOfDay ? partOfDayOrder[b.plan.schedule.partOfDay] ?? 3 : 3;
-      const aExactTime = a.plan.schedule.time ?? "";
-      const bExactTime = b.plan.schedule.time ?? "";
-      return a.sortKey - b.sortKey
-        || aTime - bTime
-        || aExactTime.localeCompare(bExactTime)
-        || (sourceOrder.get(a.plan.id) ?? 0) - (sourceOrder.get(b.plan.id) ?? 0);
-    });
+  const planItems = getPlanWeekItems(plans);
   const nextItem = planItems.find((item) => item.dayIndex >= todayIndex) ?? planItems[0];
 
-  const getStatus = (planId: number, dayIndex: number) => {
-    if (checkedItems.includes(planId)) return "Выполнено";
+  const getStatus = (progressKey: string, dayIndex: number) => {
+    if (checkedItemKeys.includes(progressKey)) return "Выполнено";
     if (dayIndex < todayIndex) return "Не выполнено";
     return "Запланировано";
   };
@@ -197,13 +163,7 @@ export function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen
       </div>
 
       {activeTab === "analytics" ? (
-        <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
-          <div className="mb-4 flex h-[60px] w-[60px] items-center justify-center rounded-full bg-card">
-            <Activity size={28} strokeWidth={1.8} color={GREEN} />
-          </div>
-          <p className="text-[16px] font-semibold text-foreground">В работе</p>
-          <p className="mt-1 text-[14px] leading-5 text-muted-foreground">Аналитика появится здесь скоро</p>
-        </div>
+        <AnalyticsScreen plans={plans} checkedItemKeys={checkedItemKeys} />
       ) : (
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {nextItem && (
@@ -227,9 +187,9 @@ export function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen
 
           <div className="space-y-2.5">
             {planItems.map((item) => {
-              const { plan, dayIndex, dayNumber, monthName } = item;
-              const done = checkedItems.includes(plan.id);
-              const status = getStatus(plan.id, dayIndex);
+              const { plan, dayIndex, dayNumber, monthName, progressKey } = item;
+              const done = checkedItemKeys.includes(progressKey);
+              const status = getStatus(progressKey, dayIndex);
               const scheduleMeta = getScheduleMeta(plan, dayIndex, status);
               const monthIndex = monthNumberByName[monthName] ?? 0;
               return (
@@ -241,10 +201,16 @@ export function PlansScreen({ onNavigate, onPlanOpen }: { onNavigate: (s: Screen
                   scheduleMeta={scheduleMeta}
                   done={done}
                   onOpen={() => onPlanOpen(plan.id)}
-                  onToggle={() => toggleCheck(plan.id)}
+                  onToggle={() => onToggleCheck(progressKey)}
                 />
               );
             })}
+            {planItems.length === 0 && (
+              <div className="flex min-h-[280px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center">
+                <p className="text-[16px] font-semibold text-foreground">Пока нет добавленных планов</p>
+                <p className="mt-1 text-[14px] leading-5 text-muted-foreground">Добавьте план в профиле, и расписание появится здесь.</p>
+              </div>
+            )}
           </div>
         </div>
       )}

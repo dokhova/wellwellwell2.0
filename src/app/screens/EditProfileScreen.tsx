@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Image as ImageIcon, X } from "lucide-react";
 import type { ExpertProfile } from "@/app/data/profile";
 import { GREEN } from "@/app/data/constants";
 
@@ -14,16 +14,30 @@ export function EditProfileScreen({
 }) {
   const [name, setName] = useState(profile.name);
   const [bio, setBio] = useState(profile.bio);
-  const [photoUrl, setPhotoUrl] = useState(profile.photoUrl);
+  const [photoUrls, setPhotoUrls] = useState<string[]>(
+    profile.photoUrls?.length ? profile.photoUrls : profile.photoUrl ? [profile.photoUrl] : []
+  );
+  const coverPhotoUrl = photoUrls[0] ?? null;
   const initials = name
     .split(" ")
     .map((part) => part[0])
     .slice(0, 2)
     .join("");
 
-  const handlePhotoPick = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) setPhotoUrl(URL.createObjectURL(file));
+  const readFileAsDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  const handlePhotoPick = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length > 0) {
+      const nextPhotoUrls = await Promise.all(files.map(readFileAsDataUrl));
+      setPhotoUrls((current) => [...current, ...nextPhotoUrls]);
+    }
     event.target.value = "";
   };
 
@@ -32,7 +46,8 @@ export function EditProfileScreen({
       ...profile,
       name: name.trim() || profile.name,
       bio: bio.trim(),
-      photoUrl,
+      photoUrl: photoUrls[0] ?? null,
+      photoUrls,
     });
   };
 
@@ -48,8 +63,8 @@ export function EditProfileScreen({
 
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         <label className="relative mb-5 block aspect-[1.9/1] overflow-hidden rounded-xl bg-gray-200">
-          {photoUrl ? (
-            <img src={photoUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          {coverPhotoUrl ? (
+            <img src={coverPhotoUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-secondary">
               <span className="text-[42px] font-bold" style={{ color: GREEN }}>{initials}</span>
@@ -58,10 +73,27 @@ export function EditProfileScreen({
           <div className="absolute inset-0 bg-black/25" />
           <span className="absolute left-4 top-4 z-10 flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-1.5 text-[12px] font-medium text-white">
             <ImageIcon size={14} strokeWidth={2} />
-            Изменить фото
+            Добавить фото
           </span>
-          <input type="file" accept="image/*" className="hidden" onChange={handlePhotoPick} />
+          <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoPick} />
         </label>
+
+        {photoUrls.length > 0 && (
+          <div className="mb-5 grid grid-cols-3 gap-2">
+            {photoUrls.map((photoUrl, index) => (
+              <div key={`${photoUrl}-${index}`} className="relative aspect-square overflow-hidden rounded-xl bg-gray-200">
+                <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+                <button
+                  onClick={() => setPhotoUrls((current) => current.filter((_, photoIndex) => photoIndex !== index))}
+                  className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white active:opacity-85"
+                  aria-label="Удалить фото"
+                >
+                  <X size={15} strokeWidth={2.2} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="space-y-4">
           <label className="block">

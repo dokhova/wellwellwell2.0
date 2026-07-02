@@ -57,9 +57,12 @@ export interface ExpertProfilePlan {
 
 export interface ExpertProfile {
   id: string;
+  telegramId: number;
+  username?: string;
   name: string;
   bio: string;
   photoUrl: string | null;
+  photoUrls: string[];
   followersCount: number;
   followingCount: number;
   plansCount: number;
@@ -117,9 +120,11 @@ export const expertPlans: ExpertProfilePlan[] = homeFeedPlans
 
 export const expertProfile: ExpertProfile = {
   id: "gena",
+  telegramId: 0,
   name: "Евгения Лаптева",
   bio: "Тренирую женщин семь лет, от первого подхода до свободы в собственном теле. Работаю онлайн и офлайн, люблю тех, кто возвращается после перерыва, после родов или после долгого «потом начну».",
   photoUrl: expertPhoto as unknown as string,
+  photoUrls: [expertPhoto as unknown as string],
   followersCount: profileFollowers.length,
   followingCount: profileFollowing.length,
   plansCount: expertPlans.length,
@@ -131,9 +136,11 @@ export const experts: ExpertProfile[] = [
   expertProfile,
   {
     id: "maria-kuznetsova",
+    telegramId: 0,
     name: "Мария Кузнецова",
     bio: "Тренирую бегунов пять лет, от первой пробежки до финишной черты. Работаю онлайн и офлайн, люблю тех, кто начинает с нуля и не знает, получится ли.",
     photoUrl: expertAvatarMariaKuznetsova as unknown as string,
+    photoUrls: [expertAvatarMariaKuznetsova as unknown as string],
     followersCount: 1240,
     followingCount: 86,
     plansCount: 3,
@@ -142,9 +149,11 @@ export const experts: ExpertProfile[] = [
   },
   {
     id: "dmitry-orlov",
+    telegramId: 0,
     name: "Дмитрий Орлов",
     bio: "Меня интересует не финиш сам по себе, а то, что происходит с телом и головой на пути к нему. Готовлю бегунов к полумарафонам и марафонам. В работе опираюсь на физиологию и данные, а не на ощущения.",
     photoUrl: expertAvatarDmitryOrlov as unknown as string,
+    photoUrls: [expertAvatarDmitryOrlov as unknown as string],
     followersCount: 2180,
     followingCount: 64,
     plansCount: 3,
@@ -153,9 +162,11 @@ export const experts: ExpertProfile[] = [
   },
   {
     id: "svetlana-voronova",
+    telegramId: 0,
     name: "Светлана Воронова",
     bio: "Специализируюсь на дистанции 5 км — первой серьёзной дистанции для большинства бегунов. Помогаю начать бегать, выстроить регулярность и выйти на первый старт.",
     photoUrl: expertAvatarSvetlanaVoronova as unknown as string,
+    photoUrls: [expertAvatarSvetlanaVoronova as unknown as string],
     followersCount: 980,
     followingCount: 73,
     plansCount: 3,
@@ -164,9 +175,11 @@ export const experts: ExpertProfile[] = [
   },
   {
     id: "alexey-petrov",
+    telegramId: 0,
     name: "Алексей Петров",
     bio: "Большинство проблем в беге — это не нагрузка и не слабая физподготовка, а неправильная механика движения. Помогаю найти и исправить то, что мешает бежать эффективно и без боли.",
     photoUrl: expertAvatarAlexeyPetrov as unknown as string,
+    photoUrls: [expertAvatarAlexeyPetrov as unknown as string],
     followersCount: 1560,
     followingCount: 51,
     plansCount: 3,
@@ -175,9 +188,11 @@ export const experts: ExpertProfile[] = [
   },
   {
     id: "yulia-belova",
+    telegramId: 0,
     name: "Юлия Белова",
     bio: "Тренирую выносливость, физическую и ментальную. Работаю с бегунами, которым мало просто финишировать — они хотят прогрессировать. Специализация — дистанции 10 км и выше.",
     photoUrl: expertAvatarYuliaBelova as unknown as string,
+    photoUrls: [expertAvatarYuliaBelova as unknown as string],
     followersCount: 2410,
     followingCount: 92,
     plansCount: 3,

@@ -42,4 +42,4 @@ export const EVENT_PARTICIPANTS = [
   { id: "gena", name: "Гена", avatar: P_AVATARS.m2 },
 ];
 
-export const NO_BOTTOM_NAV: Screen[] = ["article", "search", "planEvent", "detail", "profileConnections", "editProfile"];
+export const NO_BOTTOM_NAV: Screen[] = ["article", "search", "planEvent", "detail", "profileConnections", "editProfile", "addPlan"];

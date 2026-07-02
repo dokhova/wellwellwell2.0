@@ -1,11 +1,12 @@
-import { Calendar, Home, Plus, User } from "lucide-react";
-import { useState } from "react";
-import type { Article, Screen } from "@/app/types";
+import { ArrowLeft, Calendar, CheckCircle2, Home, Plus, User } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import type { Article, HomeFeedPlan, Screen } from "@/app/types";
 import { NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
 import { experts, expertProfile, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
+import { getTelegramUser, initTelegram } from "@/app/lib/telegram";
 import { HomeScreen } from "@/app/screens/HomeScreen";
-import { PlansScreen } from "@/app/screens/PlansScreen";
+import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
 import { CreateScreen } from "@/app/screens/CreateScreen";
 import { DetailScreen } from "@/app/screens/DetailScreen";
 import { ArticleScreen } from "@/app/screens/ArticleScreen";
@@ -15,7 +16,111 @@ import { EditProfileScreen } from "@/app/screens/EditProfileScreen";
 import { EventDetailScreen } from "@/app/screens/EventDetailScreen";
 import { WorkInProgress } from "@/app/components/WorkInProgress";
 
+const readJson = <T,>(key: string, fallback: T): T => {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) as T : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const writeJson = (key: string, value: unknown) => {
+  window.localStorage.setItem(key, JSON.stringify(value));
+};
+
+const normalizeProfile = (profile: ExpertProfile): ExpertProfile => {
+  const photoUrls = profile.photoUrls?.length ? profile.photoUrls : profile.photoUrl ? [profile.photoUrl] : [];
+  return {
+    ...profile,
+    photoUrls,
+    photoUrl: photoUrls[0] ?? null,
+  };
+};
+
+const buildTelegramProfile = (telegramUser: ReturnType<typeof getTelegramUser>): ExpertProfile => {
+  const name = [telegramUser.first_name, telegramUser.last_name].filter(Boolean).join(" ").trim();
+  const photoUrls = telegramUser.photo_url ? [telegramUser.photo_url] : [];
+
+  return {
+    ...expertProfile,
+    id: String(telegramUser.id),
+    telegramId: telegramUser.id,
+    username: telegramUser.username,
+    name: name || expertProfile.name,
+    bio: "",
+    photoUrl: photoUrls[0] ?? null,
+    photoUrls,
+    plansCount: 0,
+    isMe: true,
+    isFollowedByMe: false,
+  };
+};
+
+function AddPlanScreen({
+  selectedPlanIds,
+  onBack,
+  onAddPlan,
+}: {
+  selectedPlanIds: number[];
+  onBack: () => void;
+  onAddPlan: (id: number) => void;
+}) {
+  const selected = new Set(selectedPlanIds);
+
+  return (
+    <div className="flex h-full flex-col bg-surface">
+      <div className="flex h-14 flex-shrink-0 items-center px-4">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[15px] font-medium text-foreground active:opacity-80">
+          <ArrowLeft size={20} strokeWidth={2} />
+          <span>Назад</span>
+        </button>
+        <h1 className="ml-4 text-[18px] font-bold text-foreground">Добавить план</h1>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 pb-5">
+        <div className="space-y-2.5">
+          {homeFeedPlans.map((plan, index) => {
+            const isAdded = selected.has(plan.id);
+            return (
+              <div key={plan.id} className="relative">
+                <PlanListCard
+                  plan={plan}
+                  dayNumber={index + 1}
+                  monthLabel="План"
+                  scheduleMeta={plan.timeDate}
+                  showToggle={false}
+                  onOpen={() => {
+                    if (!isAdded) onAddPlan(plan.id);
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    if (!isAdded) onAddPlan(plan.id);
+                  }}
+                  disabled={isAdded}
+                  className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border bg-card disabled:opacity-70"
+                  style={{ borderColor: isAdded ? GREEN : "var(--border)", color: isAdded ? GREEN : "var(--foreground)" }}
+                  aria-label={isAdded ? "План добавлен" : "Добавить план"}
+                >
+                  {isAdded ? <CheckCircle2 size={18} strokeWidth={2.2} /> : <Plus size={18} strokeWidth={2.2} />}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const telegramUser = useMemo(() => getTelegramUser(), []);
+  const storagePrefix = `wellwellwell:${telegramUser.id}`;
+  const profileStorageKey = `${storagePrefix}:profile`;
+  const myPlansStorageKey = `${storagePrefix}:myPlans`;
+  const checkedItemsStorageKey = `${storagePrefix}:checkedItems`;
+
   const [screen, setScreen] = useState<Screen>("home");
   const [detailOrigin, setDetailOrigin] = useState<Screen>("plans");
   const [createOrigin, setCreateOrigin] = useState<Screen>("plans");
@@ -28,8 +133,28 @@ export default function App() {
   const [profileConnectionsCanEditFollowing, setProfileConnectionsCanEditFollowing] = useState(false);
   const [viewingOwnProfile, setViewingOwnProfile] = useState(true);
   const [viewingExpertId, setViewingExpertId] = useState("gena");
-  const [editableProfile, setEditableProfile] = useState<ExpertProfile>(expertProfile);
+  const [editableProfile, setEditableProfile] = useState<ExpertProfile>(() =>
+    normalizeProfile(readJson(profileStorageKey, buildTelegramProfile(telegramUser)))
+  );
+  const [myPlanIds, setMyPlanIds] = useState<number[]>(() => readJson(myPlansStorageKey, []));
+  const [checkedItemKeys, setCheckedItemKeys] = useState<string[]>(() => readJson(checkedItemsStorageKey, []));
   const currentUserId = editableProfile.id;
+  const myPlans = homeFeedPlans.filter((plan) => myPlanIds.includes(plan.id));
+
+  useEffect(() => initTelegram(), []);
+
+  useEffect(() => {
+    writeJson(profileStorageKey, editableProfile);
+  }, [editableProfile, profileStorageKey]);
+
+  useEffect(() => {
+    writeJson(myPlansStorageKey, myPlanIds);
+    setEditableProfile((profile) => ({ ...profile, plansCount: myPlanIds.length }));
+  }, [myPlanIds, myPlansStorageKey]);
+
+  useEffect(() => {
+    writeJson(checkedItemsStorageKey, checkedItemKeys);
+  }, [checkedItemKeys, checkedItemsStorageKey]);
 
   const navigate = (s: Screen, from?: Screen) => {
     if (s === "detail" && from) setDetailOrigin(from);
@@ -66,12 +191,35 @@ export default function App() {
     setScreen("profileConnections");
   };
 
+  const addPlanToMine = (id: number) => {
+    setMyPlanIds((ids) => ids.includes(id) ? ids : [...ids, id]);
+    setViewingOwnProfile(true);
+    setScreen("profile");
+  };
+
+  const removePlanFromMine = (id: number) => {
+    setMyPlanIds((ids) => ids.filter((planId) => planId !== id));
+    setCheckedItemKeys((keys) => keys.filter((key) => !key.endsWith(`:${id}`)));
+  };
+
+  const toggleCheckedItem = (key: string) => {
+    setCheckedItemKeys((keys) => keys.includes(key) ? keys.filter((item) => item !== key) : [...keys, key]);
+  };
+
   const renderScreen = () => {
     switch (screen) {
       case "home":
         return <HomeScreen onNavigate={navigate} onPlanOpen={openPlanEvent} onAuthorOpen={openExpertProfile} />;
       case "plans":
-        return <PlansScreen onNavigate={navigate} onPlanOpen={openPlanEvent} />;
+        return (
+          <PlansScreen
+            onNavigate={navigate}
+            onPlanOpen={openPlanEvent}
+            plans={myPlans}
+            checkedItemKeys={checkedItemKeys}
+            onToggleCheck={toggleCheckedItem}
+          />
+        );
       case "create":
         return <CreateScreen onNavigate={navigate} backTo={createOrigin} />;
       case "detail":
@@ -87,7 +235,9 @@ export default function App() {
           ? editableProfile
           : experts.find((expert) => expert.id === viewingExpertId) ?? expertProfile;
         const isCurrentUserProfile = viewedProfile.id === currentUserId;
-        const viewedPlans = homeFeedPlans.filter((plan) => (plan.author.id ?? currentUserId) === viewedProfile.id);
+        const viewedPlans = isCurrentUserProfile
+          ? myPlans
+          : homeFeedPlans.filter((plan) => (plan.author.id ?? currentUserId) === viewedProfile.id);
         return (
           <ProfileScreen
             onNavigate={navigate}
@@ -96,6 +246,8 @@ export default function App() {
             onConnectionsOpen={(type) => openProfileConnections(type, isCurrentUserProfile)}
             onEdit={() => setScreen("editProfile")}
             onBack={() => setScreen(previousScreen)}
+            onAddPlan={() => setScreen("addPlan")}
+            onRemovePlan={removePlanFromMine}
             profile={viewedProfile}
             plans={viewedPlans}
             isMe={isCurrentUserProfile}
@@ -110,6 +262,14 @@ export default function App() {
               setEditableProfile(profile);
               setScreen("profile");
             }}
+          />
+        );
+      case "addPlan":
+        return (
+          <AddPlanScreen
+            selectedPlanIds={myPlanIds}
+            onBack={() => setScreen("profile")}
+            onAddPlan={addPlanToMine}
           />
         );
       case "profileConnections":
