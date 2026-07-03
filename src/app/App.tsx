@@ -9,7 +9,7 @@ import { fetchProfile, fetchProfilesByIds, upsertProfile } from "@/app/lib/api/p
 import { fetchFollowers, fetchFollowing, follow, unfollow } from "@/app/lib/api/follows";
 import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { fetchUserThreadMessages, makeThreadId, sendMessage, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
-import { countJoined, createPlanRemote, fetchPublicPlans, upsertPlanParticipant } from "@/app/lib/api/plans";
+import { countJoined, createPlanRemote, fetchPlansByAuthor, fetchPublicPlans, upsertPlanParticipant } from "@/app/lib/api/plans";
 import { getTelegramUser, initTelegram } from "@/app/lib/telegram";
 import { HomeScreen } from "@/app/screens/HomeScreen";
 import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
@@ -297,6 +297,7 @@ export default function App() {
   const [checkedItemKeys, setCheckedItemKeys] = useState<string[]>(() => readJson(checkedItemsStorageKey, []));
   const [createdPlans, setCreatedPlans] = useState<HomeFeedPlan[]>(() => readJson<HomeFeedPlan[]>(createdPlansStorageKey, []).map(sanitizePlan));
   const [remotePublicPlans, setRemotePublicPlans] = useState<HomeFeedPlan[]>([]);
+  const [profileRemotePlans, setProfileRemotePlans] = useState<Record<string, HomeFeedPlan[]>>({});
   const [joinedCounts, setJoinedCounts] = useState<Record<string, number>>({});
   const [deletedPlanIds, setDeletedPlanIds] = useState<PlanId[]>(() => readJson(deletedPlansStorageKey, []));
   const [myFollowing, setMyFollowing] = useState<ExpertConnection[]>(() => readJson<ExpertConnection[]>(followingStorageKey, []).map(sanitizeConnection));
@@ -348,7 +349,7 @@ export default function App() {
     .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && (plan.visibility ?? "all") === "all")
     .sort((a, b) => getNextOccurrence(a.schedule).getTime() - getNextOccurrence(b.schedule).getTime());
   const justCreatedPublicPlans = [...createdPlans, ...remotePlansWithCounts]
-    .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && (plan.visibility ?? "all") === "all" && plan.author.id !== currentUserId)
+    .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && (plan.visibility ?? "all") === "all")
     .filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index);
   const publicPlans = useMemo(() => {
     const sortedPlans = [...catalogPublicPlans, ...justCreatedPublicPlans]
@@ -427,9 +428,9 @@ export default function App() {
       try {
         const plans = await fetchPublicPlans();
         if (cancelled) return;
-        const otherUserPlans = plans.map(sanitizePlan).filter((plan) => plan.author.id !== currentUserId);
-        setRemotePublicPlans(otherUserPlans);
-        const countEntries = await Promise.all(otherUserPlans.map(async (plan) => [planKey(plan.id), await countJoined(planKey(plan.id))] as const));
+        const publicRemotePlans = plans.map(sanitizePlan);
+        setRemotePublicPlans(publicRemotePlans);
+        const countEntries = await Promise.all(publicRemotePlans.map(async (plan) => [planKey(plan.id), await countJoined(planKey(plan.id))] as const));
         if (!cancelled) setJoinedCounts(Object.fromEntries(countEntries));
       } catch (error) {
         console.error("Supabase public plans fetch failed", error);
@@ -440,7 +441,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [currentUserId]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -488,6 +489,32 @@ export default function App() {
       }
     };
     if (!DEMO_EXPERT_IDS.has(viewingExpertId)) void loadViewedFollowCounts();
+    return () => {
+      cancelled = true;
+    };
+  }, [screen, viewingExpertId, viewingOwnProfile]);
+
+  useEffect(() => {
+    if (screen !== "profile" || viewingOwnProfile || DEMO_EXPERT_IDS.has(viewingExpertId)) return;
+    let cancelled = false;
+    const loadViewedAuthorPlans = async () => {
+      try {
+        const plans = (await fetchPlansByAuthor(viewingExpertId)).map(sanitizePlan);
+        if (cancelled) return;
+        setProfileRemotePlans((items) => ({ ...items, [viewingExpertId]: plans }));
+        const countEntries = await Promise.all(plans.map(async (plan) => [planKey(plan.id), await countJoined(planKey(plan.id))] as const));
+        if (!cancelled) {
+          setJoinedCounts((items) => ({
+            ...items,
+            ...Object.fromEntries(countEntries),
+          }));
+        }
+      } catch (error) {
+        console.error("Supabase profile plans fetch failed", error);
+      }
+    };
+
+    void loadViewedAuthorPlans();
     return () => {
       cancelled = true;
     };
@@ -845,14 +872,37 @@ export default function App() {
     setMyParticipantIds((items) => items.some((item) => participantKey(item) === participantKey(ref)) ? items : [ref, ...items]);
   };
 
+  const adjustProfileFollowersCount = (profile: ExpertProfile, delta: number) => {
+    setProfileFollowCounts((items) => {
+      const current = items[profile.id] ?? {
+        followers: profile.followersCount,
+        following: profile.followingCount,
+      };
+      return {
+        ...items,
+        [profile.id]: {
+          ...current,
+          followers: Math.max(0, current.followers + delta),
+        },
+      };
+    });
+  };
+
   const toggleFollowing = (profile: ExpertProfile, nextFollowed: boolean) => {
     if (!DEMO_EXPERT_IDS.has(profile.id)) {
       const connection = { id: profile.id, name: profile.name, avatarUrl: profile.photoUrl, isFollowedByMe: true };
+      const wasFollowed = dbFollowingIds.has(profile.id);
+      if (wasFollowed === nextFollowed) return;
       setDbFollowing((items) => nextFollowed
         ? items.some((item) => item.id === profile.id) ? items : [connection, ...items]
         : items.filter((item) => item.id !== profile.id));
+      adjustProfileFollowersCount(profile, nextFollowed ? 1 : -1);
       void (nextFollowed ? follow(currentUserId, profile.id) : unfollow(currentUserId, profile.id)).catch((error) => {
         console.error("Supabase follow update failed", error);
+        setDbFollowing((items) => nextFollowed
+          ? items.filter((item) => item.id !== profile.id)
+          : items.some((item) => item.id === profile.id) ? items : [connection, ...items]);
+        adjustProfileFollowersCount(profile, nextFollowed ? -1 : 1);
       });
       return;
     }
@@ -939,9 +989,14 @@ export default function App() {
                 : dbFollowingIds.has(baseViewedProfile.id),
             };
         const isCurrentUserProfile = viewedProfile.id === currentUserId;
+        const viewedRemotePlans = (profileRemotePlans[viewedProfile.id] ?? []).map((plan) => {
+          const joinedCount = joinedCounts[planKey(plan.id)];
+          return joinedCount === undefined ? plan : { ...plan, participantsLabel: `${joinedCount} чел.` };
+        });
         const viewedPlans = isCurrentUserProfile
           ? myPlans
-          : allPlans.filter((plan) => (plan.author.id ?? currentUserId) === viewedProfile.id);
+          : [...viewedRemotePlans, ...allPlans.filter((plan) => (plan.author.id ?? currentUserId) === viewedProfile.id)]
+              .filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index);
         return (
           <ProfileScreen
             onNavigate={navigate}

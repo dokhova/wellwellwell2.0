@@ -23,6 +23,9 @@ const getStartsAt = (plan: HomeFeedPlan) => {
   return null;
 };
 
+const mapPlanRows = (rows: PlanRow[] | null): HomeFeedPlan[] =>
+  (rows ?? []).map((row) => row.payload ? { ...row.payload, id: row.id } : null).filter((plan): plan is HomeFeedPlan => Boolean(plan));
+
 export const createPlanRemote = async (plan: HomeFeedPlan): Promise<HomeFeedPlan | null> => {
   if (!supabase) return null;
 
@@ -58,7 +61,7 @@ export const fetchPublicPlans = async (): Promise<HomeFeedPlan[]> => {
     .returns<PlanRow[]>();
 
   if (error) throw error;
-  return (data ?? []).map((row) => row.payload ? { ...row.payload, id: row.id } : null).filter((plan): plan is HomeFeedPlan => Boolean(plan));
+  return mapPlanRows(data);
 };
 
 export const fetchPlan = async (planId: string): Promise<HomeFeedPlan | null> => {
@@ -72,6 +75,20 @@ export const fetchPlan = async (planId: string): Promise<HomeFeedPlan | null> =>
 
   if (error) throw error;
   return data?.payload ? { ...data.payload, id: data.id } : null;
+};
+
+export const fetchPlansByAuthor = async (authorId: string): Promise<HomeFeedPlan[]> => {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("plans")
+    .select("id, author_id, title, description, cover_url, starts_at, payload, created_at")
+    .eq("author_id", authorId)
+    .order("created_at", { ascending: false })
+    .returns<PlanRow[]>();
+
+  if (error) throw error;
+  return mapPlanRows(data);
 };
 
 export const fetchParticipants = async (planId: string): Promise<PlanParticipantRow[]> => {
