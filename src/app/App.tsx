@@ -5,8 +5,9 @@ import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
 import { formatNearestDate, getNextOccurrence } from "@/app/data/calendar";
 import { experts, expertProfile, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
-import { fetchProfile, upsertProfile } from "@/app/lib/api/profiles";
+import { fetchProfile, fetchProfilesByIds, upsertProfile } from "@/app/lib/api/profiles";
 import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
+import { fetchUserThreadMessages, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
 import { getTelegramUser, initTelegram } from "@/app/lib/telegram";
 import { HomeScreen } from "@/app/screens/HomeScreen";
 import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
@@ -91,6 +92,21 @@ const asRealPeer = (peer: ChatPeer): ChatPeer => {
 
 const isRealProfilePeer = (peer: ChatPeer, remoteProfiles: Record<string, ExpertProfile>) =>
   peer.realUser || Boolean(remoteProfiles[peer.id]) || /^\d+$/.test(peer.id);
+
+const getPeerIdFromThreadId = (threadId: string, currentUserId: string) => {
+  const parts = threadId.split("_");
+  if (parts.length !== 2) return null;
+  return parts[0] === currentUserId ? parts[1] : parts[1] === currentUserId ? parts[0] : null;
+};
+
+const mapMessageRowToChatMessage = (message: MessageRow, currentUserId: string): ChatMessage => ({
+  id: message.id,
+  sender: message.sender_id === currentUserId ? "me" : "peer",
+  text: message.text,
+  createdAt: new Date(message.created_at).getTime(),
+  readAt: message.read_at ? new Date(message.read_at).getTime() : null,
+  status: "sent",
+});
 
 const isTelegramPhotoUrl = (url: string | null | undefined) => {
   if (!url) return false;
@@ -294,13 +310,13 @@ export default function App() {
     .sort((a, b) => getNextOccurrence(a.schedule).getTime() - getNextOccurrence(b.schedule).getTime());
   const justCreatedPublicPlans = createdPlans.filter((plan) => !deletedPlanIdSet.has(plan.id) && (plan.visibility ?? "all") === "all");
   const publicPlans = [...catalogPublicPlans, ...justCreatedPublicPlans];
-  const participantChatPeers: ChatPeer[] = EVENT_PARTICIPANTS.map((participant) => ({
+  const participantChatPeers: ChatPeer[] = useMemo(() => EVENT_PARTICIPANTS.map((participant) => ({
     id: participant.id,
     name: participant.name,
     avatarUrl: participant.avatar,
     cannedReplies: participant.cannedReplies,
-  }));
-  const chatSearchPeers: ChatPeer[] = [
+  })), []);
+  const chatSearchPeers: ChatPeer[] = useMemo(() => [
     ...experts.map((expert) => ({
       id: expert.id,
       name: expert.name,
@@ -308,9 +324,110 @@ export default function App() {
       cannedReplies: expert.cannedReplies,
     })),
     ...participantChatPeers,
-  ];
+  ], [participantChatPeers]);
+  const localPeerById = useMemo(() => new Map(chatSearchPeers.map((peer) => [peer.id, peer])), [chatSearchPeers]);
+
+  const mergeRemoteThreads = useCallback((rows: MessageRow[], profiles: ExpertProfile[] = []) => {
+    const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+    const rowsByThread = new Map<string, MessageRow[]>();
+    rows.forEach((row) => {
+      const peerId = getPeerIdFromThreadId(row.thread_id, currentUserId);
+      if (!peerId) return;
+      rowsByThread.set(row.thread_id, [...(rowsByThread.get(row.thread_id) ?? []), row]);
+    });
+
+    setChatThreads((threads) => {
+      const nextThreads = [...threads];
+      rowsByThread.forEach((threadRows, threadId) => {
+        const peerId = getPeerIdFromThreadId(threadId, currentUserId);
+        if (!peerId) return;
+        const sortedRows = [...threadRows].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        const latestRow = sortedRows[sortedRows.length - 1];
+        if (!latestRow) return;
+        const profile = profileById.get(peerId) ?? remoteProfiles[peerId];
+        const localPeer = localPeerById.get(peerId);
+        const peer = asRealPeer({
+          id: peerId,
+          name: profile?.name ?? localPeer?.name ?? `Пользователь ${peerId}`,
+          avatarUrl: sanitizeImageUrl(profile?.photoUrl ?? localPeer?.avatarUrl ?? null),
+        });
+        const unreadCount = sortedRows.filter((row) => row.sender_id !== currentUserId && row.read_at === null).length;
+        const latestMessage = mapMessageRowToChatMessage(latestRow, currentUserId);
+        const existingIndex = nextThreads.findIndex((thread) => thread.peer.id === peerId);
+        if (existingIndex >= 0) {
+          const existing = nextThreads[existingIndex];
+          const hasLatestMessage = existing.messages.some((message) => message.id === latestMessage.id);
+          nextThreads[existingIndex] = {
+            ...existing,
+            peer: existing.peer.cannedReplies?.length ? existing.peer : peer,
+            messages: hasLatestMessage ? existing.messages : [...existing.messages, latestMessage],
+            updatedAt: Math.max(existing.updatedAt, latestMessage.createdAt),
+            unreadCount,
+          };
+        } else {
+          nextThreads.push({ peer, messages: [latestMessage], updatedAt: latestMessage.createdAt, unreadCount });
+        }
+      });
+      return nextThreads;
+    });
+  }, [currentUserId, localPeerById, remoteProfiles]);
 
   useEffect(() => initTelegram(), []);
+
+  useEffect(() => {
+    if (screen !== "chats") return;
+    let cancelled = false;
+
+    const loadRemoteThreads = async () => {
+      try {
+        const rows = await fetchUserThreadMessages(currentUserId);
+        if (cancelled) return;
+        const peerIds = Array.from(new Set(rows
+          .map((row) => getPeerIdFromThreadId(row.thread_id, currentUserId))
+          .filter((id): id is string => Boolean(id))));
+        const missingProfileIds = peerIds.filter((id) => !remoteProfiles[id] && !localPeerById.has(id));
+        const profiles = await fetchProfilesByIds(missingProfileIds);
+        if (cancelled) return;
+        if (profiles.length > 0) {
+          setRemoteProfiles((items) => ({
+            ...items,
+            ...Object.fromEntries(profiles.map((profile) => [profile.id, normalizeProfile(profile)])),
+          }));
+        }
+        mergeRemoteThreads(rows, profiles);
+      } catch (error) {
+        console.error("Supabase chat threads fetch failed", error);
+      }
+    };
+
+    void loadRemoteThreads();
+    const unsubscribe = subscribeToUserMessages(currentUserId, (message) => {
+      const peerId = getPeerIdFromThreadId(message.thread_id, currentUserId);
+      if (!peerId) return;
+      if (remoteProfiles[peerId] || localPeerById.has(peerId)) {
+        mergeRemoteThreads([message]);
+        return;
+      }
+      void fetchProfilesByIds([peerId]).then((profiles) => {
+        if (cancelled) return;
+        if (profiles.length > 0) {
+          setRemoteProfiles((items) => ({
+            ...items,
+            ...Object.fromEntries(profiles.map((profile) => [profile.id, normalizeProfile(profile)])),
+          }));
+        }
+        mergeRemoteThreads([message], profiles);
+      }).catch((error) => {
+        console.error("Supabase incoming chat profile fetch failed", error);
+        mergeRemoteThreads([message]);
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [currentUserId, localPeerById, mergeRemoteThreads, remoteProfiles, screen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -424,16 +541,17 @@ export default function App() {
   const openChatWithPeer = (peer: ChatPeer) => {
     const nextPeer = getCannedPeer(peer);
     setActiveChatPeer(nextPeer);
+    setChatThreads((threads) => threads.map((thread) => thread.peer.id === nextPeer.id ? { ...thread, unreadCount: 0 } : thread));
     setPreviousScreen(screen);
     setScreen("chat");
   };
 
-  const sendChatMessage = (peer: ChatPeer, text: string, sender: ChatMessage["sender"], status?: ChatMessage["status"]): ChatMessage | null => {
+  const sendChatMessage = (peer: ChatPeer, text: string, sender: ChatMessage["sender"], status?: ChatMessage["status"], messageId = crypto.randomUUID()): ChatMessage | null => {
     const body = text.trim();
     if (!body) return null;
     const normalizedPeer = getCannedPeer(peer);
     const message: ChatMessage = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      id: messageId,
       sender,
       text: body,
       createdAt: Date.now(),

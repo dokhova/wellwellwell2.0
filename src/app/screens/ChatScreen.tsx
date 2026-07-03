@@ -158,6 +158,11 @@ export function ChatsScreen({
                       {lastMessage?.sender === "me" ? "Вы: " : ""}{lastMessage?.text ?? ""}
                     </p>
                   </div>
+                  {Boolean(thread.unreadCount) && (
+                    <span className="flex h-5 min-w-5 flex-shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white" style={{ backgroundColor: GREEN }}>
+                      {thread.unreadCount}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -201,12 +206,13 @@ export function ChatScreen({
   currentUserId: string;
   myAvatarUrl: string | null;
   onBack: () => void;
-  onSendMessage: (peer: ChatPeer, text: string, sender: ChatMessage["sender"], status?: ChatMessage["status"]) => ChatMessage | null;
+  onSendMessage: (peer: ChatPeer, text: string, sender: ChatMessage["sender"], status?: ChatMessage["status"], messageId?: string) => ChatMessage | null;
   onReceiveRemoteMessage: (peer: ChatPeer, message: ChatMessage) => void;
   onConfirmRemoteMessage: (peer: ChatPeer, localId: string, message: ChatMessage) => void;
 }) {
   const [text, setText] = useState("");
   const [typing, setTyping] = useState(false);
+  const [sending, setSending] = useState(false);
   const timeoutRef = useRef<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const isRealPeer = !peer.cannedReplies?.length;
@@ -256,15 +262,19 @@ export function ChatScreen({
 
   const send = (value: string) => {
     const body = value.trim();
-    if (!body) return;
-    const localMessage = onSendMessage(peer, body, "me", isRealPeer ? "sending" : undefined);
+    if (!body || (isRealPeer && sending)) return;
+    const messageId = crypto.randomUUID();
+    const localMessage = onSendMessage(peer, body, "me", isRealPeer ? "sending" : undefined, messageId);
     setText("");
 
     if (isRealPeer && threadId) {
-      void sendMessage({ threadId, senderId: currentUserId, text: body, photoUrl: null }).then((message) => {
+      setSending(true);
+      void sendMessage({ id: messageId, threadId, senderId: currentUserId, text: body, photoUrl: null }).then((message) => {
         if (message && localMessage) onConfirmRemoteMessage(peer, localMessage.id, mapMessageRow(message, currentUserId));
       }).catch((error) => {
         console.error("Supabase chat send failed", error);
+      }).finally(() => {
+        setSending(false);
       });
     }
 
@@ -336,6 +346,7 @@ export function ChatScreen({
               <button
                 key={message}
                 onClick={() => send(message)}
+                disabled={isRealPeer && sending}
                 className="flex-shrink-0 rounded-full bg-muted px-3.5 py-2 text-[13px] font-medium text-foreground active:opacity-85"
               >
                 {message}
@@ -349,14 +360,14 @@ export function ChatScreen({
             value={text}
             onChange={(event) => setText(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter") send(text);
+              if (event.key === "Enter" && !(isRealPeer && sending)) send(text);
             }}
             placeholder="Сообщение"
             className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-muted-foreground"
           />
           <button
             onClick={() => send(text)}
-            disabled={!text.trim()}
+            disabled={!text.trim() || (isRealPeer && sending)}
             className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full disabled:opacity-50"
             style={{ backgroundColor: GREEN }}
           >

@@ -44,6 +44,7 @@ export interface ChatThread {
   messages: ChatMessage[];
   updatedAt: number;
   pinned?: boolean;
+  unreadCount?: number;
 }
 export type PlanRepeat =
   | { type: "days"; days: number }

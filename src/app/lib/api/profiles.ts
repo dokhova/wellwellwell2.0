@@ -92,3 +92,16 @@ export const searchProfiles = async (query: string): Promise<ExpertProfile[]> =>
   if (error) throw error;
   return (data ?? []).map(mapRowToProfile);
 };
+
+export const fetchProfilesByIds = async (ids: string[]): Promise<ExpertProfile[]> => {
+  if (!supabase || ids.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, telegram_id, username, name, bio, photo_url, photo_urls")
+    .in("id", ids)
+    .returns<ProfileRow[]>();
+
+  if (error) throw error;
+  return (data ?? []).map(mapRowToProfile);
+};

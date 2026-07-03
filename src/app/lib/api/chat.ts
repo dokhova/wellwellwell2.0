@@ -11,6 +11,7 @@ export type MessageRow = {
 };
 
 export type SendMessageInput = {
+  id: string;
   threadId: string;
   senderId: string;
   text: string;
@@ -33,12 +34,27 @@ export const fetchMessages = async (threadId: string): Promise<MessageRow[]> => 
   return data ?? [];
 };
 
+export const fetchUserThreadMessages = async (currentUserId: string): Promise<MessageRow[]> => {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("messages")
+    .select("id, thread_id, sender_id, text, photo_url, created_at, read_at")
+    .or(`thread_id.like.${currentUserId}_%,thread_id.like.%_${currentUserId}`)
+    .order("created_at", { ascending: false })
+    .returns<MessageRow[]>();
+
+  if (error) throw error;
+  return data ?? [];
+};
+
 export const sendMessage = async (input: SendMessageInput): Promise<MessageRow | null> => {
   if (!supabase) return null;
 
   const { data, error } = await supabase
     .from("messages")
     .insert({
+      id: input.id,
       thread_id: input.threadId,
       sender_id: input.senderId,
       text: input.text,
@@ -85,6 +101,28 @@ export const subscribeToThread = (
       { event: "UPDATE", schema: "public", table: "messages", filter: `thread_id=eq.${threadId}` },
       (payload) => {
         onMessageUpdate?.(payload.new as MessageRow);
+      },
+    )
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+};
+
+export const subscribeToUserMessages = (currentUserId: string, onMessage: (message: MessageRow) => void) => {
+  if (!supabase) return () => undefined;
+
+  const channel = supabase
+    .channel(`messages:user:${currentUserId}`)
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "messages" },
+      (payload) => {
+        const message = payload.new as MessageRow;
+        if (message.thread_id.startsWith(`${currentUserId}_`) || message.thread_id.endsWith(`_${currentUserId}`)) {
+          onMessage(message);
+        }
       },
     )
     .subscribe();
