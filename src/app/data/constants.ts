@@ -1,6 +1,8 @@
-import avatarManBlack from "@/imports/avatarManBlack-opt.jpg";
-import avatarGirl from "@/imports/avatarGirl-opt.jpg";
-import avatarDmitry from "@/imports/avatarDmitry-opt.jpg";
+import expertAvatarMariaKuznetsova from "@/imports/avatar_01.jpg";
+import expertAvatarDmitryOrlov from "@/imports/avatar_02.jpg";
+import expertAvatarSvetlanaVoronova from "@/imports/avatar_03.jpg";
+import expertAvatarAlexeyPetrov from "@/imports/avatar_04.jpg";
+import expertAvatarYuliaBelova from "@/imports/avatar_05.jpg";
 import type { Screen, Visibility } from "@/app/types";
 
 export const P_AVATARS = {
@@ -15,10 +17,10 @@ export const UNSPLASH = {
   phone: "https://images.unsplash.com/photo-1592890288564-76628a30a657?crop=entropy&cs=tinysrgb&fit=crop&w=300&h=300&q=80",
   shoes: "https://images.unsplash.com/photo-1571008887538-b36bb32f4571?crop=entropy&cs=tinysrgb&fit=crop&w=300&h=300&q=80",
   marathon: "https://images.unsplash.com/photo-1571008887538-b36bb32f4571?crop=entropy&cs=tinysrgb&fit=crop&w=300&h=400&q=80&crop=top",
-  avatarMaria: avatarGirl as unknown as string,
-  avatarGena: avatarManBlack as unknown as string,
-  avatarDmitry: avatarDmitry as unknown as string,
-  userAvatar: avatarManBlack as unknown as string,
+  avatarMaria: expertAvatarMariaKuznetsova as unknown as string,
+  avatarGena: expertAvatarMariaKuznetsova as unknown as string,
+  avatarDmitry: expertAvatarDmitryOrlov as unknown as string,
+  userAvatar: expertAvatarMariaKuznetsova as unknown as string,
 };
 
 export const GREEN = "var(--accent)";
@@ -36,10 +38,11 @@ export const VISIBILITY_OPTIONS: { value: Visibility; label: string }[] = [
 ];
 
 export const EVENT_PARTICIPANTS = [
-  { id: "maria", name: "Мария", avatar: P_AVATARS.w1, cannedReplies: ["Привет! Да, я уже в плане.", "Пока иду по расписанию, без пропусков.", "Увидимся на тренировке, я буду чуть раньше."] },
-  { id: "dmitry", name: "Дмитрий", avatar: P_AVATARS.m1, cannedReplies: ["Готов начать. Главное — не перегореть в первую неделю.", "План нормальный, держу спокойный темп.", "Если будет дождь, всё равно приду."] },
-  { id: "anna", name: "Анна", avatar: P_AVATARS.w2, cannedReplies: ["Привет! Я тоже начинаю с этой недели.", "План идёт хорошо, отмечаю выполнение каждый раз.", "Есть вопрос — пиши, разберёмся вместе."] },
-  { id: "gena", name: "Гена", avatar: P_AVATARS.m2, cannedReplies: ["Привет. Начинай спокойно и не пропускай разминку.", "Если тяжело, уменьши темп, но сохрани привычку.", "После тренировки напиши, как прошло."] },
+  { id: "maria-kuznetsova", name: "Мария Кузнецова", avatar: expertAvatarMariaKuznetsova as unknown as string, cannedReplies: ["Привет! Первые недели держим разговорный темп.", "Если тяжело, снизь скорость, но сохрани регулярность."] },
+  { id: "dmitry-orlov", name: "Дмитрий Орлов", avatar: expertAvatarDmitryOrlov as unknown as string, cannedReplies: ["План проходит нормально, если пульс не улетает в первые минуты.", "Смотри не на разовый результат, а на динамику за неделю."] },
+  { id: "svetlana-voronova", name: "Светлана Воронова", avatar: expertAvatarSvetlanaVoronova as unknown as string, cannedReplies: ["Начинаем мягко. Первые тренировки должны казаться слишком лёгкими.", "На 5 км важнее ровность, чем быстрый первый километр."] },
+  { id: "alexey-petrov", name: "Алексей Петров", avatar: expertAvatarAlexeyPetrov as unknown as string, cannedReplies: ["Проверь технику на разминке: корпус ровный, шаг короткий.", "Боль игнорировать не надо."] },
+  { id: "yulia-belova", name: "Юлия Белова", avatar: expertAvatarYuliaBelova as unknown as string, cannedReplies: ["В этом плане важна терпеливая работа, без резких скачков.", "Если тренировка прошла тяжело, следующий день делаем легче."] },
 ];
 
 export const NO_BOTTOM_NAV: Screen[] = ["article", "search", "planEvent", "detail", "profileConnections", "editProfile", "addPlan", "chat"];

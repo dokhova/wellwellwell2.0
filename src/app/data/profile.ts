@@ -7,7 +7,6 @@ import expertAvatarDmitryOrlov from "@/imports/avatar_02.jpg";
 import expertAvatarSvetlanaVoronova from "@/imports/avatar_03.jpg";
 import expertAvatarAlexeyPetrov from "@/imports/avatar_04.jpg";
 import expertAvatarYuliaBelova from "@/imports/avatar_05.jpg";
-import expertPhoto from "@/imports/avatar 10.png";
 import { P_AVATARS, UNSPLASH } from "@/app/data/constants";
 import { homeFeedPlans, normalizePlanTag } from "@/app/data/plans";
 import type { PlanTag } from "@/app/types";
@@ -72,16 +71,16 @@ export interface ExpertProfile {
 }
 
 export const profileFollowers: ExpertConnection[] = [
-  { id: "maria", name: "Мария Нестерова", avatarUrl: UNSPLASH.avatarMaria, isFollowedByMe: true },
-  { id: "dmitry", name: "Дмитрий Савин", avatarUrl: UNSPLASH.avatarDmitry, isFollowedByMe: false },
-  { id: "anna", name: "Анна Романова", avatarUrl: P_AVATARS.w2, isFollowedByMe: false },
-  { id: "kirill", name: "Кирилл Волков", avatarUrl: P_AVATARS.m1, isFollowedByMe: true },
+  { id: "dmitry-orlov", name: "Дмитрий Орлов", avatarUrl: expertAvatarDmitryOrlov as unknown as string, isFollowedByMe: false },
+  { id: "svetlana-voronova", name: "Светлана Воронова", avatarUrl: expertAvatarSvetlanaVoronova as unknown as string, isFollowedByMe: false },
+  { id: "alexey-petrov", name: "Алексей Петров", avatarUrl: expertAvatarAlexeyPetrov as unknown as string, isFollowedByMe: true },
+  { id: "yulia-belova", name: "Юлия Белова", avatarUrl: expertAvatarYuliaBelova as unknown as string, isFollowedByMe: true },
 ];
 
 export const profileFollowing: ExpertConnection[] = [
-  { id: "gena", name: "Гена Лохтин", avatarUrl: UNSPLASH.avatarGena, isFollowedByMe: true },
-  { id: "olga", name: "Ольга Миронова", avatarUrl: P_AVATARS.w1, isFollowedByMe: true },
-  { id: "ilya", name: "Илья Гордеев", avatarUrl: P_AVATARS.m3, isFollowedByMe: false },
+  { id: "maria-kuznetsova", name: "Мария Кузнецова", avatarUrl: expertAvatarMariaKuznetsova as unknown as string, isFollowedByMe: true },
+  { id: "dmitry-orlov", name: "Дмитрий Орлов", avatarUrl: expertAvatarDmitryOrlov as unknown as string, isFollowedByMe: true },
+  { id: "svetlana-voronova", name: "Светлана Воронова", avatarUrl: expertAvatarSvetlanaVoronova as unknown as string, isFollowedByMe: false },
 ];
 
 const tagAxis: Record<PlanTag, ExpertProfilePlan["axis"]> = {
@@ -107,7 +106,7 @@ const getParticipantsCount = (label: string, fallback: number) => {
 };
 
 export const expertPlans: ExpertProfilePlan[] = homeFeedPlans
-  .filter((plan) => plan.author.name === "Гена Лохтин")
+  .filter((plan) => plan.author.name === "Мария Кузнецова")
   .slice(0, 4)
   .map((plan) => ({
     id: plan.id,
@@ -120,12 +119,12 @@ export const expertPlans: ExpertProfilePlan[] = homeFeedPlans
   }));
 
 export const expertProfile: ExpertProfile = {
-  id: "gena",
+  id: "maria-kuznetsova",
   telegramId: 0,
-  name: "Евгения Лаптева",
-  bio: "Тренирую женщин семь лет, от первого подхода до свободы в собственном теле. Работаю онлайн и офлайн, люблю тех, кто возвращается после перерыва, после родов или после долгого «потом начну».",
-  photoUrl: expertPhoto as unknown as string,
-  photoUrls: [expertPhoto as unknown as string],
+  name: "Мария Кузнецова",
+  bio: "Тренирую бегунов пять лет, от первой пробежки до финишной черты. Работаю онлайн и офлайн, люблю тех, кто начинает с нуля и не знает, получится ли.",
+  photoUrl: expertAvatarMariaKuznetsova as unknown as string,
+  photoUrls: [expertAvatarMariaKuznetsova as unknown as string],
   followersCount: profileFollowers.length,
   followingCount: profileFollowing.length,
   plansCount: expertPlans.length,
@@ -140,24 +139,6 @@ export const expertProfile: ExpertProfile = {
 
 export const experts: ExpertProfile[] = [
   expertProfile,
-  {
-    id: "maria-kuznetsova",
-    telegramId: 0,
-    name: "Мария Кузнецова",
-    bio: "Тренирую бегунов пять лет, от первой пробежки до финишной черты. Работаю онлайн и офлайн, люблю тех, кто начинает с нуля и не знает, получится ли.",
-    photoUrl: expertAvatarMariaKuznetsova as unknown as string,
-    photoUrls: [expertAvatarMariaKuznetsova as unknown as string],
-    followersCount: 1240,
-    followingCount: 86,
-    plansCount: 3,
-    isFollowedByMe: false,
-    isMe: false,
-    cannedReplies: [
-      "Привет! Первые недели держим разговорный темп.",
-      "Если тяжело, снизь скорость, но сохрани регулярность.",
-      "На тренировке увидимся у старта, приходи за 10 минут.",
-    ],
-  },
   {
     id: "dmitry-orlov",
     telegramId: 0,

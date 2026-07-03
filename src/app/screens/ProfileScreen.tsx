@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { ArrowLeft, Check, Edit3, MessageCircle, Plus, Trash2, UserPlus } from "lucide-react";
 import type { Article, ChatPeer, HomeFeedPlan, Screen } from "@/app/types";
-import { weekDates, weekDateMonths } from "@/app/data/calendar";
+import { formatNearestDate, getNextOccurrence, weekDates, weekDateMonths } from "@/app/data/calendar";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
 import { profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { PlanListCard } from "@/app/screens/PlansScreen";
@@ -45,7 +45,7 @@ function ProfileStat({
 
 function Avatar({ user }: { user: ExpertConnection }) {
   if (user.avatarUrl) {
-    return <img src={user.avatarUrl} alt={user.name} className="h-11 w-11 flex-shrink-0 rounded-full object-cover" />;
+    return <img loading="lazy" decoding="async" src={user.avatarUrl} alt={user.name} className="h-11 w-11 flex-shrink-0 rounded-full object-cover" />;
   }
 
   const initials = user.name
@@ -187,7 +187,10 @@ export function ProfileScreen(props: {
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false });
   const shouldShowBioToggle = props.profile.bio.length > 100;
   const visiblePlans = showAllPlans ? props.plans : props.plans.slice(0, 3);
+  const nearestPlans = [...props.plans].sort((a, b) => getNextOccurrence(a.schedule).getTime() - getNextOccurrence(b.schedule).getTime());
+  const visibleNearestPlans = showAllPlans ? nearestPlans : nearestPlans.slice(0, 2);
   const hasMorePlans = props.plans.length > visiblePlans.length;
+  const hasMoreNearestPlans = nearestPlans.length > visibleNearestPlans.length;
   const photoUrls = props.profile.photoUrls?.length
     ? props.profile.photoUrls
     : props.profile.photoUrl
@@ -239,7 +242,7 @@ export function ProfileScreen(props: {
               <div className="flex h-full">
                 {photoUrls.map((photoUrl, index) => (
                   <div key={`${photoUrl}-${index}`} className="min-w-0 flex-[0_0_100%]">
-                    <img src={photoUrl} alt={props.profile.name} className="h-full w-full object-cover" />
+                    <img loading="lazy" decoding="async" src={photoUrl} alt={props.profile.name} className="h-full w-full object-cover" />
                   </div>
                 ))}
               </div>
@@ -343,11 +346,37 @@ export function ProfileScreen(props: {
 
           {props.isMe ? (
             <div className="mt-7">
-              <h2 className="mb-3 text-[19px] font-bold leading-6 text-foreground">Аналитика</h2>
-              <div className="rounded-2xl bg-muted px-4 py-8 text-center">
-                <p className="text-[15px] font-semibold text-foreground">Аналитика появится здесь скоро</p>
-                <p className="mt-2 text-[14px] leading-5 text-muted-foreground">Мы собираем прогресс по планам и выполнению.</p>
-              </div>
+              <h2 className="mb-3 text-[19px] font-bold leading-6 text-foreground">Ближайшие планы</h2>
+              {visibleNearestPlans.length > 0 ? (
+                <div className="space-y-2.5">
+                  {visibleNearestPlans.map((plan) => {
+                    const nearestDate = formatNearestDate(plan.schedule);
+                    return (
+                      <PlanListCard
+                        key={plan.id}
+                        plan={plan}
+                        dayNumber={nearestDate.dayNumber}
+                        monthLabel={nearestDate.monthLabel}
+                        scheduleMeta={plan.timeDate}
+                        onOpen={() => props.onPlanOpen(plan.id)}
+                        showToggle={false}
+                      />
+                    );
+                  })}
+                  {hasMoreNearestPlans && (
+                    <button
+                      onClick={() => setShowAllPlans(true)}
+                      className="mt-1 flex h-11 w-full items-center justify-center rounded-xl bg-muted text-[14px] font-semibold text-foreground active:opacity-85"
+                    >
+                      Показать все
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-xl bg-muted px-4 py-6 text-center">
+                  <p className="text-[14px] leading-5 text-muted-foreground">Пока нет ближайших планов</p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="mt-7">

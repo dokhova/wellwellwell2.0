@@ -12,7 +12,7 @@ function ParticipantAvatarLine({ avatars }: { avatars: string[] }) {
     <div className="flex -space-x-2">
       {visible.length > 0 ? (
         visible.map((url, index) => (
-          <img
+          <img loading="lazy" decoding="async"
             key={`${url}-${index}`}
             src={url}
             alt=""
@@ -39,7 +39,7 @@ function FeedAvatarStack({ avatars, label }: { avatars: string[]; label: string 
 
 function AuthorAvatar({ name, avatarUrl }: { name: string; avatarUrl: string | null }) {
   if (avatarUrl) {
-    return <img src={avatarUrl} alt={name} className="h-9 w-9 flex-shrink-0 rounded-full object-cover" />;
+    return <img loading="lazy" decoding="async" src={avatarUrl} alt={name} className="h-9 w-9 flex-shrink-0 rounded-full object-cover" />;
   }
 
   const initials = name
@@ -90,7 +90,7 @@ export function FeedEventCard({
         style={{ background: plan.gradient ?? "#D1D5DB" }}
       >
         {plan.coverUrl && (
-          <img src={plan.coverUrl} alt={plan.title} className="absolute inset-0 h-full w-full object-cover" />
+          <img loading="lazy" decoding="async" src={plan.coverUrl} alt={plan.title} className="absolute inset-0 h-full w-full object-cover" />
         )}
         <div
           className="absolute inset-0"

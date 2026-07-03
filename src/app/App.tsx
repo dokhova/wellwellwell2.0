@@ -716,7 +716,8 @@ export default function App() {
         return (
           <SearchScreen
             onBack={() => setScreen("home")}
-            onArticle={a => openArticle(a, "search")}
+            plans={allPlans}
+            onPlanOpen={(id) => openPlanEvent(id, "search")}
             currentUserId={currentUserId}
             onProfile={openSearchProfile}
             onMessagePeer={(peer) => openChatWithPeer(asRealPeer(peer))}
@@ -844,6 +845,9 @@ export default function App() {
   };
 
   const showNav = !NO_BOTTOM_NAV.includes(screen);
+  const unreadChatsCount = chatThreads
+    .filter((thread) => !thread.peer.cannedReplies?.length)
+    .reduce((sum, thread) => sum + (thread.unreadCount ?? 0), 0);
 
   return (
     <div
@@ -865,8 +869,15 @@ export default function App() {
           ] as { id: Screen; label: string; Icon: React.FC<{ size: number; strokeWidth: number; color: string }> }[]).map(({ id, label, Icon }) => {
             const isActive = screen === id || (id === "plans" && (screen === "detail" || screen === "planEvent")) || (id === "home" && screen === "search");
             return (
-              <button key={id} onClick={() => navigate(id)} className="flex flex-col items-center gap-0.5 px-4 py-1">
-                <Icon size={22} strokeWidth={isActive ? 2.2 : 1.7} color={isActive ? GREEN : "#9CA3AF"} />
+              <button key={id} onClick={() => navigate(id)} className="relative flex flex-col items-center gap-0.5 px-4 py-1">
+                <span className="relative">
+                  <Icon size={22} strokeWidth={isActive ? 2.2 : 1.7} color={isActive ? GREEN : "#9CA3AF"} />
+                  {id === "chats" && unreadChatsCount > 0 && (
+                    <span className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white" style={{ backgroundColor: GREEN }}>
+                      {unreadChatsCount > 99 ? "99+" : unreadChatsCount}
+                    </span>
+                  )}
+                </span>
                 <span className="text-[11px] font-medium" style={{ color: isActive ? GREEN : "#9CA3AF" }}>{label}</span>
               </button>
             );

@@ -27,7 +27,7 @@ const mapMessageRow = (message: MessageRow, currentUserId: string): ChatMessage 
 
 function PeerAvatar({ peer, size = 44 }: { peer: ChatPeer; size?: number }) {
   if (peer.avatarUrl) {
-    return <img src={peer.avatarUrl} alt={peer.name} className="flex-shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />;
+    return <img loading="lazy" decoding="async" src={peer.avatarUrl} alt={peer.name} className="flex-shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />;
   }
 
   const initials = peer.name.split(" ").map((part) => part[0]).slice(0, 2).join("");

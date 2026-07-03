@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import confetti from "canvas-confetti";
-import { ArrowLeft, Check, ChevronDown, Clock, Copy, Eye, Image as ImageIcon, Lock, MapPin, Plus, Repeat2, Search, Sparkles, Users, Video, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Clock, Eye, Image as ImageIcon, Lock, MapPin, Plus, Repeat2, Search, Sparkles, Users, X } from "lucide-react";
 import type { HomeFeedPlan, PartOfDay, PlanRepeat, Schedule, Screen, TimeMode, Visibility } from "@/app/types";
 import { ALL_DAYS, EVENT_PARTICIPANTS, GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES, WEEKDAY_VALUES } from "@/app/data/constants";
 import { DEFAULT_PLAN_AUTHOR, DEFAULT_PLAN_PARTICIPANTS, homeFeedPlans, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
@@ -99,9 +99,6 @@ export function CreateScreen({
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const [participantQuery, setParticipantQuery] = useState("");
-  const [videoEnabled, setVideoEnabled] = useState(false);
-  const [videoLink, setVideoLink] = useState("");
-  const [videoCopied, setVideoCopied] = useState(false);
   const [locationMode, setLocationMode] = useState<"online" | "offline">("online");
   const [locationAddress, setLocationAddress] = useState("");
 
@@ -200,7 +197,7 @@ export function CreateScreen({
       visibility,
       participants: selectedParticipants,
       location: locationMode === "online" ? "online" : locationAddress.trim() ? { address: locationAddress.trim() } : null,
-      videoMeeting: { enabled: videoEnabled, link: videoEnabled ? videoLink : "" },
+      videoMeeting: { enabled: false, link: "" },
     };
 
     onCreatePlan([newPlan], result);
@@ -334,7 +331,7 @@ export function CreateScreen({
         label="Участники"
         subtitle={selectedParticipantItems.length ? `${selectedParticipantItems.length} выбрано` : "Выбрать участников"}
         onClick={() => setParticipantsOpen(true)}
-        control={selectedParticipantItems.length > 0 ? <div className="flex -space-x-2">{selectedParticipantItems.slice(0, 4).map((person) => person.avatarUrl ? <img key={person.id} src={person.avatarUrl} alt={person.name} className="h-7 w-7 rounded-full border-2 border-card object-cover" /> : <span key={person.id} className="h-7 w-7 rounded-full border-2 border-card bg-secondary" />)}</div> : <Plus size={18} color={GREEN} />}
+        control={selectedParticipantItems.length > 0 ? <div className="flex -space-x-2">{selectedParticipantItems.slice(0, 4).map((person) => person.avatarUrl ? <img loading="lazy" decoding="async" key={person.id} src={person.avatarUrl} alt={person.name} className="h-7 w-7 rounded-full border-2 border-card object-cover" /> : <span key={person.id} className="h-7 w-7 rounded-full border-2 border-card bg-secondary" />)}</div> : <Plus size={18} color={GREEN} />}
       />
       <OptionRow
         icon={<MapPin size={17} color={GREEN} />}
@@ -344,8 +341,6 @@ export function CreateScreen({
         control={<span className="text-[13px] font-semibold" style={{ color: GREEN }}>{locationMode === "online" ? "Офлайн" : "Онлайн"}</span>}
       />
       {locationMode === "offline" && <input value={locationAddress} onChange={(event) => setLocationAddress(event.target.value)} placeholder="Адрес места проведения" className="h-12 w-full rounded-xl bg-card px-4 text-[14px] outline-none placeholder:text-muted-foreground" />}
-      <OptionRow icon={<Video size={17} color={GREEN} />} label="Видеовстреча" subtitle={videoEnabled ? "Ссылка прикреплена" : undefined} onClick={() => setVideoEnabled((enabled) => { const next = !enabled; if (next && !videoLink) setVideoLink("https://meet.wellwellwell.local/plan"); return next; })} control={<div className="h-6 w-11 rounded-full p-0.5" style={{ backgroundColor: videoEnabled ? "var(--component-switch-on)" : "var(--component-switch-off)" }}><div className="h-5 w-5 rounded-full bg-card transition-transform" style={{ transform: videoEnabled ? "translateX(20px)" : "translateX(0)" }} /></div>} />
-      {videoEnabled && <div className="rounded-xl bg-card px-4 py-3"><div className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-[14px]">{videoLink}</span><button onClick={async () => { await navigator.clipboard?.writeText(videoLink); setVideoCopied(true); window.setTimeout(() => setVideoCopied(false), 1200); }} className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold" style={{ color: GREEN }}><Copy size={13} />{videoCopied ? "Скопировано" : "Копировать"}</button></div></div>}
     </div>
   );
 
@@ -358,7 +353,7 @@ export function CreateScreen({
       case "description":
         return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Описание</h2><textarea value={draft.description} onChange={(e) => updatePlan({ description: e.target.value })} placeholder="Что будет в плане и зачем он нужен" rows={5} className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none" /></div>;
       case "image":
-        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Обложка</h2><label className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center active:opacity-90">{draft.coverImage ? <img src={draft.coverImage} alt="" className="mb-4 h-28 w-28 rounded-xl object-cover" /> : <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary"><ImageIcon size={28} color={GREEN} /></div>}<p className="text-[16px] font-semibold">Добавь обложку</p><span className="mt-4 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Загрузить</span><input type="file" accept="image/*" className="hidden" onChange={async (event) => { const file = event.target.files?.[0]; if (file) { const publicUrl = await uploadPhoto(file); if (publicUrl) updatePlan({ coverImage: publicUrl }); } event.target.value = ""; }} /></label></div>;
+        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Обложка</h2><label className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center active:opacity-90">{draft.coverImage ? <img loading="lazy" decoding="async" src={draft.coverImage} alt="" className="mb-4 h-28 w-28 rounded-xl object-cover" /> : <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary"><ImageIcon size={28} color={GREEN} /></div>}<p className="text-[16px] font-semibold">Добавь обложку</p><span className="mt-4 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Загрузить</span><input type="file" accept="image/*" className="hidden" onChange={async (event) => { const file = event.target.files?.[0]; if (file) { const publicUrl = await uploadPhoto(file); if (publicUrl) updatePlan({ coverImage: publicUrl }); } event.target.value = ""; }} /></label></div>;
       case "schedule":
         return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Дата и время</h2>{renderSchedule()}</div>;
       case "finalOptions":
@@ -409,7 +404,7 @@ export function CreateScreen({
                   className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left"
                   style={active ? { backgroundColor: GREEN_LIGHT } : { backgroundColor: "var(--card)" }}
                 >
-                  {person.avatarUrl ? <img src={person.avatarUrl} alt={person.name} className="h-9 w-9 rounded-full object-cover" /> : <span className="h-9 w-9 rounded-full bg-secondary" />}
+                  {person.avatarUrl ? <img loading="lazy" decoding="async" src={person.avatarUrl} alt={person.name} className="h-9 w-9 rounded-full object-cover" /> : <span className="h-9 w-9 rounded-full bg-secondary" />}
                   <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{person.name}</span>
                   {active && <Check size={16} color={GREEN} />}
                 </button>

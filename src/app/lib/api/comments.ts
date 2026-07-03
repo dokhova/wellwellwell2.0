@@ -53,3 +53,10 @@ export const addComment = async (input: AddCommentInput): Promise<CommentRow | n
   if (error) throw error;
   return data;
 };
+
+export const deleteComment = async (id: string) => {
+  if (!supabase) return;
+
+  const { error } = await supabase.from("comments").delete().eq("id", id);
+  if (error) throw error;
+};

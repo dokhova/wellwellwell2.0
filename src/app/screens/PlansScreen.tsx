@@ -41,7 +41,7 @@ export function PlanListCard({
       </div>
       <div className="h-[38px] w-px flex-shrink-0 bg-border" />
       <div className="h-[50px] w-[50px] flex-shrink-0 overflow-hidden rounded-xl" style={{ background: gradient }}>
-        {plan.coverUrl && <img src={plan.coverUrl} alt={plan.title} className="h-full w-full object-cover" />}
+        {plan.coverUrl && <img loading="lazy" decoding="async" src={plan.coverUrl} alt={plan.title} className="h-full w-full object-cover" />}
       </div>
       <div className="min-w-0 flex-1">
         <h3
@@ -195,7 +195,7 @@ export function PlansScreen({
                 style={{ backgroundColor: "var(--brand-dark)" }}
               >
                 <div className="h-[46px] w-[46px] flex-shrink-0 overflow-hidden rounded-lg" style={{ background: getGradient(nextItem.plan) }}>
-                  {nextItem.plan.coverUrl && <img src={nextItem.plan.coverUrl} alt={nextItem.plan.title} className="h-full w-full object-cover" />}
+                  {nextItem.plan.coverUrl && <img loading="lazy" decoding="async" src={nextItem.plan.coverUrl} alt={nextItem.plan.title} className="h-full w-full object-cover" />}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[12px] leading-4 text-white/60">

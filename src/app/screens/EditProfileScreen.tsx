@@ -66,7 +66,7 @@ export function EditProfileScreen({
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         <label className="relative mb-5 block aspect-[1.9/1] overflow-hidden rounded-xl bg-gray-200">
           {coverPhotoUrl ? (
-            <img src={coverPhotoUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            <img loading="lazy" decoding="async" src={coverPhotoUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-secondary">
               <span className="text-[42px] font-bold" style={{ color: GREEN }}>{initials}</span>
@@ -84,7 +84,7 @@ export function EditProfileScreen({
           <div className="mb-5 grid grid-cols-3 gap-2">
             {photoUrls.map((photoUrl, index) => (
               <div key={`${photoUrl}-${index}`} className="relative aspect-square overflow-hidden rounded-xl bg-gray-200">
-                <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+                <img loading="lazy" decoding="async" src={photoUrl} alt="" className="h-full w-full object-cover" />
                 <button
                   onClick={() => setPhotoUrls((current) => current.filter((_, photoIndex) => photoIndex !== index))}
                   className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white active:opacity-85"

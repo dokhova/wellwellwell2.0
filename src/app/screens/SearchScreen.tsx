@@ -1,50 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, MessageCircle, MoreVertical, Search, X } from "lucide-react";
-import type { Article, ChatPeer } from "@/app/types";
-import { articles } from "@/app/data/articles";
+import { ArrowLeft, MessageCircle, Search, X } from "lucide-react";
+import type { ChatPeer, HomeFeedPlan } from "@/app/types";
 import { experts, type ExpertProfile } from "@/app/data/profile";
 import { GREEN } from "@/app/data/constants";
 import { searchProfiles } from "@/app/lib/api/profiles";
 import { sanitizeImageUrl } from "@/app/lib/api/storage";
 
-function AuthorAvatar({ article, size = 28 }: { article: Article; size?: number }) {
-  if (article.avatarBrand) {
-    return (
-      <div
-        className="rounded-full flex-shrink-0 flex items-center justify-center font-bold text-white"
-        style={{ width: size, height: size, backgroundColor: GREEN, fontSize: size * 0.45 }}
-      >
-        w
-      </div>
-    );
-  }
-  if (article.avatarUrl) {
-    return (
-      <img
-        src={article.avatarUrl}
-        alt={article.author}
-        className="rounded-full flex-shrink-0 object-cover"
-        style={{ width: size, height: size }}
-      />
-    );
-  }
-  return (
-    <div
-      className="rounded-full flex-shrink-0"
-      style={{ width: size, height: size, backgroundColor: GREEN }}
-    />
-  );
-}
-
-function ArticleCard({
-  article,
+function PlanSearchCard({
+  plan,
   onPress,
 }: {
-  article: Article;
+  plan: HomeFeedPlan;
   onPress?: () => void;
 }) {
-  const coverSrc = article.coverUrl;
-
   return (
     <div
       onClick={onPress}
@@ -55,46 +23,32 @@ function ArticleCard({
         {/* Text */}
         <div className="flex-1 min-w-0">
           <h3 className="text-[15px] font-semibold text-gray-900 leading-snug mb-1.5 line-clamp-2">
-            {article.title}
+            {plan.title}
           </h3>
           <p className="text-[13px] text-gray-500 leading-snug line-clamp-2 mb-4">
-            {article.excerpt}
+            {plan.description}
           </p>
 
-          {/* Author row */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <AuthorAvatar article={article} size={28} />
+              {plan.author.avatarUrl ? (
+                <img loading="lazy" decoding="async" src={plan.author.avatarUrl} alt={plan.author.name} className="h-7 w-7 rounded-full object-cover" />
+              ) : (
+                <span className="h-7 w-7 rounded-full bg-gray-200" />
+              )}
               <div>
-                <div className="flex items-center gap-1">
-                  <span className="text-[12px] font-semibold text-gray-800">
-                    {article.author}
-                  </span>
-                  {article.authorVerified && (
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                      <circle cx="7" cy="7" r="7" fill="#1D9BF0" />
-                      <path d="M4 7l2 2 4-4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  )}
-                </div>
-                <p className="text-[11px] text-gray-400">{article.readTime}</p>
+                <span className="text-[12px] font-semibold text-gray-800">{plan.author.name}</span>
+                <p className="text-[11px] text-gray-400">{plan.timeDate}</p>
               </div>
             </div>
-            <button
-              onClick={(e) => e.stopPropagation()}
-              className="w-7 h-7 flex items-center justify-center text-gray-400 rounded-full hover:bg-gray-200"
-            >
-              <MoreVertical size={16} strokeWidth={1.8} />
-            </button>
           </div>
         </div>
 
-        {/* Cover image */}
         <div className="flex-shrink-0">
-          {coverSrc ? (
-            <img
-              src={coverSrc as string}
-              alt={article.title}
+          {plan.coverUrl ? (
+            <img loading="lazy" decoding="async"
+              src={plan.coverUrl}
+              alt={plan.title}
               className="rounded-xl object-cover"
               style={{ width: 100, height: 110 }}
             />
@@ -113,7 +67,7 @@ function ArticleCard({
 function PersonAvatar({ person, size = 40 }: { person: ExpertProfile; size?: number }) {
   const avatarUrl = sanitizeImageUrl(person.photoUrl);
   if (avatarUrl) {
-    return <img src={avatarUrl} alt={person.name} className="flex-shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />;
+    return <img loading="lazy" decoding="async" src={avatarUrl} alt={person.name} className="flex-shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />;
   }
 
   const initials = person.name.split(" ").map((part) => part[0]).slice(0, 2).join("");
@@ -157,13 +111,15 @@ function PersonCard({
 
 export function SearchScreen({
   onBack,
-  onArticle,
+  plans,
+  onPlanOpen,
   currentUserId,
   onProfile,
   onMessagePeer,
 }: {
   onBack: () => void;
-  onArticle: (a: Article) => void;
+  plans: HomeFeedPlan[];
+  onPlanOpen: (id: number) => void;
   currentUserId: string;
   onProfile: (profile: ExpertProfile) => void;
   onMessagePeer: (peer: ChatPeer) => void;
@@ -172,11 +128,11 @@ export function SearchScreen({
   const [remotePeople, setRemotePeople] = useState<ExpertProfile[]>([]);
   const normalizedQuery = query.trim().toLowerCase();
   const results = normalizedQuery
-    ? articles.filter(a =>
-        a.title.toLowerCase().includes(normalizedQuery) ||
-        a.author.toLowerCase().includes(normalizedQuery)
+    ? plans.filter((plan) =>
+        plan.title.toLowerCase().includes(normalizedQuery) ||
+        plan.description.toLowerCase().includes(normalizedQuery)
       )
-    : articles;
+    : plans;
   const localPeople = useMemo(() => {
     if (!normalizedQuery) return [];
     return experts.filter((person) =>
@@ -228,7 +184,7 @@ export function SearchScreen({
               autoFocus
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Поиск материалов..."
+            placeholder="Поиск планов..."
               className="flex-1 text-[15px] bg-transparent outline-none text-gray-800 placeholder-gray-400"
             />
             {query && (
@@ -248,11 +204,11 @@ export function SearchScreen({
             onMessage={() => onMessagePeer({ id: person.id, name: person.name, avatarUrl: sanitizeImageUrl(person.photoUrl) })}
           />
         ))}
-        {results.map(article => (
-          <ArticleCard
-            key={article.id}
-            article={article}
-            onPress={() => onArticle(article)}
+        {results.map((plan) => (
+          <PlanSearchCard
+            key={plan.id}
+            plan={plan}
+            onPress={() => onPlanOpen(plan.id)}
           />
         ))}
         {!hasResults && (

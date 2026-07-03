@@ -4,9 +4,9 @@ import type { EventDetailProps } from "@/app/types";
 import { DETAIL_AVATARS, normalizePlanTag, PLAN_TAG_GRADIENTS, PLAN_TAG_LABELS } from "@/app/data/plans";
 import { ALL_DAYS, GREEN, PART_OF_DAY_RANGES, UNSPLASH, WEEKDAY_VALUES } from "@/app/data/constants";
 import { HomeSheet } from "@/app/components/HomeSheet";
-import { addComment, fetchComments, type CommentRow } from "@/app/lib/api/comments";
+import { addComment, deleteComment, fetchComments, type CommentRow } from "@/app/lib/api/comments";
 
-type LocalComment = { id: string; author: string; avatarUrl: string; time: string; text: string };
+type LocalComment = { id: string; authorId: string | null; author: string; avatarUrl: string; time: string; text: string; persisted: boolean };
 
 const formatCommentTime = (value: string) => {
   const date = new Date(value);
@@ -16,10 +16,12 @@ const formatCommentTime = (value: string) => {
 
 const mapCommentRow = (row: CommentRow): LocalComment => ({
   id: row.id,
+  authorId: row.author_id,
   author: row.author_name,
   avatarUrl: row.author_avatar_url ?? UNSPLASH.userAvatar,
   time: formatCommentTime(row.created_at),
   text: row.text,
+  persisted: true,
 });
 
 function CommentsBlock({
@@ -27,11 +29,17 @@ function CommentsBlock({
   setComment,
   comments,
   onSend,
+  currentAuthor,
+  planAuthorId,
+  onDelete,
 }: {
   comment: string;
   setComment: (v: string) => void;
   comments: LocalComment[];
   onSend: () => void;
+  currentAuthor?: { id: string; name: string; avatarUrl: string | null };
+  planAuthorId?: string;
+  onDelete: (comment: LocalComment) => void;
 }) {
   const canSend = comment.trim().length > 0;
 
@@ -43,7 +51,7 @@ function CommentsBlock({
         Комментарии <span className="text-[15px] font-normal text-muted-foreground">{comments.length}</span>
       </h3>
       <div className="mb-[18px] flex items-center gap-2.5">
-        <img src={UNSPLASH.userAvatar} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+        <AuthorAvatar name={currentAuthor?.name ?? "Вы"} avatarUrl={currentAuthor?.avatarUrl ?? null} size={32} />
         <div className="flex-1 bg-input rounded-full px-3.5 py-[9px] flex items-center gap-2">
           <input
             value={comment}
@@ -66,9 +74,11 @@ function CommentsBlock({
       </div>
       {comments.length > 0 ? (
         <div className="space-y-4">
-          {comments.map((item) => (
+          {comments.map((item) => {
+            const canDelete = currentAuthor && (item.authorId === currentAuthor.id || planAuthorId === currentAuthor.id);
+            return (
             <div key={item.id} className="flex gap-2.5">
-              <img src={item.avatarUrl} alt="" className="h-8 w-8 flex-shrink-0 rounded-full object-cover" />
+              <img loading="lazy" decoding="async" src={item.avatarUrl} alt="" className="h-8 w-8 flex-shrink-0 rounded-full object-cover" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
                   <p className="truncate text-[14px] font-medium text-foreground">{item.author}</p>
@@ -76,8 +86,14 @@ function CommentsBlock({
                 </div>
                 <p className="mt-0.5 text-[14px] leading-5 text-foreground">{item.text}</p>
               </div>
+              {canDelete && (
+                <button onClick={() => onDelete(item)} className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground active:opacity-80" aria-label="Удалить комментарий">
+                  <Trash2 size={15} strokeWidth={2} />
+                </button>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="flex justify-center py-8">
@@ -90,7 +106,7 @@ function CommentsBlock({
 
 function AuthorAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl: string | null; size?: number }) {
   if (avatarUrl) {
-    return <img src={avatarUrl} alt={name} className="flex-shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />;
+    return <img loading="lazy" decoding="async" src={avatarUrl} alt={name} className="flex-shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />;
   }
 
   const initials = name
@@ -222,10 +238,12 @@ export function EventDetailScreen({
     const author = currentAuthor ?? { id: "local", name: "Вы", avatarUrl: UNSPLASH.userAvatar };
     const localComment: LocalComment = {
       id: `local-${Date.now()}`,
+      authorId: author.id,
       author: author.name,
       avatarUrl: author.avatarUrl ?? UNSPLASH.userAvatar,
       time: "сейчас",
       text,
+      persisted: false,
     };
     setComments((items) => [
       ...items,
@@ -245,6 +263,14 @@ export function EventDetailScreen({
       setComments((items) => items.map((item) => item.id === localComment.id ? mapCommentRow(savedComment) : item));
     }).catch((error) => {
       console.error("Supabase comment insert failed", error);
+    });
+  };
+
+  const removeComment = (item: LocalComment) => {
+    setComments((items) => items.filter((commentItem) => commentItem.id !== item.id));
+    if (!item.persisted) return;
+    void deleteComment(item.id).catch((error) => {
+      console.error("Supabase comment delete failed", error);
     });
   };
 
@@ -275,7 +301,7 @@ export function EventDetailScreen({
         <div className="px-4 pb-4">
           <div className="relative aspect-[4/5] overflow-hidden rounded-xl" style={{ background: backgroundGradient ?? PLAN_TAG_GRADIENTS.other }}>
             {coverSrc && (
-              <img src={coverSrc} alt={title} className="absolute inset-0 h-full w-full object-cover" />
+              <img loading="lazy" decoding="async" src={coverSrc} alt={title} className="absolute inset-0 h-full w-full object-cover" />
             )}
             <div
               className="absolute inset-0"
@@ -311,7 +337,7 @@ export function EventDetailScreen({
             <div className="absolute inset-x-4 bottom-[18px] flex flex-col items-center text-center">
               <div className="flex -space-x-2">
                 {participantAvatars.slice(0, 4).map((url, i) => (
-                  <img key={i} src={url} alt="" className="h-[30px] w-[30px] rounded-full border-2 border-white object-cover" />
+                  <img loading="lazy" decoding="async" key={i} src={url} alt="" className="h-[30px] w-[30px] rounded-full border-2 border-white object-cover" />
                 ))}
               </div>
               <p className="mt-1.5 text-[12px] leading-4 text-white/85">{participantCountLabel}</p>
@@ -424,7 +450,7 @@ export function EventDetailScreen({
                 <div className="flex items-center">
                   <div className="flex -space-x-2">
                     {participantAvatars.slice(0, 3).map((url, i) => (
-                      <img key={i} src={url} alt="" className="h-7 w-7 rounded-full border object-cover" style={{ borderColor: "var(--surface)" }} />
+                      <img loading="lazy" decoding="async" key={i} src={url} alt="" className="h-7 w-7 rounded-full border object-cover" style={{ borderColor: "var(--surface)" }} />
                     ))}
                   </div>
                   {overflowLabel && (
@@ -438,7 +464,7 @@ export function EventDetailScreen({
           </div>
         </div>
 
-        <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} />
+        <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} currentAuthor={currentAuthor} planAuthorId={authorId} onDelete={removeComment} />
       </div>
 
       {sheet === "participants" && (
@@ -448,7 +474,7 @@ export function EventDetailScreen({
               const participant = participantItems?.[i] ?? { id: `participant-${i}`, name: `Участник ${i + 1}`, avatarUrl: url };
               return (
                 <div key={`${participant.id}-${i}`} className="flex w-full items-center gap-3 rounded-2xl bg-gray-100 px-4 py-3 text-left">
-                  <img src={participant.avatarUrl ?? url} alt="" className="h-9 w-9 rounded-full object-cover" />
+                  <img loading="lazy" decoding="async" src={participant.avatarUrl ?? url} alt="" className="h-9 w-9 rounded-full object-cover" />
                   <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-gray-900">{participant.name}</span>
                   {onMessageParticipant && (
                     <button

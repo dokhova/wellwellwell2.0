@@ -27,7 +27,7 @@ import expertAvatarYuliaBelova from "@/imports/avatar_05.jpg";
 import { PLAN_TAGS } from "@/app/types";
 import type { EventMeta, HomeFeedPlan, PlanTag, TagFilter } from "@/app/types";
 export { PLAN_TAGS };
-import { P_AVATARS, UNSPLASH } from "@/app/data/constants";
+import { UNSPLASH } from "@/app/data/constants";
 
 export const PLAN_TAG_LABELS: Record<PlanTag, string> = {
   running: "Бег",
@@ -38,18 +38,17 @@ export const PLAN_TAG_LABELS: Record<PlanTag, string> = {
 };
 
 export const DEFAULT_PLAN_AUTHOR = {
-  id: "gena",
-  name: "Гена Лохтин",
-  avatarUrl: UNSPLASH.avatarGena,
+  id: "maria-kuznetsova",
+  name: "Мария Кузнецова",
+  avatarUrl: expertAvatarMariaKuznetsova as unknown as string,
 };
 
 export const DEFAULT_PLAN_PARTICIPANTS = [
-  UNSPLASH.avatarMaria,
-  P_AVATARS.m1,
-  P_AVATARS.w1,
-  P_AVATARS.m2,
-  P_AVATARS.w2,
-  P_AVATARS.m3,
+  expertAvatarMariaKuznetsova as unknown as string,
+  expertAvatarDmitryOrlov as unknown as string,
+  expertAvatarSvetlanaVoronova as unknown as string,
+  expertAvatarAlexeyPetrov as unknown as string,
+  expertAvatarYuliaBelova as unknown as string,
 ];
 
 export const PLAN_TAG_GRADIENTS: Record<PlanTag, string> = {
@@ -60,7 +59,30 @@ export const PLAN_TAG_GRADIENTS: Record<PlanTag, string> = {
   other: "linear-gradient(135deg, var(--accent) 0%, var(--muted-foreground) 100%)",
 };
 
-export const homeFeedPlans: HomeFeedPlan[] = [
+const exactDemoOffsets = [1, 2, 3, 4, 5, 6];
+const weekdayNames = ["Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"];
+
+const withRelativeDemoDate = (plan: HomeFeedPlan, index: number): HomeFeedPlan => {
+  if (plan.schedule.mode !== "exact" && plan.schedule.timeMode !== "exact") return plan;
+
+  const baseDate = new Date();
+  baseDate.setHours(0, 0, 0, 0);
+  baseDate.setDate(baseDate.getDate() + (exactDemoOffsets[index] ?? index + 1));
+  const originalStart = plan.schedule.start ? new Date(plan.schedule.start) : null;
+  const hours = originalStart && !Number.isNaN(originalStart.getTime()) ? originalStart.getHours() : 9;
+  const minutes = originalStart && !Number.isNaN(originalStart.getTime()) ? originalStart.getMinutes() : 0;
+  baseDate.setHours(hours, minutes, 0, 0);
+
+  const nextStart = baseDate.toISOString();
+  const timeLabel = baseDate.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return {
+    ...plan,
+    schedule: { ...plan.schedule, start: nextStart },
+    timeDate: plan.duration === "Каждый день" ? `Каждый день · ${timeLabel}` : `${weekdayNames[baseDate.getDay()]} · ${timeLabel}`,
+  };
+};
+
+export const homeFeedPlans: HomeFeedPlan[] = ([
   {
     id: 1,
     tag: "running",
@@ -73,7 +95,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "exact", timeMode: "exact", time: "09:00", partOfDay: null, weekdays: [6], start: "2026-07-04T09:00:00", repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Суббота · 09:00",
     address: "Лужники",
     lat: 55.7158,
@@ -93,7 +115,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "exact", timeMode: "exact", time: "18:55", partOfDay: null, weekdays: [1, 2, 3, 4, 5, 6, 7], start: "2026-07-01T18:55:00", repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Каждый день · 18:55",
     author: { id: "dmitry-orlov", name: "Дмитрий Орлов", avatarUrl: expertAvatarDmitryOrlov as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/2",
@@ -110,7 +132,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.recovery,
     schedule: { mode: "exact", timeMode: "exact", time: "20:00", partOfDay: null, weekdays: [1, 2, 3, 4, 5, 6, 7], start: "2026-07-01T20:00:00", repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Каждый день · 20:00",
     author: { id: "maria-kuznetsova", name: "Мария Кузнецова", avatarUrl: expertAvatarMariaKuznetsova as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/3",
@@ -127,7 +149,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "exact", timeMode: "exact", time: "19:30", partOfDay: null, weekdays: [2], start: "2026-07-07T19:30:00", repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Вторник · 19:30",
     author: { id: "dmitry-orlov", name: "Дмитрий Орлов", avatarUrl: expertAvatarDmitryOrlov as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/4",
@@ -145,7 +167,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "exact", timeMode: "exact", time: "19:00", partOfDay: null, weekdays: [3], start: "2026-07-01T19:00:00", repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Среда · 19:00",
     author: { id: "maria-kuznetsova", name: "Мария Кузнецова", avatarUrl: expertAvatarMariaKuznetsova as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/5",
@@ -162,7 +184,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "exact", timeMode: "exact", time: "19:00", partOfDay: null, weekdays: [4], start: "2026-07-02T19:00:00", repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Четверг · 19:00",
     author: { id: "svetlana-voronova", name: "Светлана Воронова", avatarUrl: expertAvatarSvetlanaVoronova as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/6",
@@ -179,7 +201,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Утро · 10 недель",
     author: { id: "maria-kuznetsova", name: "Мария Кузнецова", avatarUrl: expertAvatarMariaKuznetsova as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/101",
@@ -196,7 +218,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Утро · 12 недель",
     author: { id: "maria-kuznetsova", name: "Мария Кузнецова", avatarUrl: expertAvatarMariaKuznetsova as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/102",
@@ -214,7 +236,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Утро · 12 недель",
     author: { id: "maria-kuznetsova", name: "Мария Кузнецова", avatarUrl: expertAvatarMariaKuznetsova as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/103",
@@ -231,7 +253,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Утро · 12 недель",
     author: { id: "dmitry-orlov", name: "Дмитрий Орлов", avatarUrl: expertAvatarDmitryOrlov as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/104",
@@ -248,7 +270,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Утро · 12 недель",
     author: { id: "dmitry-orlov", name: "Дмитрий Орлов", avatarUrl: expertAvatarDmitryOrlov as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/105",
@@ -266,7 +288,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Утро · 12 недель",
     author: { id: "dmitry-orlov", name: "Дмитрий Орлов", avatarUrl: expertAvatarDmitryOrlov as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/106",
@@ -283,7 +305,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "svetlana-voronova", name: "Светлана Воронова", avatarUrl: expertAvatarSvetlanaVoronova as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/107",
@@ -301,7 +323,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "svetlana-voronova", name: "Светлана Воронова", avatarUrl: expertAvatarSvetlanaVoronova as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/108",
@@ -318,7 +340,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "svetlana-voronova", name: "Светлана Воронова", avatarUrl: expertAvatarSvetlanaVoronova as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/109",
@@ -335,7 +357,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "alexey-petrov", name: "Алексей Петров", avatarUrl: expertAvatarAlexeyPetrov as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/110",
@@ -352,7 +374,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "alexey-petrov", name: "Алексей Петров", avatarUrl: expertAvatarAlexeyPetrov as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/111",
@@ -370,7 +392,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "alexey-petrov", name: "Алексей Петров", avatarUrl: expertAvatarAlexeyPetrov as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/112",
@@ -387,7 +409,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "yulia-belova", name: "Юлия Белова", avatarUrl: expertAvatarYuliaBelova as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/113",
@@ -404,7 +426,7 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "yulia-belova", name: "Юлия Белова", avatarUrl: expertAvatarYuliaBelova as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/114",
@@ -422,12 +444,12 @@ export const homeFeedPlans: HomeFeedPlan[] = [
     gradient: PLAN_TAG_GRADIENTS.running,
     schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [1, 3, 5], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
-    participantsLabel: "100+ чел.",
+    participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "yulia-belova", name: "Юлия Белова", avatarUrl: expertAvatarYuliaBelova as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/115",
   },
-];
+] satisfies HomeFeedPlan[]).map(withRelativeDemoDate);
 
 export const CATEGORY_CHIPS: { label: string; value: TagFilter }[] = [
   { label: "Все", value: "all" },
@@ -444,7 +466,7 @@ export const PLAN_CATEGORY_GRADIENTS: Record<string, string> = {
   "Питание": "linear-gradient(135deg, var(--secondary) 0%, var(--accent) 100%)",
   "Другое": "linear-gradient(135deg, var(--muted-foreground) 0%, var(--border) 100%)",
 };
-export const DETAIL_AVATARS = [P_AVATARS.w1, P_AVATARS.m1, P_AVATARS.w2, P_AVATARS.m2];
+export const DETAIL_AVATARS = DEFAULT_PLAN_PARTICIPANTS;
 
 export const eventMeta: Record<number, EventMeta> = {
   0: {
