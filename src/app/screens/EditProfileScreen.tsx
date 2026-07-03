@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowLeft, Image as ImageIcon, X } from "lucide-react";
 import type { ExpertProfile } from "@/app/data/profile";
 import { GREEN } from "@/app/data/constants";
+import { uploadPhoto } from "@/app/lib/api/storage";
 
 export function EditProfileScreen({
   profile,
@@ -27,7 +28,9 @@ export function EditProfileScreen({
   const handlePhotoPick = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     if (files.length > 0) {
-      const nextPhotoUrls = files.map((file) => URL.createObjectURL(file));
+      const nextPhotoUrls = await Promise.all(
+        files.map(async (file) => await uploadPhoto(file) ?? URL.createObjectURL(file))
+      );
       setPhotoUrls((current) => [...current, ...nextPhotoUrls]);
     }
     event.target.value = "";

@@ -5,6 +5,7 @@ import type { HomeFeedPlan, PartOfDay, PlanRepeat, Schedule, Screen, TimeMode, V
 import { ALL_DAYS, EVENT_PARTICIPANTS, GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES, WEEKDAY_VALUES } from "@/app/data/constants";
 import { DEFAULT_PLAN_AUTHOR, DEFAULT_PLAN_PARTICIPANTS, homeFeedPlans, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
 import { HomeSheet } from "@/app/components/HomeSheet";
+import { uploadPhoto } from "@/app/lib/api/storage";
 
 type CreateStep = "welcome" | "name" | "description" | "image" | "schedule" | "finalOptions" | "success";
 type PlanDraft = { title: string; description: string; coverImage: string | null; schedule: Schedule };
@@ -357,7 +358,7 @@ export function CreateScreen({
       case "description":
         return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Описание</h2><textarea value={draft.description} onChange={(e) => updatePlan({ description: e.target.value })} placeholder="Что будет в плане и зачем он нужен" rows={5} className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none" /></div>;
       case "image":
-        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Обложка</h2><label className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center active:opacity-90">{draft.coverImage ? <img src={draft.coverImage} alt="" className="mb-4 h-28 w-28 rounded-xl object-cover" /> : <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary"><ImageIcon size={28} color={GREEN} /></div>}<p className="text-[16px] font-semibold">Добавь обложку</p><span className="mt-4 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Загрузить</span><input type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) updatePlan({ coverImage: URL.createObjectURL(file) }); event.target.value = ""; }} /></label></div>;
+        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Обложка</h2><label className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center active:opacity-90">{draft.coverImage ? <img src={draft.coverImage} alt="" className="mb-4 h-28 w-28 rounded-xl object-cover" /> : <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary"><ImageIcon size={28} color={GREEN} /></div>}<p className="text-[16px] font-semibold">Добавь обложку</p><span className="mt-4 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Загрузить</span><input type="file" accept="image/*" className="hidden" onChange={async (event) => { const file = event.target.files?.[0]; if (file) updatePlan({ coverImage: await uploadPhoto(file) ?? URL.createObjectURL(file) }); event.target.value = ""; }} /></label></div>;
       case "schedule":
         return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Дата и время</h2>{renderSchedule()}</div>;
       case "finalOptions":

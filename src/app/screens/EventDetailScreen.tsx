@@ -1,9 +1,26 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Calendar, Check, ChevronRight, Copy, MapPin, Plus, Share2, Trash2, Users, Video } from "lucide-react";
 import type { EventDetailProps } from "@/app/types";
 import { DETAIL_AVATARS, normalizePlanTag, PLAN_TAG_GRADIENTS, PLAN_TAG_LABELS } from "@/app/data/plans";
 import { ALL_DAYS, GREEN, PART_OF_DAY_RANGES, UNSPLASH, WEEKDAY_VALUES } from "@/app/data/constants";
 import { HomeSheet } from "@/app/components/HomeSheet";
+import { addComment, fetchComments, type CommentRow } from "@/app/lib/api/comments";
+
+type LocalComment = { id: string; author: string; avatarUrl: string; time: string; text: string };
+
+const formatCommentTime = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+};
+
+const mapCommentRow = (row: CommentRow): LocalComment => ({
+  id: row.id,
+  author: row.author_name,
+  avatarUrl: row.author_avatar_url ?? UNSPLASH.userAvatar,
+  time: formatCommentTime(row.created_at),
+  text: row.text,
+});
 
 function CommentsBlock({
   comment,
@@ -13,7 +30,7 @@ function CommentsBlock({
 }: {
   comment: string;
   setComment: (v: string) => void;
-  comments: { id: number; author: string; avatarUrl: string; time: string; text: string }[];
+  comments: LocalComment[];
   onSend: () => void;
 }) {
   const canSend = comment.trim().length > 0;
@@ -96,7 +113,7 @@ export function EventDetailScreen({
   readTime, badgeDate, paragraphs, meta, format = "offline", duration, tag, schedule, shareUrl,
   participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, planId, onJoin, onLeave, onProfile,
   authorId, onMessageAuthor, participantItems, onMessageParticipant,
-  canDelete = false, onDelete,
+  currentAuthor, canDelete = false, onDelete,
 }: EventDetailProps) {
   void authorVerified;
   void readTime;
@@ -107,7 +124,7 @@ export function EventDetailScreen({
   const [subscribed, setSubscribed] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [comment, setComment] = useState("");
-  const [comments, setComments] = useState<{ id: number; author: string; avatarUrl: string; time: string; text: string }[]>([]);
+  const [comments, setComments] = useState<LocalComment[]>([]);
   const [copied, setCopied] = useState(false);
   const description = paragraphs.join("\n\n");
   const participantAvatars = planParticipantAvatars?.length ? planParticipantAvatars : DETAIL_AVATARS;
@@ -180,20 +197,55 @@ export function EventDetailScreen({
     }
   };
 
+  useEffect(() => {
+    if (planId === undefined) return;
+    let cancelled = false;
+
+    const loadComments = async () => {
+      try {
+        const rows = await fetchComments(String(planId));
+        if (!cancelled) setComments((localItems) => [...localItems, ...rows.map(mapCommentRow)]);
+      } catch (error) {
+        console.error("Supabase comments fetch failed", error);
+      }
+    };
+
+    void loadComments();
+    return () => {
+      cancelled = true;
+    };
+  }, [planId]);
+
   const sendComment = () => {
     const text = comment.trim();
     if (!text) return;
+    const author = currentAuthor ?? { id: "local", name: "Вы", avatarUrl: UNSPLASH.userAvatar };
+    const localComment: LocalComment = {
+      id: `local-${Date.now()}`,
+      author: author.name,
+      avatarUrl: author.avatarUrl ?? UNSPLASH.userAvatar,
+      time: "сейчас",
+      text,
+    };
     setComments((items) => [
       ...items,
-      {
-        id: Date.now(),
-        author: "Вы",
-        avatarUrl: UNSPLASH.userAvatar,
-        time: "сейчас",
-        text,
-      },
+      localComment,
     ]);
     setComment("");
+    if (planId === undefined) return;
+    void addComment({
+      planId: String(planId),
+      authorId: author.id,
+      authorName: author.name,
+      authorAvatarUrl: author.avatarUrl,
+      text,
+      photoUrl: null,
+    }).then((savedComment) => {
+      if (!savedComment) return;
+      setComments((items) => items.map((item) => item.id === localComment.id ? mapCommentRow(savedComment) : item));
+    }).catch((error) => {
+      console.error("Supabase comment insert failed", error);
+    });
   };
 
   const copyShareLink = async () => {

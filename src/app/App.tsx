@@ -1,10 +1,11 @@
 import { ArrowLeft, Calendar, CheckCircle2, Home, MessageCircle, Plus, User } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Article, ChatMessage, ChatPeer, ChatThread, HomeFeedPlan, ParticipantPlanRef, Screen } from "@/app/types";
 import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
 import { formatNearestDate, getNextOccurrence } from "@/app/data/calendar";
 import { experts, expertProfile, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
+import { fetchProfile, upsertProfile } from "@/app/lib/api/profiles";
 import { getTelegramUser, initTelegram } from "@/app/lib/telegram";
 import { HomeScreen } from "@/app/screens/HomeScreen";
 import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
@@ -239,6 +240,29 @@ export default function App() {
   useEffect(() => initTelegram(), []);
 
   useEffect(() => {
+    let cancelled = false;
+    const syncProfile = async () => {
+      const telegramProfile = normalizeProfile(buildTelegramProfile(telegramUser));
+      try {
+        const storedProfile = await fetchProfile(telegramProfile.id);
+        if (cancelled) return;
+        if (storedProfile) {
+          setEditableProfile(normalizeProfile(storedProfile));
+          return;
+        }
+        await upsertProfile(telegramProfile);
+      } catch (error) {
+        console.error("Supabase profile sync failed", error);
+      }
+    };
+
+    void syncProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, [telegramUser]);
+
+  useEffect(() => {
     writeJson(profileStorageKey, editableProfile);
   }, [editableProfile, profileStorageKey]);
 
@@ -335,6 +359,19 @@ export default function App() {
     });
   };
 
+  const receiveRemoteChatMessage = useCallback((peer: ChatPeer, message: ChatMessage) => {
+    setChatThreads((threads) => {
+      const existing = threads.find((thread) => thread.peer.id === peer.id);
+      if (existing) {
+        if (existing.messages.some((item) => item.id === message.id)) return threads;
+        return threads.map((thread) => thread.peer.id === peer.id
+          ? { ...thread, peer, messages: [...thread.messages, message], updatedAt: message.createdAt }
+          : thread);
+      }
+      return [{ peer, messages: [message], updatedAt: message.createdAt }, ...threads];
+    });
+  }, []);
+
   const openProfileConnections = (type: ConnectionType, ownerIsCurrentUser = false) => {
     setProfileConnectionsType(type);
     setProfileConnectionsCanEditFollowing(ownerIsCurrentUser);
@@ -425,9 +462,11 @@ export default function App() {
           <ChatScreen
             peer={getCannedPeer(activeChatPeer)}
             messages={thread?.messages ?? []}
+            currentUserId={currentUserId}
             myAvatarUrl={editableProfile.photoUrl}
             onBack={() => setScreen(previousScreen === "chat" ? "chats" : previousScreen)}
             onSendMessage={sendChatMessage}
+            onReceiveRemoteMessage={receiveRemoteChatMessage}
           />
         );
       }
@@ -477,6 +516,9 @@ export default function App() {
             onBack={() => setScreen("profile")}
             onSave={(profile) => {
               setEditableProfile(profile);
+              void upsertProfile(profile).catch((error) => {
+                console.error("Supabase profile save failed", error);
+              });
               setScreen("profile");
             }}
           />
@@ -545,6 +587,7 @@ export default function App() {
               onMessageAuthor={(peer) => openChatWithPeer({ ...peer, id: feedPlan.author.id ?? peer.id })}
               participantItems={participantChatPeers}
               onMessageParticipant={openChatWithPeer}
+              currentAuthor={currentAuthor}
               canDelete={feedPlan.author.id === currentUserId}
               onDelete={() => deletePlan(feedPlan.id)}
             />

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, MessageCircle, Search, Send, X } from "lucide-react";
 import type { ChatMessage, ChatPeer, ChatThread } from "@/app/types";
 import { GREEN, GREEN_LIGHT, UNSPLASH } from "@/app/data/constants";
+import { fetchMessages, makeThreadId, sendMessage, subscribeToThread, type MessageRow } from "@/app/lib/api/chat";
 
 const QUICK_MESSAGES = [
   "Привет! Готов(а) начать?",
@@ -12,6 +13,13 @@ const QUICK_MESSAGES = [
 
 const formatChatTime = (value: number) =>
   new Date(value).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+
+const mapMessageRow = (message: MessageRow, currentUserId: string): ChatMessage => ({
+  id: message.id,
+  sender: message.sender_id === currentUserId ? "me" : "peer",
+  text: message.text,
+  createdAt: new Date(message.created_at).getTime(),
+});
 
 function PeerAvatar({ peer, size = 44 }: { peer: ChatPeer; size?: number }) {
   if (peer.avatarUrl) {
@@ -143,24 +151,58 @@ export function ChatsScreen({
 export function ChatScreen({
   peer,
   messages,
+  currentUserId,
   myAvatarUrl,
   onBack,
   onSendMessage,
+  onReceiveRemoteMessage,
 }: {
   peer: ChatPeer;
   messages: ChatMessage[];
+  currentUserId: string;
   myAvatarUrl: string | null;
   onBack: () => void;
   onSendMessage: (peer: ChatPeer, text: string, sender: ChatMessage["sender"]) => void;
+  onReceiveRemoteMessage: (peer: ChatPeer, message: ChatMessage) => void;
 }) {
   const [text, setText] = useState("");
   const [typing, setTyping] = useState(false);
   const timeoutRef = useRef<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const isRealPeer = !peer.cannedReplies?.length;
+  const threadId = isRealPeer ? makeThreadId(currentUserId, peer.id) : "";
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length, typing]);
+
+  useEffect(() => {
+    if (!isRealPeer || !threadId) return;
+    let cancelled = false;
+
+    const loadMessages = async () => {
+      try {
+        const rows = await fetchMessages(threadId);
+        if (cancelled) return;
+        rows.forEach((row) => {
+          onReceiveRemoteMessage(peer, mapMessageRow(row, currentUserId));
+        });
+      } catch (error) {
+        console.error("Supabase chat fetch failed", error);
+      }
+    };
+
+    void loadMessages();
+    const unsubscribe = subscribeToThread(threadId, (message) => {
+      if (message.sender_id === currentUserId) return;
+      onReceiveRemoteMessage(peer, mapMessageRow(message, currentUserId));
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [currentUserId, isRealPeer, onReceiveRemoteMessage, peer, threadId]);
 
   useEffect(() => () => {
     if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
@@ -171,6 +213,12 @@ export function ChatScreen({
     if (!body) return;
     onSendMessage(peer, body, "me");
     setText("");
+
+    if (isRealPeer && threadId) {
+      void sendMessage({ threadId, senderId: currentUserId, text: body, photoUrl: null }).catch((error) => {
+        console.error("Supabase chat send failed", error);
+      });
+    }
 
     if (peer.cannedReplies?.length) {
       setTyping(true);

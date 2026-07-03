@@ -134,6 +134,11 @@ export interface EventDetailProps {
   onMessageAuthor?: (peer: ChatPeer) => void;
   participantItems?: ChatPeer[];
   onMessageParticipant?: (peer: ChatPeer) => void;
+  currentAuthor?: {
+    id: string;
+    name: string;
+    avatarUrl: string | null;
+  };
   canDelete?: boolean;
   onDelete?: () => void;
 }
