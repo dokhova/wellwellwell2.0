@@ -3,14 +3,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Article, ChatMessage, ChatPeer, ChatThread, HomeFeedPlan, ParticipantPlanRef, PlanId, Screen } from "@/app/types";
 import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
 import { formatNearestDate, getNextOccurrence } from "@/app/data/calendar";
-import { experts, expertProfile, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
+import { experts, expertProfile, profileFollowers, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
 import { demoCommunityPlanIds, demoCommunityPlans, getDemoCommunityParticipantPeers } from "@/app/data/demoCommunity";
 import { fetchProfile, fetchProfilesByIds, upsertProfile } from "@/app/lib/api/profiles";
 import { fetchFollowers, fetchFollowing, follow, unfollow } from "@/app/lib/api/follows";
 import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { fetchUserThreadMessages, makeThreadId, sendMessage, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
-import { countJoined, createPlanRemote, deletePlanParticipant, fetchParticipants, fetchPlansByAuthor, fetchPublicPlans, subscribeToPlanParticipants, upsertPlanParticipant } from "@/app/lib/api/plans";
+import { countJoined, createPlanRemote, deletePlanParticipant, deletePlanRemote, fetchParticipants, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, upsertPlanParticipant } from "@/app/lib/api/plans";
 import { getTelegramUser, initTelegram } from "@/app/lib/telegram";
 import { HomeScreen } from "@/app/screens/HomeScreen";
 import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
@@ -53,6 +53,7 @@ const SUPPORT_PEER: ChatPeer = {
 };
 
 const SUPPORT_MESSAGE = "Привет! Well Well Well помогает собирать привычки и планы тренировок — создавай свои события или присоединяйся к чужим, зови друзей в чат. Если возникнут вопросы — пишите сюда, наша команда ответит";
+const MODERATOR_IDS = ["МОЙ_ID"];
 const DEMO_PROFILE_IDS = new Set(experts.filter((profile) => profile.isDemo).map((profile) => profile.id));
 const isDemoProfileId = (id?: string | null) => Boolean(id && DEMO_PROFILE_IDS.has(id));
 const isDemoProfile = (profile: Pick<ExpertProfile, "isDemo">) => profile.isDemo === true;
@@ -85,6 +86,11 @@ const sanitizeConnection = (connection: ExpertConnection): ExpertConnection => (
   ...connection,
   avatarUrl: sanitizeImageUrl(connection.avatarUrl),
 });
+
+type ProfileConnectionSets = {
+  followers: ExpertConnection[];
+  following: ExpertConnection[];
+};
 
 const sanitizeChatThread = (thread: ChatThread): ChatThread => ({
   ...thread,
@@ -289,10 +295,12 @@ export default function App() {
   const [previousScreen, setPreviousScreen] = useState<Screen>("plans");
   const [profileConnectionsType, setProfileConnectionsType] = useState<ConnectionType>("followers");
   const [profileConnectionsCanEditFollowing, setProfileConnectionsCanEditFollowing] = useState(false);
+  const [profileConnectionsOwnerId, setProfileConnectionsOwnerId] = useState("");
   const [highlightedPlanId, setHighlightedPlanId] = useState<PlanId | null>(null);
   const [viewingOwnProfile, setViewingOwnProfile] = useState(true);
   const [viewingExpertId, setViewingExpertId] = useState("gena");
   const [refreshTick, setRefreshTick] = useState(0);
+  const [moderatorHiddenPlanIds, setModeratorHiddenPlanIds] = useState<PlanId[]>([]);
   const [remoteProfiles, setRemoteProfiles] = useState<Record<string, ExpertProfile>>({});
   const [feedShuffleSeed] = useState(() => crypto.randomUUID());
   const [editableProfile, setEditableProfile] = useState<ExpertProfile>(() =>
@@ -313,6 +321,7 @@ export default function App() {
   const [dbFollowing, setDbFollowing] = useState<ExpertConnection[]>([]);
   const [dbFollowers, setDbFollowers] = useState<ExpertConnection[]>([]);
   const [profileFollowCounts, setProfileFollowCounts] = useState<Record<string, { followers: number; following: number }>>({});
+  const [connectionSetsByUser, setConnectionSetsByUser] = useState<Record<string, ProfileConnectionSets>>({});
   const [chatThreads, setChatThreads] = useState<ChatThread[]>(() => {
     const ids = readJson<string[]>(chatThreadIdsStorageKey, []);
     const storedThreads = ids
@@ -331,12 +340,14 @@ export default function App() {
     ];
   });
   const currentUserId = editableProfile.id;
+  const isModerator = MODERATOR_IDS.includes(currentUserId);
   const currentAuthor = {
     id: currentUserId,
     name: editableProfile.name,
     avatarUrl: editableProfile.photoUrl,
   };
   const deletedPlanIdSet = new Set(deletedPlanIds.map(planKey));
+  const moderatorHiddenPlanIdSet = new Set(moderatorHiddenPlanIds.map(planKey));
   const isJoinedPlan = (id: PlanId) => myParticipantIds.some((item) => planKey(item.id) === planKey(id));
   const demoPlansWithParticipants = demoCommunityPlans.map((plan) => {
     const joinedPeers = joinedParticipantPeers[planKey(plan.id)] ?? [];
@@ -376,10 +387,11 @@ export default function App() {
       .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)))
       .sort((a, b) => seededRank(`${feedShuffleSeed}:demo:${a.id}`) - seededRank(`${feedShuffleSeed}:demo:${b.id}`));
     const sortedPlans = [...catalogPublicPlans, ...justCreatedPublicPlans]
+      .filter((plan) => !moderatorHiddenPlanIdSet.has(planKey(plan.id)))
       .sort((a, b) => getParticipantsCount(b) - getParticipantsCount(a));
     const shuffledTop = sortedPlans.slice(0, 20).sort((a, b) => seededRank(`${feedShuffleSeed}:${a.id}`) - seededRank(`${feedShuffleSeed}:${b.id}`));
     return [...shuffledDemoPlans, ...shuffledTop, ...sortedPlans.slice(20)];
-  }, [catalogPublicPlans, deletedPlanIdSet, demoPlansWithParticipants, feedShuffleSeed, justCreatedPublicPlans]);
+  }, [catalogPublicPlans, deletedPlanIdSet, demoPlansWithParticipants, feedShuffleSeed, justCreatedPublicPlans, moderatorHiddenPlanIdSet]);
   const participantChatPeers: ChatPeer[] = useMemo(() => EVENT_PARTICIPANTS.map((participant) => ({
     id: participant.id,
     name: participant.name,
@@ -397,6 +409,54 @@ export default function App() {
       avatarUrl: profile.photoUrl,
       isFollowedByMe: followed,
     })), []);
+
+  const dedupeConnections = (items: ExpertConnection[]) =>
+    Array.from(new Map(items.map((item) => [item.id, sanitizeConnection(item)])).values());
+
+  const localDemoFollowingFor = useCallback((ownerId: string) =>
+    ownerId === currentUserId ? myFollowing : [], [currentUserId, myFollowing]);
+
+  const localDemoFollowersFor = useCallback((ownerId: string) =>
+    ownerId === currentUserId ? profileFollowers.map(sanitizeConnection) : [], [currentUserId]);
+
+  const idsToConnections = useCallback(async (ids: string[], followedByMeIds: Set<string>) => {
+    const uniqueIds = Array.from(new Set(ids));
+    const profiles = await fetchProfilesByIds(uniqueIds.filter((id) => !isDemoProfileId(id)));
+    const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+    return uniqueIds.map((id) => {
+      const localDemo = experts.find((profile) => profile.id === id && profile.isDemo);
+      const profile = profileById.get(id);
+      return sanitizeConnection({
+        id,
+        name: profile?.name ?? localDemo?.name ?? "Участник",
+        avatarUrl: profile?.photoUrl ?? localDemo?.photoUrl ?? null,
+        isFollowedByMe: followedByMeIds.has(id),
+      });
+    });
+  }, []);
+
+  const loadConnectionSets = useCallback(async (ownerId: string) => {
+    const [followingIds, followerIds, myFollowingIds] = await Promise.all([
+      fetchFollowing(ownerId),
+      fetchFollowers(ownerId),
+      ownerId === currentUserId ? Promise.resolve([]) : fetchFollowing(currentUserId),
+    ]);
+    const followedByMeIds = new Set(ownerId === currentUserId ? followingIds : myFollowingIds);
+    const [remoteFollowing, remoteFollowers] = await Promise.all([
+      idsToConnections(followingIds, followedByMeIds),
+      idsToConnections(followerIds, followedByMeIds),
+    ]);
+    const sets = {
+      following: dedupeConnections([...localDemoFollowingFor(ownerId), ...remoteFollowing]),
+      followers: dedupeConnections([...localDemoFollowersFor(ownerId), ...remoteFollowers]),
+    } satisfies ProfileConnectionSets;
+    setConnectionSetsByUser((items) => ({ ...items, [ownerId]: sets }));
+    if (ownerId === currentUserId) {
+      setDbFollowing(remoteFollowing);
+      setDbFollowers(remoteFollowers);
+    }
+    return sets;
+  }, [currentUserId, idsToConnections, localDemoFollowersFor, localDemoFollowingFor]);
 
   const loadPlanParticipants = useCallback(async (planId: PlanId) => {
     const id = planKey(planId);
@@ -568,17 +628,9 @@ export default function App() {
     let cancelled = false;
     const loadMyFollows = async () => {
       try {
-        const [followingIds, followerIds] = await Promise.all([
-          fetchFollowing(currentUserId),
-          fetchFollowers(currentUserId),
-        ]);
-        const [followingProfiles, followerProfiles] = await Promise.all([
-          fetchProfilesByIds(followingIds.filter((id) => !isDemoProfileId(id))),
-          fetchProfilesByIds(followerIds.filter((id) => !isDemoProfileId(id))),
-        ]);
+        const sets = await loadConnectionSets(currentUserId);
         if (cancelled) return;
-        setDbFollowing(profilesToConnections(followingProfiles, true));
-        setDbFollowers(profilesToConnections(followerProfiles));
+        setConnectionSetsByUser((items) => ({ ...items, [currentUserId]: sets }));
       } catch (error) {
         console.error("Supabase follows fetch failed", error);
       }
@@ -588,32 +640,32 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [currentUserId, profilesToConnections]);
+  }, [currentUserId, loadConnectionSets, refreshTick]);
 
   useEffect(() => {
     if (screen !== "profile" || viewingOwnProfile) return;
     let cancelled = false;
-    const loadViewedFollowCounts = async () => {
+    const loadViewedConnections = async () => {
       try {
-        const [followingIds, followerIds] = await Promise.all([
-          fetchFollowing(viewingExpertId),
-          fetchFollowers(viewingExpertId),
-        ]);
-        if (!cancelled) {
-          setProfileFollowCounts((items) => ({
-            ...items,
-            [viewingExpertId]: { following: followingIds.length, followers: followerIds.length },
-          }));
-        }
+        const sets = await loadConnectionSets(viewingExpertId);
+        if (cancelled) return;
+        setConnectionSetsByUser((items) => ({ ...items, [viewingExpertId]: sets }));
       } catch (error) {
-        console.error("Supabase profile follows count failed", error);
+        console.error("Supabase profile follows fetch failed", error);
       }
     };
-    if (!isDemoProfileId(viewingExpertId)) void loadViewedFollowCounts();
+    if (!isDemoProfileId(viewingExpertId)) void loadViewedConnections();
     return () => {
       cancelled = true;
     };
-  }, [screen, viewingExpertId, viewingOwnProfile]);
+  }, [loadConnectionSets, refreshTick, screen, viewingExpertId, viewingOwnProfile]);
+
+  useEffect(() => {
+    if (screen !== "profileConnections" || !profileConnectionsOwnerId || isDemoProfileId(profileConnectionsOwnerId)) return;
+    void loadConnectionSets(profileConnectionsOwnerId).catch((error) => {
+      console.error("Supabase profile connections fetch failed", error);
+    });
+  }, [loadConnectionSets, profileConnectionsOwnerId, refreshTick, screen]);
 
   useEffect(() => {
     if (screen !== "profile" || viewingOwnProfile || isDemoProfileId(viewingExpertId)) return;
@@ -752,7 +804,6 @@ export default function App() {
 
   useEffect(() => {
     writeJson(followingStorageKey, myFollowing.map(sanitizeConnection));
-    setEditableProfile((profile) => ({ ...profile, followersCount: 0, followingCount: myFollowing.length }));
   }, [followingStorageKey, myFollowing]);
 
   useEffect(() => {
@@ -793,6 +844,32 @@ export default function App() {
     const normalizedProfile = normalizeProfile(profile);
     setRemoteProfiles((items) => ({ ...items, [normalizedProfile.id]: normalizedProfile }));
     openExpertProfile(normalizedProfile.id);
+  };
+
+  const openConnectionProfile = (connection: ExpertConnection) => {
+    if (isDemoProfileId(connection.id)) {
+      openExpertProfile(connection.id);
+      return;
+    }
+    const fallbackProfile = normalizeProfile({
+      ...expertProfile,
+      id: connection.id,
+      telegramId: Number(connection.id) || 0,
+      name: connection.name,
+      bio: "",
+      photoUrl: connection.avatarUrl,
+      photoUrls: connection.avatarUrl ? [connection.avatarUrl] : [],
+      isMe: false,
+      isFollowedByMe: (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === connection.id),
+    });
+    delete fallbackProfile.cannedReplies;
+    setRemoteProfiles((items) => ({ ...items, [connection.id]: items[connection.id] ?? fallbackProfile }));
+    openExpertProfile(connection.id);
+    void fetchProfile(connection.id).then((profile) => {
+      if (profile) setRemoteProfiles((items) => ({ ...items, [profile.id]: normalizeProfile(profile) }));
+    }).catch((error) => {
+      console.error("Supabase connection profile fetch failed", error);
+    });
   };
 
   const openChatPeerProfile = (peer: ChatPeer) => {
@@ -902,9 +979,10 @@ export default function App() {
     }));
   }, []);
 
-  const openProfileConnections = (type: ConnectionType, ownerIsCurrentUser = false) => {
+  const openProfileConnections = (type: ConnectionType, ownerIsCurrentUser = false, ownerId = currentUserId) => {
     setProfileConnectionsType(type);
     setProfileConnectionsCanEditFollowing(ownerIsCurrentUser);
+    setProfileConnectionsOwnerId(ownerId);
     setPreviousScreen(screen);
     setScreen("profileConnections");
   };
@@ -965,11 +1043,29 @@ export default function App() {
   };
 
   const deletePlan = (id: PlanId) => {
+    const plan = allPlans.find((item) => planKey(item.id) === planKey(id));
+    if (plan?.author.id && plan.author.id !== currentUserId) return;
     setDeletedPlanIds((ids) => ids.some((item) => planKey(item) === planKey(id)) ? ids : [id, ...ids]);
     setCreatedPlans((plans) => plans.filter((plan) => planKey(plan.id) !== planKey(id)));
     setMyParticipantIds((ids) => ids.filter((item) => planKey(item.id) !== planKey(id)));
     setCheckedItemKeys((keys) => keys.filter((key) => !key.endsWith(`:${id}`)));
+    void deletePlanRemote(planKey(id)).catch((error) => {
+      console.error("Supabase plan delete failed", error);
+    });
     setScreen("plans");
+  };
+
+  const canHidePlanFromHome = (plan: HomeFeedPlan) =>
+    isModerator && plan.author.id !== currentUserId && !isDemoCommunityPlanId(plan.id);
+
+  const hidePlanFromHome = (plan: HomeFeedPlan) => {
+    if (!canHidePlanFromHome(plan)) return;
+    setModeratorHiddenPlanIds((ids) => ids.some((id) => planKey(id) === planKey(plan.id)) ? ids : [plan.id, ...ids]);
+    setRemotePublicPlans((plans) => plans.filter((item) => planKey(item.id) !== planKey(plan.id)));
+    void setPlanHidden(planKey(plan.id), true).catch((error) => {
+      console.error("Supabase plan hide failed", error);
+      setModeratorHiddenPlanIds((ids) => ids.filter((id) => planKey(id) !== planKey(plan.id)));
+    });
   };
 
   const toggleCheckedItem = (key: string) => {
@@ -1040,21 +1136,54 @@ export default function App() {
     });
   };
 
+  const setOptimisticFollowState = (profile: ExpertProfile, nextFollowed: boolean) => {
+    const connection = sanitizeConnection({ id: profile.id, name: profile.name, avatarUrl: profile.photoUrl, isFollowedByMe: true });
+    const meConnection = sanitizeConnection({ id: currentUserId, name: currentAuthor.name, avatarUrl: currentAuthor.avatarUrl, isFollowedByMe: false });
+    setConnectionSetsByUser((items) => {
+      const mySets = items[currentUserId] ?? { followers: localDemoFollowersFor(currentUserId), following: localDemoFollowingFor(currentUserId) };
+      const targetSets = items[profile.id] ?? { followers: localDemoFollowersFor(profile.id), following: localDemoFollowingFor(profile.id) };
+      return {
+        ...items,
+        [currentUserId]: {
+          ...mySets,
+          following: nextFollowed
+            ? dedupeConnections([connection, ...mySets.following])
+            : mySets.following.filter((item) => item.id !== profile.id),
+        },
+        [profile.id]: {
+          ...targetSets,
+          followers: nextFollowed
+            ? dedupeConnections([meConnection, ...targetSets.followers])
+            : targetSets.followers.filter((item) => item.id !== currentUserId),
+        },
+      };
+    });
+  };
+
   const toggleFollowing = (profile: ExpertProfile, nextFollowed: boolean) => {
     if (!isDemoProfile(profile)) {
       const connection = { id: profile.id, name: profile.name, avatarUrl: profile.photoUrl, isFollowedByMe: true };
-      const wasFollowed = dbFollowingIds.has(profile.id);
+      const wasFollowed = (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === profile.id);
       if (wasFollowed === nextFollowed) return;
+      setOptimisticFollowState(profile, nextFollowed);
       setDbFollowing((items) => nextFollowed
         ? items.some((item) => item.id === profile.id) ? items : [connection, ...items]
         : items.filter((item) => item.id !== profile.id));
       adjustProfileFollowersCount(profile, nextFollowed ? 1 : -1);
       void (nextFollowed ? follow(currentUserId, profile.id) : unfollow(currentUserId, profile.id)).catch((error) => {
         console.error("Supabase follow update failed", error);
+        setOptimisticFollowState(profile, !nextFollowed);
         setDbFollowing((items) => nextFollowed
           ? items.filter((item) => item.id !== profile.id)
           : items.some((item) => item.id === profile.id) ? items : [connection, ...items]);
         adjustProfileFollowersCount(profile, nextFollowed ? -1 : 1);
+      }).finally(() => {
+        void Promise.all([
+          loadConnectionSets(currentUserId),
+          loadConnectionSets(profile.id),
+        ]).catch((error) => {
+          console.error("Supabase follows reload failed", error);
+        });
       });
       return;
     }
@@ -1063,12 +1192,35 @@ export default function App() {
       if (items.some((item) => item.id === profile.id)) return items;
       return [{ id: profile.id, name: profile.name, avatarUrl: profile.photoUrl, isFollowedByMe: true }, ...items];
     });
+    setConnectionSetsByUser((items) => {
+      const mySets = items[currentUserId] ?? { followers: localDemoFollowersFor(currentUserId), following: localDemoFollowingFor(currentUserId) };
+      return {
+        ...items,
+        [currentUserId]: {
+          ...mySets,
+          following: nextFollowed
+            ? dedupeConnections([{ id: profile.id, name: profile.name, avatarUrl: profile.photoUrl, isFollowedByMe: true }, ...mySets.following])
+            : mySets.following.filter((item) => item.id !== profile.id),
+        },
+      };
+    });
   };
 
   const renderScreen = () => {
     switch (screen) {
       case "home":
-        return <HomeScreen plans={publicPlans} onNavigate={navigate} onPlanOpen={openPlanEvent} onAuthorOpen={openExpertProfile} onMessagePeer={openChatWithPeer} canMessageAuthor={(authorId) => !isDemoProfileId(authorId)} />;
+        return (
+          <HomeScreen
+            plans={publicPlans}
+            onNavigate={navigate}
+            onPlanOpen={openPlanEvent}
+            onAuthorOpen={openExpertProfile}
+            onMessagePeer={openChatWithPeer}
+            canMessageAuthor={(authorId) => !isDemoProfileId(authorId)}
+            canHidePlan={canHidePlanFromHome}
+            onHidePlan={hidePlanFromHome}
+          />
+        );
       case "plans":
         return (
           <PlansScreen
@@ -1125,20 +1277,23 @@ export default function App() {
         const baseViewedProfile = viewingOwnProfile
           ? editableProfile
           : remoteProfiles[viewingExpertId] ?? experts.find((expert) => expert.id === viewingExpertId) ?? expertProfile;
-        const viewedFollowCounts = profileFollowCounts[baseViewedProfile.id];
+        const viewedConnectionSets = connectionSetsByUser[baseViewedProfile.id] ?? {
+          followers: localDemoFollowersFor(baseViewedProfile.id),
+          following: localDemoFollowingFor(baseViewedProfile.id),
+        };
         const viewedProfile = viewingOwnProfile
           ? {
               ...baseViewedProfile,
-              followersCount: dbFollowers.length,
-              followingCount: myFollowing.length + dbFollowing.length,
+              followersCount: viewedConnectionSets.followers.length,
+              followingCount: viewedConnectionSets.following.length,
             }
           : {
               ...baseViewedProfile,
-              followersCount: isDemoProfile(baseViewedProfile) ? baseViewedProfile.followersCount : viewedFollowCounts?.followers ?? baseViewedProfile.followersCount,
-              followingCount: isDemoProfile(baseViewedProfile) ? baseViewedProfile.followingCount : viewedFollowCounts?.following ?? baseViewedProfile.followingCount,
+              followersCount: isDemoProfile(baseViewedProfile) ? baseViewedProfile.followersCount : viewedConnectionSets.followers.length,
+              followingCount: isDemoProfile(baseViewedProfile) ? baseViewedProfile.followingCount : viewedConnectionSets.following.length,
               isFollowedByMe: isDemoProfile(baseViewedProfile)
                 ? myFollowing.some((item) => item.id === baseViewedProfile.id)
-                : dbFollowingIds.has(baseViewedProfile.id),
+                : (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === baseViewedProfile.id),
             };
         const isCurrentUserProfile = viewedProfile.id === currentUserId;
         const viewedRemotePlans = (profileRemotePlans[viewedProfile.id] ?? []).map((plan) => {
@@ -1154,7 +1309,7 @@ export default function App() {
             onNavigate={navigate}
             onArticle={a => openArticle(a, "profile" as Screen)}
             onPlanOpen={id => { openPlanEvent(id, "profile"); }}
-            onConnectionsOpen={(type) => openProfileConnections(type, isCurrentUserProfile)}
+            onConnectionsOpen={(type) => openProfileConnections(type, isCurrentUserProfile, viewedProfile.id)}
             onEdit={() => setScreen("editProfile")}
             onBack={() => setScreen(previousScreen)}
             onAddPlan={() => {
@@ -1199,22 +1354,77 @@ export default function App() {
           />
         );
       case "profileConnections":
+        const connectionsOwnerId = profileConnectionsOwnerId || currentUserId;
+        const connectionSets = connectionSetsByUser[connectionsOwnerId] ?? {
+          followers: localDemoFollowersFor(connectionsOwnerId),
+          following: localDemoFollowingFor(connectionsOwnerId),
+        };
         return (
           <ProfileConnectionsScreen
             type={profileConnectionsType}
             onBack={() => setScreen(previousScreen)}
-            onProfileOpen={() => setScreen("profile")}
+            onProfileOpen={openConnectionProfile}
             canEditFollowing={profileConnectionsCanEditFollowing}
-            followerItems={profileConnectionsCanEditFollowing ? dbFollowers : undefined}
-            followingItems={profileConnectionsCanEditFollowing ? [...myFollowing, ...dbFollowing] : myFollowing}
+            followerItems={connectionSets.followers}
+            followingItems={connectionSets.following}
             onToggleFollowing={(id) => {
+              const targetConnection = connectionSets.following.find((item) => item.id === id);
               if (isDemoProfileId(id)) {
                 setMyFollowing((items) => items.filter((item) => item.id !== id));
+                setConnectionSetsByUser((items) => {
+                  const current = items[currentUserId];
+                  if (!current) return items;
+                  return {
+                    ...items,
+                    [currentUserId]: {
+                      ...current,
+                      following: current.following.filter((item) => item.id !== id),
+                    },
+                  };
+                });
                 return;
               }
+              setConnectionSetsByUser((items) => {
+                const current = items[currentUserId];
+                const target = items[id];
+                return {
+                  ...items,
+                  ...(current ? {
+                    [currentUserId]: {
+                      ...current,
+                      following: current.following.filter((item) => item.id !== id),
+                    },
+                  } : {}),
+                  ...(target ? {
+                    [id]: {
+                      ...target,
+                      followers: target.followers.filter((item) => item.id !== currentUserId),
+                    },
+                  } : {}),
+                };
+              });
               setDbFollowing((items) => items.filter((item) => item.id !== id));
               void unfollow(currentUserId, id).catch((error) => {
                 console.error("Supabase unfollow from list failed", error);
+                if (targetConnection) {
+                  setConnectionSetsByUser((items) => {
+                    const current = items[currentUserId] ?? { followers: localDemoFollowersFor(currentUserId), following: localDemoFollowingFor(currentUserId) };
+                    return {
+                      ...items,
+                      [currentUserId]: {
+                        ...current,
+                        following: dedupeConnections([targetConnection, ...current.following]),
+                      },
+                    };
+                  });
+                }
+              }).finally(() => {
+                void Promise.all([
+                  loadConnectionSets(currentUserId),
+                  loadConnectionSets(id),
+                ]).catch((error) => {
+                  console.error("Supabase follows reload failed", error);
+                });
               });
             }}
           />
@@ -1273,6 +1483,11 @@ export default function App() {
               currentAuthor={currentAuthor}
               canDelete={feedPlan.author.id === currentUserId}
               onDelete={() => deletePlan(feedPlan.id)}
+              canHide={canHidePlanFromHome(feedPlan)}
+              onHide={() => {
+                hidePlanFromHome(feedPlan);
+                setScreen(planEventOrigin);
+              }}
               refreshKey={refreshTick}
             />
           );

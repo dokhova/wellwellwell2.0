@@ -77,6 +77,7 @@ export interface HomeFeedPlan {
   id: PlanId;
   kind?: PlanKind;
   visibility?: Visibility;
+  hidden?: boolean;
   tag?: PlanTag;
   isChallenge?: boolean;
   format?: "online" | "offline";
@@ -150,6 +151,8 @@ export interface EventDetailProps {
   };
   canDelete?: boolean;
   onDelete?: () => void;
+  canHide?: boolean;
+  onHide?: () => void;
   refreshKey?: number;
 }
 

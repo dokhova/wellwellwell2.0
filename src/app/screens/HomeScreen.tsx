@@ -172,6 +172,8 @@ export function HomeScreen({
   onAuthorOpen,
   onMessagePeer,
   canMessageAuthor,
+  canHidePlan,
+  onHidePlan,
   plans,
 }: {
   onNavigate: (s: Screen, from?: Screen) => void;
@@ -179,6 +181,8 @@ export function HomeScreen({
   onAuthorOpen: (expertId: string) => void;
   onMessagePeer: (peer: ChatPeer) => void;
   canMessageAuthor?: (authorId?: string) => boolean;
+  canHidePlan?: (plan: HomeFeedPlan) => boolean;
+  onHidePlan?: (plan: HomeFeedPlan) => void;
   plans: HomeFeedPlan[];
 }) {
   const [tagFilter, setTagFilter] = useState<TagFilter>("all");
@@ -312,6 +316,9 @@ export function HomeScreen({
             <button onClick={() => { setSheet(null); onAuthorOpen(activePlan.author.id ?? "gena"); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Открыть профиль</button>
             {(canMessageAuthor?.(activePlan.author.id) ?? true) && (
               <button onClick={() => { setSheet(null); onMessagePeer({ id: activePlan.author.id ?? activePlan.author.name, name: activePlan.author.name, avatarUrl: activePlan.author.avatarUrl }); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Написать</button>
+            )}
+            {canHidePlan?.(activePlan) && (
+              <button onClick={() => { setSheet(null); onHidePlan?.(activePlan); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Скрыть с главной</button>
             )}
             <button onClick={() => setSheet(null)} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Пожаловаться</button>
           </div>

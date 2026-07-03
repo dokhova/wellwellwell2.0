@@ -104,7 +104,7 @@ export function ProfileConnectionsScreen({
 }: {
   type: ConnectionType;
   onBack: () => void;
-  onProfileOpen: () => void;
+  onProfileOpen: (user: ExpertConnection) => void;
   canEditFollowing: boolean;
   followerItems?: ExpertConnection[];
   followingItems?: ExpertConnection[];
@@ -148,7 +148,7 @@ export function ProfileConnectionsScreen({
               <ConnectionRow
                 key={user.id}
                 user={user}
-                onProfile={onProfileOpen}
+                onProfile={() => onProfileOpen(user)}
                 onToggle={canEditConnections ? () => toggle(user.id) : undefined}
               />
             ))}
