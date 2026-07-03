@@ -51,6 +51,8 @@ export const mapRowToProfile = (row: ProfileRow): ExpertProfile => {
     isFollowedByMe: false,
   };
   delete profile.cannedReplies;
+  delete profile.isDemo;
+  delete profile.tags;
   return profile;
 };
 
@@ -86,6 +88,20 @@ export const searchProfiles = async (query: string): Promise<ExpertProfile[]> =>
     .from("profiles")
     .select("id, telegram_id, username, name, bio, photo_url, photo_urls")
     .or(`name.ilike.${pattern},username.ilike.${pattern}`)
+    .limit(20)
+    .returns<ProfileRow[]>();
+
+  if (error) throw error;
+  return (data ?? []).map(mapRowToProfile);
+};
+
+export const fetchRecentProfiles = async (): Promise<ExpertProfile[]> => {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, telegram_id, username, name, bio, photo_url, photo_urls")
+    .order("updated_at", { ascending: false })
     .limit(20)
     .returns<ProfileRow[]>();
 

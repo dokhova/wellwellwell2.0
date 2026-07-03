@@ -55,15 +55,18 @@ const SUPPORT_PEER: ChatPeer = {
 const SUPPORT_MESSAGE = "Привет! Well Well Well помогает собирать привычки и планы тренировок — создавай свои события или присоединяйся к чужим, зови друзей в чат. Если возникнут вопросы — пишите сюда, наша команда ответит";
 const DEMO_PROFILE_IDS = new Set(experts.filter((profile) => profile.isDemo).map((profile) => profile.id));
 const isDemoProfileId = (id?: string | null) => Boolean(id && DEMO_PROFILE_IDS.has(id));
-const isDemoProfile = (profile: Pick<ExpertProfile, "id" | "isDemo">) => Boolean(profile.isDemo || isDemoProfileId(profile.id));
+const isDemoProfile = (profile: Pick<ExpertProfile, "isDemo">) => profile.isDemo === true;
 
 const normalizeProfile = (profile: ExpertProfile): ExpertProfile => {
   const rawPhotoUrls = profile.photoUrls?.length ? profile.photoUrls : profile.photoUrl ? [profile.photoUrl] : [];
   const photoUrls = rawPhotoUrls.map(sanitizeImageUrl).filter((url): url is string => Boolean(url));
+  const keepDemoFields = profile.isDemo === true && isDemoProfileId(profile.id);
   return {
     ...profile,
     photoUrls,
     photoUrl: photoUrls[0] ?? null,
+    isDemo: keepDemoFields ? true : undefined,
+    tags: keepDemoFields ? profile.tags : undefined,
   };
 };
 
@@ -92,7 +95,7 @@ const sanitizeChatThread = (thread: ChatThread): ChatThread => ({
 });
 
 const asRealPeer = (peer: ChatPeer): ChatPeer => {
-  const { cannedReplies: _cannedReplies, ...realPeer } = peer;
+  const { cannedReplies: _cannedReplies, isDemo: _isDemo, ...realPeer } = peer;
   return { ...realPeer, realUser: true };
 };
 
@@ -100,7 +103,7 @@ const isRealProfilePeer = (peer: ChatPeer, remoteProfiles: Record<string, Expert
   peer.realUser || Boolean(remoteProfiles[peer.id]) || /^\d+$/.test(peer.id);
 
 const canMessageProfile = (profile: Pick<ExpertProfile, "id" | "isDemo" | "cannedReplies">) =>
-  !isDemoProfile(profile) && !profile.cannedReplies?.length;
+  !isDemoProfile(profile);
 
 const getPeerIdFromThreadId = (threadId: string, currentUserId: string) => {
   const parts = threadId.split("_");
@@ -759,7 +762,7 @@ export default function App() {
     if (isRealProfilePeer(peer, remoteProfiles)) return asRealPeer(peer);
     const expert = experts.find((item) => item.id === peer.id);
     if (expert) {
-      return { id: expert.id, name: peer.name || expert.name, avatarUrl: peer.avatarUrl ?? expert.photoUrl, cannedReplies: expert.cannedReplies };
+      return { id: expert.id, name: peer.name || expert.name, avatarUrl: peer.avatarUrl ?? expert.photoUrl, cannedReplies: expert.cannedReplies, isDemo: expert.isDemo };
     }
     const participant = participantChatPeers.find((item) => item.id === peer.id);
     if (participant) return participant;
@@ -767,7 +770,7 @@ export default function App() {
   };
 
   const openChatWithPeer = (peer: ChatPeer) => {
-    if (isDemoProfileId(peer.id)) return;
+    if (peer.isDemo === true) return;
     const nextPeer = getCannedPeer(peer);
     setActiveChatPeer(nextPeer);
     setChatThreads((threads) => threads.map((thread) => thread.peer.id === nextPeer.id ? { ...thread, unreadCount: 0 } : thread));
@@ -1082,7 +1085,7 @@ export default function App() {
             }}
             onRemovePlan={removePlanFromMine}
             onToggleFollow={toggleFollowing}
-            onMessageProfile={(peer) => openChatWithPeer(remoteProfiles[peer.id] ? asRealPeer(peer) : peer)}
+              onMessageProfile={(peer) => openChatWithPeer(viewedProfile.isDemo ? { ...peer, isDemo: true } : asRealPeer(peer))}
             canMessage={canMessageProfile(viewedProfile)}
             profile={viewedProfile}
             plans={viewedPlans}

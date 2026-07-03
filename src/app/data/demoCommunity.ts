@@ -160,5 +160,6 @@ export const getDemoCommunityParticipantPeers = (planId: string): ChatPeer[] => 
       id: person.id,
       name: person.name,
       avatarUrl: demoCommunityAssets.avatars[person.avatar],
+      isDemo: true,
     }));
 };

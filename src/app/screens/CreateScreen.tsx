@@ -6,7 +6,7 @@ import { ALL_DAYS, GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES, WEEKDAY_VALUES } from
 import { DEFAULT_PLAN_AUTHOR, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
-import { searchProfiles } from "@/app/lib/api/profiles";
+import { fetchRecentProfiles, searchProfiles } from "@/app/lib/api/profiles";
 
 type CreateStep = "welcome" | "name" | "description" | "image" | "schedule" | "finalOptions" | "success";
 type PlanDraft = { title: string; description: string; coverImage: string | null; schedule: Schedule };
@@ -87,6 +87,7 @@ export function CreateScreen({
   const [selectedPeople, setSelectedPeople] = useState<Person[]>([]);
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const [participantQuery, setParticipantQuery] = useState("");
+  const [participantsLoading, setParticipantsLoading] = useState(false);
   const [locationMode, setLocationMode] = useState<"online" | "offline">("online");
   const [locationAddress, setLocationAddress] = useState("");
 
@@ -103,20 +104,26 @@ export function CreateScreen({
   const filteredPeople = people;
 
   useEffect(() => {
-    if (!participantsOpen || !participantQuery.trim()) {
+    if (!participantsOpen) {
       setPeople([]);
+      setParticipantsLoading(false);
       return;
     }
     let cancelled = false;
+    const normalizedQuery = participantQuery.trim();
     const loadPeople = async () => {
+      setParticipantsLoading(true);
       try {
-        const profiles = await searchProfiles(participantQuery);
+        const profiles = normalizedQuery ? await searchProfiles(normalizedQuery) : await fetchRecentProfiles();
         if (cancelled) return;
         setPeople(profiles
           .filter((profile) => profile.id !== currentAuthor.id && !profile.isDemo)
           .map((profile) => ({ id: profile.id, name: profile.name, avatarUrl: sanitizeImageUrl(profile.photoUrl) })));
       } catch (error) {
         console.error("Supabase participant search failed", error);
+        if (!cancelled) setPeople([]);
+      } finally {
+        if (!cancelled) setParticipantsLoading(false);
       }
     };
     void loadPeople();
@@ -406,6 +413,8 @@ export function CreateScreen({
             />
           </div>
           <div className="space-y-1">
+            {participantsLoading && <p className="px-3 py-4 text-center text-[13px] text-muted-foreground">Загружаем участников...</p>}
+            {!participantsLoading && filteredPeople.length === 0 && <p className="px-3 py-4 text-center text-[13px] text-muted-foreground">Пользователи не найдены</p>}
             {filteredPeople.map((person) => {
               const active = selectedParticipants.includes(person.id);
               return (

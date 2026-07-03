@@ -29,6 +29,7 @@ export interface ChatPeer {
   avatarUrl: string | null;
   cannedReplies?: string[];
   realUser?: boolean;
+  isDemo?: boolean;
 }
 
 export interface ChatMessage {
