@@ -6,6 +6,7 @@ import { formatNearestDate, getNextOccurrence } from "@/app/data/calendar";
 import { experts, expertProfile, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
 import { fetchProfile, upsertProfile } from "@/app/lib/api/profiles";
+import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { getTelegramUser, initTelegram } from "@/app/lib/telegram";
 import { HomeScreen } from "@/app/screens/HomeScreen";
 import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
@@ -50,12 +51,74 @@ const SUPPORT_PEER: ChatPeer = {
 const SUPPORT_MESSAGE = "Привет! Well Well Well помогает собирать привычки и планы тренировок — создавай свои события или присоединяйся к чужим, зови друзей в чат. Если возникнут вопросы — пишите сюда, наша команда ответит";
 
 const normalizeProfile = (profile: ExpertProfile): ExpertProfile => {
-  const photoUrls = profile.photoUrls?.length ? profile.photoUrls : profile.photoUrl ? [profile.photoUrl] : [];
+  const rawPhotoUrls = profile.photoUrls?.length ? profile.photoUrls : profile.photoUrl ? [profile.photoUrl] : [];
+  const photoUrls = rawPhotoUrls.map(sanitizeImageUrl).filter((url): url is string => Boolean(url));
   return {
     ...profile,
     photoUrls,
     photoUrl: photoUrls[0] ?? null,
   };
+};
+
+const sanitizePlan = (plan: HomeFeedPlan): HomeFeedPlan => ({
+  ...plan,
+  coverUrl: sanitizeImageUrl(plan.coverUrl) ?? undefined,
+  participants: plan.participants.map(sanitizeImageUrl).filter((url): url is string => Boolean(url)),
+  author: {
+    ...plan.author,
+    avatarUrl: sanitizeImageUrl(plan.author.avatarUrl),
+  },
+  items: plan.items?.map(sanitizePlan),
+});
+
+const sanitizeConnection = (connection: ExpertConnection): ExpertConnection => ({
+  ...connection,
+  avatarUrl: sanitizeImageUrl(connection.avatarUrl),
+});
+
+const sanitizeChatThread = (thread: ChatThread): ChatThread => ({
+  ...thread,
+  peer: {
+    ...thread.peer,
+    avatarUrl: sanitizeImageUrl(thread.peer.avatarUrl),
+  },
+});
+
+const isTelegramPhotoUrl = (url: string | null | undefined) => {
+  if (!url) return false;
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return hostname === "t.me" || hostname.endsWith(".t.me");
+  } catch {
+    return false;
+  }
+};
+
+const mirrorTelegramPhotoToStorage = async (profile: ExpertProfile): Promise<ExpertProfile> => {
+  const sourceUrl = profile.photoUrl;
+  if (!canUploadPhotos || !isTelegramPhotoUrl(sourceUrl)) return profile;
+
+  try {
+    const response = await fetch(sourceUrl);
+    if (!response.ok) return profile;
+
+    const blob = await response.blob();
+    if (!blob.type.startsWith("image/")) return profile;
+
+    const extension = blob.type.split("/")[1]?.replace(/[^a-z0-9]/gi, "") || "jpg";
+    const file = new File([blob], `telegram-avatar.${extension}`, { type: blob.type });
+    const publicUrl = await uploadPhoto(file);
+    if (!publicUrl) return profile;
+
+    const previousUrls = profile.photoUrls.filter((url) => url !== sourceUrl);
+    return normalizeProfile({
+      ...profile,
+      photoUrl: publicUrl,
+      photoUrls: [publicUrl, ...previousUrls],
+    });
+  } catch {
+    return profile;
+  }
 };
 
 const buildTelegramProfile = (telegramUser: ReturnType<typeof getTelegramUser>): ExpertProfile => {
@@ -173,6 +236,7 @@ export default function App() {
   const [highlightedPlanId, setHighlightedPlanId] = useState<number | null>(null);
   const [viewingOwnProfile, setViewingOwnProfile] = useState(true);
   const [viewingExpertId, setViewingExpertId] = useState("gena");
+  const [remoteProfiles, setRemoteProfiles] = useState<Record<string, ExpertProfile>>({});
   const [editableProfile, setEditableProfile] = useState<ExpertProfile>(() =>
     normalizeProfile(readJson(profileStorageKey, buildTelegramProfile(telegramUser)))
   );
@@ -181,14 +245,15 @@ export default function App() {
     return stored.map((item) => typeof item === "number" ? { kind: "plan", id: item } : item);
   });
   const [checkedItemKeys, setCheckedItemKeys] = useState<string[]>(() => readJson(checkedItemsStorageKey, []));
-  const [createdPlans, setCreatedPlans] = useState<HomeFeedPlan[]>(() => readJson(createdPlansStorageKey, []));
+  const [createdPlans, setCreatedPlans] = useState<HomeFeedPlan[]>(() => readJson<HomeFeedPlan[]>(createdPlansStorageKey, []).map(sanitizePlan));
   const [deletedPlanIds, setDeletedPlanIds] = useState<number[]>(() => readJson(deletedPlansStorageKey, []));
-  const [myFollowing, setMyFollowing] = useState<ExpertConnection[]>(() => readJson(followingStorageKey, []));
+  const [myFollowing, setMyFollowing] = useState<ExpertConnection[]>(() => readJson<ExpertConnection[]>(followingStorageKey, []).map(sanitizeConnection));
   const [chatThreads, setChatThreads] = useState<ChatThread[]>(() => {
     const ids = readJson<string[]>(chatThreadIdsStorageKey, []);
     const storedThreads = ids
       .map((id) => readJson<ChatThread | null>(chatThreadStorageKey(id), null))
-      .filter((thread): thread is ChatThread => Boolean(thread?.peer && Array.isArray(thread.messages)));
+      .filter((thread): thread is ChatThread => Boolean(thread?.peer && Array.isArray(thread.messages)))
+      .map(sanitizeChatThread);
     if (storedThreads.some((thread) => thread.peer.id === SUPPORT_PEER.id)) return storedThreads;
     return [
       {
@@ -247,10 +312,20 @@ export default function App() {
         const storedProfile = await fetchProfile(telegramProfile.id);
         if (cancelled) return;
         if (storedProfile) {
-          setEditableProfile(normalizeProfile(storedProfile));
+          const normalizedStoredProfile = normalizeProfile(storedProfile);
+          setEditableProfile(normalizedStoredProfile);
+          const mirroredProfile = await mirrorTelegramPhotoToStorage(normalizedStoredProfile);
+          if (!cancelled && mirroredProfile.photoUrl !== normalizedStoredProfile.photoUrl) {
+            setEditableProfile(mirroredProfile);
+            await upsertProfile(mirroredProfile);
+          }
           return;
         }
-        await upsertProfile(telegramProfile);
+        const mirroredProfile = await mirrorTelegramPhotoToStorage(telegramProfile);
+        if (!cancelled && mirroredProfile.photoUrl !== telegramProfile.photoUrl) {
+          setEditableProfile(mirroredProfile);
+        }
+        await upsertProfile(mirroredProfile);
       } catch (error) {
         console.error("Supabase profile sync failed", error);
       }
@@ -263,7 +338,7 @@ export default function App() {
   }, [telegramUser]);
 
   useEffect(() => {
-    writeJson(profileStorageKey, editableProfile);
+    writeJson(profileStorageKey, normalizeProfile(editableProfile));
   }, [editableProfile, profileStorageKey]);
 
   useEffect(() => {
@@ -276,7 +351,7 @@ export default function App() {
   }, [checkedItemKeys, checkedItemsStorageKey]);
 
   useEffect(() => {
-    writeJson(createdPlansStorageKey, createdPlans);
+    writeJson(createdPlansStorageKey, createdPlans.map(sanitizePlan));
   }, [createdPlans, createdPlansStorageKey]);
 
   useEffect(() => {
@@ -284,13 +359,13 @@ export default function App() {
   }, [deletedPlanIds, deletedPlansStorageKey]);
 
   useEffect(() => {
-    writeJson(followingStorageKey, myFollowing);
+    writeJson(followingStorageKey, myFollowing.map(sanitizeConnection));
     setEditableProfile((profile) => ({ ...profile, followersCount: 0, followingCount: myFollowing.length }));
   }, [followingStorageKey, myFollowing]);
 
   useEffect(() => {
     writeJson(chatThreadIdsStorageKey, chatThreads.map((thread) => thread.peer.id));
-    chatThreads.forEach((thread) => writeJson(chatThreadStorageKey(thread.peer.id), thread));
+    chatThreads.forEach((thread) => writeJson(chatThreadStorageKey(thread.peer.id), sanitizeChatThread(thread)));
   }, [chatThreadIdsStorageKey, chatThreads]);
 
   const navigate = (s: Screen, from?: Screen) => {
@@ -319,6 +394,12 @@ export default function App() {
     setViewingOwnProfile(false);
     setPreviousScreen(screen);
     setScreen("profile");
+  };
+
+  const openSearchProfile = (profile: ExpertProfile) => {
+    const normalizedProfile = normalizeProfile(profile);
+    setRemoteProfiles((items) => ({ ...items, [normalizedProfile.id]: normalizedProfile }));
+    openExpertProfile(normalizedProfile.id);
   };
 
   const getCannedPeer = (peer: ChatPeer): ChatPeer => {
@@ -417,8 +498,9 @@ export default function App() {
 
   const createPlan = (plans: HomeFeedPlan[], result: CreatedPlanResult) => {
     void result;
-    const ids = plans.map((plan) => plan.id);
-    setCreatedPlans((items) => [...plans, ...items.filter((item) => !ids.includes(item.id))]);
+    const sanitizedPlans = plans.map(sanitizePlan);
+    const ids = sanitizedPlans.map((plan) => plan.id);
+    setCreatedPlans((items) => [...sanitizedPlans, ...items.filter((item) => !ids.includes(item.id))]);
     const ref = { kind: "plan", id: ids[0] } satisfies ParticipantPlanRef;
     const key = participantKey(ref);
     setMyParticipantIds((items) => items.some((item) => participantKey(item) === key) ? items : [ref, ...items]);
@@ -477,11 +559,19 @@ export default function App() {
           ? <ArticleScreen article={activeArticle} onBack={() => setScreen(articleOrigin)} onProfile={() => openExpertProfile("gena")} />
           : null;
       case "search":
-        return <SearchScreen onBack={() => setScreen("home")} onArticle={a => openArticle(a, "search")} />;
+        return (
+          <SearchScreen
+            onBack={() => setScreen("home")}
+            onArticle={a => openArticle(a, "search")}
+            currentUserId={currentUserId}
+            onProfile={openSearchProfile}
+            onMessagePeer={openChatWithPeer}
+          />
+        );
       case "profile":
         const baseViewedProfile = viewingOwnProfile
           ? editableProfile
-          : experts.find((expert) => expert.id === viewingExpertId) ?? expertProfile;
+          : remoteProfiles[viewingExpertId] ?? experts.find((expert) => expert.id === viewingExpertId) ?? expertProfile;
         const viewedProfile = viewingOwnProfile
           ? baseViewedProfile
           : { ...baseViewedProfile, isFollowedByMe: myFollowing.some((item) => item.id === baseViewedProfile.id) };
@@ -515,8 +605,9 @@ export default function App() {
             profile={editableProfile}
             onBack={() => setScreen("profile")}
             onSave={(profile) => {
-              setEditableProfile(profile);
-              void upsertProfile(profile).catch((error) => {
+              const normalizedProfile = normalizeProfile(profile);
+              setEditableProfile(normalizedProfile);
+              void upsertProfile(normalizedProfile).catch((error) => {
                 console.error("Supabase profile save failed", error);
               });
               setScreen("profile");

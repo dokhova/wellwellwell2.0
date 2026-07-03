@@ -29,9 +29,12 @@ export function EditProfileScreen({
     const files = Array.from(event.target.files ?? []);
     if (files.length > 0) {
       const nextPhotoUrls = await Promise.all(
-        files.map(async (file) => await uploadPhoto(file) ?? URL.createObjectURL(file))
+        files.map((file) => uploadPhoto(file))
       );
-      setPhotoUrls((current) => [...current, ...nextPhotoUrls]);
+      const uploadedUrls = nextPhotoUrls.filter((url): url is string => Boolean(url));
+      if (uploadedUrls.length > 0) {
+        setPhotoUrls((current) => [...current, ...uploadedUrls]);
+      }
     }
     event.target.value = "";
   };
