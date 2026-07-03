@@ -84,6 +84,14 @@ const sanitizeChatThread = (thread: ChatThread): ChatThread => ({
   },
 });
 
+const asRealPeer = (peer: ChatPeer): ChatPeer => {
+  const { cannedReplies: _cannedReplies, ...realPeer } = peer;
+  return { ...realPeer, realUser: true };
+};
+
+const isRealProfilePeer = (peer: ChatPeer, remoteProfiles: Record<string, ExpertProfile>) =>
+  peer.realUser || Boolean(remoteProfiles[peer.id]) || /^\d+$/.test(peer.id);
+
 const isTelegramPhotoUrl = (url: string | null | undefined) => {
   if (!url) return false;
   try {
@@ -403,6 +411,7 @@ export default function App() {
   };
 
   const getCannedPeer = (peer: ChatPeer): ChatPeer => {
+    if (isRealProfilePeer(peer, remoteProfiles)) return asRealPeer(peer);
     const expert = experts.find((item) => item.id === peer.id);
     if (expert) {
       return { id: expert.id, name: peer.name || expert.name, avatarUrl: peer.avatarUrl ?? expert.photoUrl, cannedReplies: expert.cannedReplies };
@@ -419,15 +428,16 @@ export default function App() {
     setScreen("chat");
   };
 
-  const sendChatMessage = (peer: ChatPeer, text: string, sender: ChatMessage["sender"]) => {
+  const sendChatMessage = (peer: ChatPeer, text: string, sender: ChatMessage["sender"], status?: ChatMessage["status"]): ChatMessage | null => {
     const body = text.trim();
-    if (!body) return;
+    if (!body) return null;
     const normalizedPeer = getCannedPeer(peer);
     const message: ChatMessage = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       sender,
       text: body,
       createdAt: Date.now(),
+      status,
     };
     setChatThreads((threads) => {
       const existing = threads.find((thread) => thread.peer.id === normalizedPeer.id);
@@ -438,19 +448,44 @@ export default function App() {
       }
       return [{ peer: normalizedPeer, messages: [message], updatedAt: message.createdAt }, ...threads];
     });
+    return message;
   };
 
   const receiveRemoteChatMessage = useCallback((peer: ChatPeer, message: ChatMessage) => {
     setChatThreads((threads) => {
       const existing = threads.find((thread) => thread.peer.id === peer.id);
       if (existing) {
-        if (existing.messages.some((item) => item.id === message.id)) return threads;
+        if (existing.messages.some((item) => item.id === message.id)) {
+          return threads.map((thread) => thread.peer.id === peer.id
+            ? {
+                ...thread,
+                peer,
+                messages: thread.messages.map((item) => item.id === message.id ? { ...item, ...message } : item),
+                updatedAt: Math.max(thread.updatedAt, message.createdAt),
+              }
+            : thread);
+        }
         return threads.map((thread) => thread.peer.id === peer.id
           ? { ...thread, peer, messages: [...thread.messages, message], updatedAt: message.createdAt }
           : thread);
       }
       return [{ peer, messages: [message], updatedAt: message.createdAt }, ...threads];
     });
+  }, []);
+
+  const confirmRemoteChatMessage = useCallback((peer: ChatPeer, localId: string, message: ChatMessage) => {
+    setChatThreads((threads) => threads.map((thread) => {
+      if (thread.peer.id !== peer.id) return thread;
+      const hasRemoteMessage = thread.messages.some((item) => item.id === message.id);
+      return {
+        ...thread,
+        peer,
+        messages: thread.messages
+          .filter((item) => !(hasRemoteMessage && item.id === localId))
+          .map((item) => item.id === localId ? message : item),
+        updatedAt: Math.max(thread.updatedAt, message.createdAt),
+      };
+    }));
   }, []);
 
   const openProfileConnections = (type: ConnectionType, ownerIsCurrentUser = false) => {
@@ -536,9 +571,9 @@ export default function App() {
       case "create":
         return <CreateScreen onNavigate={navigate} backTo={createOrigin} onCreatePlan={createPlan} currentAuthor={currentAuthor} />;
       case "chats":
-        return <ChatsScreen threads={chatThreads} onOpenThread={openChatWithPeer} availablePeers={chatSearchPeers} />;
+        return <ChatsScreen threads={chatThreads} onOpenThread={openChatWithPeer} currentUserId={currentUserId} availablePeers={chatSearchPeers} />;
       case "chat": {
-        if (!activeChatPeer) return <ChatsScreen threads={chatThreads} onOpenThread={openChatWithPeer} availablePeers={chatSearchPeers} />;
+        if (!activeChatPeer) return <ChatsScreen threads={chatThreads} onOpenThread={openChatWithPeer} currentUserId={currentUserId} availablePeers={chatSearchPeers} />;
         const thread = chatThreads.find((item) => item.peer.id === activeChatPeer.id);
         return (
           <ChatScreen
@@ -549,6 +584,7 @@ export default function App() {
             onBack={() => setScreen(previousScreen === "chat" ? "chats" : previousScreen)}
             onSendMessage={sendChatMessage}
             onReceiveRemoteMessage={receiveRemoteChatMessage}
+            onConfirmRemoteMessage={confirmRemoteChatMessage}
           />
         );
       }
@@ -565,7 +601,7 @@ export default function App() {
             onArticle={a => openArticle(a, "search")}
             currentUserId={currentUserId}
             onProfile={openSearchProfile}
-            onMessagePeer={openChatWithPeer}
+            onMessagePeer={(peer) => openChatWithPeer(asRealPeer(peer))}
           />
         );
       case "profile":
@@ -593,7 +629,7 @@ export default function App() {
             }}
             onRemovePlan={removePlanFromMine}
             onToggleFollow={toggleFollowing}
-            onMessageProfile={openChatWithPeer}
+            onMessageProfile={(peer) => openChatWithPeer(remoteProfiles[peer.id] ? asRealPeer(peer) : peer)}
             profile={viewedProfile}
             plans={viewedPlans}
             isMe={isCurrentUserProfile}

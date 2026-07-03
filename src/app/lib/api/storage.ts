@@ -14,17 +14,62 @@ const getExtension = (file: File) => {
   return "jpg";
 };
 
+const shouldCompressImage = (file: File) =>
+  ["image/jpeg", "image/png", "image/webp", "image/bmp"].includes(file.type);
+
+const loadImage = (url: string) =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Image decode failed"));
+    image.src = url;
+  });
+
+const compressPhoto = async (file: File): Promise<File> => {
+  if (!shouldCompressImage(file)) return file;
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await loadImage(objectUrl);
+    const longestSide = Math.max(image.naturalWidth, image.naturalHeight);
+    if (!longestSide) return file;
+
+    const scale = Math.min(1, 1280 / longestSide);
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+
+    context.drawImage(image, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/jpeg", 0.8);
+    });
+    if (!blob) return file;
+
+    return new File([blob], "photo.jpg", { type: "image/jpeg" });
+  } catch (error) {
+    console.error("Photo compression failed; uploading original file.", error);
+    return file;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+};
+
 export const uploadPhoto = async (file: File): Promise<string | null> => {
   if (!supabase) {
     console.error("Supabase photo upload failed: Supabase client is not configured.");
     return null;
   }
 
-  const extension = getExtension(file);
+  const uploadFile = await compressPhoto(file);
+  const extension = getExtension(uploadFile);
   const fileName = `${Date.now()}-${crypto.randomUUID()}.${extension}`;
 
   try {
-    const { error } = await supabase.storage.from("photos").upload(fileName, file);
+    const { error } = await supabase.storage.from("photos").upload(fileName, uploadFile);
     if (error) {
       console.error("Supabase photo upload failed:", error.message, error);
       return null;

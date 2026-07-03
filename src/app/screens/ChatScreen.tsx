@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, MessageCircle, Search, Send, X } from "lucide-react";
+import { ArrowLeft, Check, CheckCheck, MessageCircle, Search, Send, X } from "lucide-react";
 import type { ChatMessage, ChatPeer, ChatThread } from "@/app/types";
 import { GREEN, GREEN_LIGHT, UNSPLASH } from "@/app/data/constants";
-import { fetchMessages, makeThreadId, sendMessage, subscribeToThread, type MessageRow } from "@/app/lib/api/chat";
+import { fetchMessages, makeThreadId, markThreadMessagesRead, sendMessage, subscribeToThread, type MessageRow } from "@/app/lib/api/chat";
+import { searchProfiles } from "@/app/lib/api/profiles";
+import { sanitizeImageUrl } from "@/app/lib/api/storage";
 
 const QUICK_MESSAGES = [
   "Привет! Готов(а) начать?",
@@ -19,6 +21,8 @@ const mapMessageRow = (message: MessageRow, currentUserId: string): ChatMessage 
   sender: message.sender_id === currentUserId ? "me" : "peer",
   text: message.text,
   createdAt: new Date(message.created_at).getTime(),
+  readAt: message.read_at ? new Date(message.read_at).getTime() : null,
+  status: "sent",
 });
 
 function PeerAvatar({ peer, size = 44 }: { peer: ChatPeer; size?: number }) {
@@ -37,23 +41,57 @@ function PeerAvatar({ peer, size = 44 }: { peer: ChatPeer; size?: number }) {
 export function ChatsScreen({
   threads,
   onOpenThread,
+  currentUserId,
   availablePeers = [],
 }: {
   threads: ChatThread[];
   onOpenThread: (peer: ChatPeer) => void;
+  currentUserId: string;
   availablePeers?: ChatPeer[];
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [remotePeers, setRemotePeers] = useState<ChatPeer[]>([]);
   const normalizedQuery = query.trim().toLowerCase();
   const visibleThreads = [...threads].sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || b.updatedAt - a.updatedAt);
   const matchingThreads = normalizedQuery
     ? visibleThreads.filter((thread) => thread.peer.name.toLowerCase().includes(normalizedQuery))
     : visibleThreads;
   const existingPeerIds = new Set(threads.map((thread) => thread.peer.id));
+  useEffect(() => {
+    if (!normalizedQuery) {
+      setRemotePeers([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadProfiles = async () => {
+      try {
+        const profiles = await searchProfiles(normalizedQuery);
+        if (cancelled) return;
+        setRemotePeers(profiles
+          .filter((profile) => profile.id !== currentUserId)
+          .map((profile) => ({
+            id: profile.id,
+            name: profile.name,
+            avatarUrl: sanitizeImageUrl(profile.photoUrl),
+            realUser: true,
+          })));
+      } catch (error) {
+        console.error("Supabase chat profile search failed", error);
+      }
+    };
+
+    void loadProfiles();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, normalizedQuery]);
+
   const newPeerMatches = normalizedQuery
-    ? availablePeers
+    ? [...remotePeers, ...availablePeers]
         .filter((peer) => !existingPeerIds.has(peer.id))
+        .filter((peer, index, items) => items.findIndex((item) => item.id === peer.id) === index)
         .filter((peer) => peer.name.toLowerCase().includes(normalizedQuery))
     : [];
 
@@ -156,14 +194,16 @@ export function ChatScreen({
   onBack,
   onSendMessage,
   onReceiveRemoteMessage,
+  onConfirmRemoteMessage,
 }: {
   peer: ChatPeer;
   messages: ChatMessage[];
   currentUserId: string;
   myAvatarUrl: string | null;
   onBack: () => void;
-  onSendMessage: (peer: ChatPeer, text: string, sender: ChatMessage["sender"]) => void;
+  onSendMessage: (peer: ChatPeer, text: string, sender: ChatMessage["sender"], status?: ChatMessage["status"]) => ChatMessage | null;
   onReceiveRemoteMessage: (peer: ChatPeer, message: ChatMessage) => void;
+  onConfirmRemoteMessage: (peer: ChatPeer, localId: string, message: ChatMessage) => void;
 }) {
   const [text, setText] = useState("");
   const [typing, setTyping] = useState(false);
@@ -187,6 +227,7 @@ export function ChatScreen({
         rows.forEach((row) => {
           onReceiveRemoteMessage(peer, mapMessageRow(row, currentUserId));
         });
+        await markThreadMessagesRead(threadId, currentUserId);
       } catch (error) {
         console.error("Supabase chat fetch failed", error);
       }
@@ -195,6 +236,11 @@ export function ChatScreen({
     void loadMessages();
     const unsubscribe = subscribeToThread(threadId, (message) => {
       if (message.sender_id === currentUserId) return;
+      onReceiveRemoteMessage(peer, mapMessageRow(message, currentUserId));
+      void markThreadMessagesRead(threadId, currentUserId).catch((error) => {
+        console.error("Supabase chat mark read failed", error);
+      });
+    }, (message) => {
       onReceiveRemoteMessage(peer, mapMessageRow(message, currentUserId));
     });
 
@@ -211,11 +257,13 @@ export function ChatScreen({
   const send = (value: string) => {
     const body = value.trim();
     if (!body) return;
-    onSendMessage(peer, body, "me");
+    const localMessage = onSendMessage(peer, body, "me", isRealPeer ? "sending" : undefined);
     setText("");
 
     if (isRealPeer && threadId) {
-      void sendMessage({ threadId, senderId: currentUserId, text: body, photoUrl: null }).catch((error) => {
+      void sendMessage({ threadId, senderId: currentUserId, text: body, photoUrl: null }).then((message) => {
+        if (message && localMessage) onConfirmRemoteMessage(peer, localMessage.id, mapMessageRow(message, currentUserId));
+      }).catch((error) => {
         console.error("Supabase chat send failed", error);
       });
     }
@@ -261,7 +309,12 @@ export function ChatScreen({
                   style={mine ? { backgroundColor: GREEN, color: "#fff" } : { backgroundColor: "var(--card)", color: "var(--foreground)" }}
                 >
                   <p className="text-[14px] leading-5">{message.text}</p>
-                  <p className={`mt-1 text-right text-[10px] ${mine ? "text-white/70" : "text-muted-foreground"}`}>{formatChatTime(message.createdAt)}</p>
+                  <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${mine ? "text-white/70" : "text-muted-foreground"}`}>
+                    <span>{formatChatTime(message.createdAt)}</span>
+                    {mine && isRealPeer && message.status === "sent" && (
+                      message.readAt ? <CheckCheck size={12} strokeWidth={2.2} /> : <Check size={12} strokeWidth={2.2} />
+                    )}
+                  </div>
                 </div>
                 {mine && <PeerAvatar peer={myPeer} size={28} />}
               </div>

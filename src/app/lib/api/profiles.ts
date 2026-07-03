@@ -35,7 +35,7 @@ export const mapRowToProfile = (row: ProfileRow): ExpertProfile => {
   const photoUrl = sanitizeImageUrl(row.photo_url);
   const photoUrls = sanitizePhotoUrls(row.photo_urls);
 
-  return {
+  const profile: ExpertProfile = {
     ...expertProfile,
     id: row.id,
     telegramId: row.telegram_id ?? Number(row.id),
@@ -50,6 +50,8 @@ export const mapRowToProfile = (row: ProfileRow): ExpertProfile => {
     isMe: true,
     isFollowedByMe: false,
   };
+  delete profile.cannedReplies;
+  return profile;
 };
 
 export const upsertProfile = async (profile: ExpertProfile) => {

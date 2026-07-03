@@ -27,6 +27,7 @@ export interface ChatPeer {
   name: string;
   avatarUrl: string | null;
   cannedReplies?: string[];
+  realUser?: boolean;
 }
 
 export interface ChatMessage {
@@ -34,6 +35,8 @@ export interface ChatMessage {
   sender: "me" | "peer";
   text: string;
   createdAt: number;
+  readAt?: number | null;
+  status?: "sending" | "sent";
 }
 
 export interface ChatThread {

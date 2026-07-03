@@ -7,6 +7,7 @@ export type MessageRow = {
   text: string;
   photo_url: string | null;
   created_at: string;
+  read_at: string | null;
 };
 
 export type SendMessageInput = {
@@ -23,7 +24,7 @@ export const fetchMessages = async (threadId: string): Promise<MessageRow[]> => 
 
   const { data, error } = await supabase
     .from("messages")
-    .select("id, thread_id, sender_id, text, photo_url, created_at")
+    .select("id, thread_id, sender_id, text, photo_url, created_at, read_at")
     .eq("thread_id", threadId)
     .order("created_at", { ascending: true })
     .returns<MessageRow[]>();
@@ -43,14 +44,31 @@ export const sendMessage = async (input: SendMessageInput): Promise<MessageRow |
       text: input.text,
       photo_url: input.photoUrl ?? null,
     })
-    .select("id, thread_id, sender_id, text, photo_url, created_at")
+    .select("id, thread_id, sender_id, text, photo_url, created_at, read_at")
     .single<MessageRow>();
 
   if (error) throw error;
   return data;
 };
 
-export const subscribeToThread = (threadId: string, onMessage: (message: MessageRow) => void) => {
+export const markThreadMessagesRead = async (threadId: string, currentUserId: string) => {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from("messages")
+    .update({ read_at: new Date().toISOString() })
+    .eq("thread_id", threadId)
+    .neq("sender_id", currentUserId)
+    .is("read_at", null);
+
+  if (error) throw error;
+};
+
+export const subscribeToThread = (
+  threadId: string,
+  onMessage: (message: MessageRow) => void,
+  onMessageUpdate?: (message: MessageRow) => void,
+) => {
   if (!supabase) return () => undefined;
 
   const channel = supabase
@@ -60,6 +78,13 @@ export const subscribeToThread = (threadId: string, onMessage: (message: Message
       { event: "INSERT", schema: "public", table: "messages", filter: `thread_id=eq.${threadId}` },
       (payload) => {
         onMessage(payload.new as MessageRow);
+      },
+    )
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "messages", filter: `thread_id=eq.${threadId}` },
+      (payload) => {
+        onMessageUpdate?.(payload.new as MessageRow);
       },
     )
     .subscribe();
