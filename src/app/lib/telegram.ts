@@ -5,6 +5,7 @@ declare global {
         ready: () => void;
         expand: () => void;
         initDataUnsafe: {
+          start_param?: string;
           user?: {
             id: number;
             first_name: string;
@@ -17,6 +18,14 @@ declare global {
     };
   }
 }
+
+export const BOT_USERNAME = "BOT_USERNAME_PLACEHOLDER";
+export const APP_NAME = "APP_NAME_PLACEHOLDER";
+
+export const buildPlanStartAppUrl = (planId: string) =>
+  `https://t.me/${BOT_USERNAME}/${APP_NAME}?startapp=plan_${encodeURIComponent(planId)}`;
+
+export const getTelegramStartParam = () => window.Telegram?.WebApp?.initDataUnsafe?.start_param ?? "";
 
 export function getTelegramUser() {
   // MVP only: initDataUnsafe is not HMAC-validated on the client.

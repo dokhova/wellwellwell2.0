@@ -282,8 +282,28 @@ export function EventDetailScreen({
     });
   };
 
+  const copyText = async (value: string) => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable");
+      await navigator.clipboard?.writeText(value);
+      return true;
+    } catch {
+      const input = document.createElement("textarea");
+      input.value = value;
+      input.setAttribute("readonly", "");
+      input.style.position = "fixed";
+      input.style.left = "-9999px";
+      document.body.appendChild(input);
+      input.select();
+      const copiedFallback = document.execCommand("copy");
+      document.body.removeChild(input);
+      return copiedFallback;
+    }
+  };
+
   const copyShareLink = async () => {
-    await navigator.clipboard?.writeText(shareUrl ?? `https://wellwellwell.app/plans/${encodeURIComponent(title)}`);
+    if (!shareUrl) return;
+    await copyText(shareUrl);
     setCopied(true);
   };
 
@@ -343,16 +363,18 @@ export function EventDetailScreen({
                   <Eye size={16} strokeWidth={2} color="#fff" />
                 </button>
               )}
-              <button
-                onClick={() => {
-                  setCopied(false);
-                  setSheet("share");
-                }}
-                className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-black/50 active:opacity-85"
-                aria-label="Поделиться"
-              >
-                <Share2 size={16} strokeWidth={2} color="#fff" />
-              </button>
+              {shareUrl && (
+                <button
+                  onClick={() => {
+                    setCopied(false);
+                    setSheet("share");
+                  }}
+                  className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-black/50 active:opacity-85"
+                  aria-label="Поделиться"
+                >
+                  <Share2 size={16} strokeWidth={2} color="#fff" />
+                </button>
+              )}
             </div>
             <div className="absolute inset-x-4 bottom-[18px] flex flex-col items-center text-center">
               <div className="flex -space-x-2">
@@ -527,7 +549,7 @@ export function EventDetailScreen({
         </HomeSheet>
       )}
 
-      {sheet === "share" && (
+      {sheet === "share" && shareUrl && (
         <HomeSheet title="Поделиться" onClose={() => setSheet(null)}>
           <button
             onClick={copyShareLink}

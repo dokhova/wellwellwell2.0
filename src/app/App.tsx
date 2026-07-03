@@ -10,8 +10,8 @@ import { fetchProfile, fetchProfilesByIds, upsertProfile } from "@/app/lib/api/p
 import { fetchFollowers, fetchFollowing, follow, unfollow } from "@/app/lib/api/follows";
 import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { fetchUserThreadMessages, makeThreadId, sendMessage, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
-import { countJoined, createPlanRemote, deletePlanParticipant, deletePlanRemote, fetchParticipants, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, upsertPlanParticipant } from "@/app/lib/api/plans";
-import { getTelegramUser, initTelegram } from "@/app/lib/telegram";
+import { countJoined, createPlanRemote, deletePlanParticipant, deletePlanRemote, fetchParticipants, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, upsertPlanParticipant } from "@/app/lib/api/plans";
+import { buildPlanStartAppUrl, getTelegramStartParam, getTelegramUser, initTelegram } from "@/app/lib/telegram";
 import { HomeScreen } from "@/app/screens/HomeScreen";
 import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
 import { CreateScreen, type CreatedPlanResult } from "@/app/screens/CreateScreen";
@@ -136,6 +136,9 @@ const getParticipantsCount = (plan: HomeFeedPlan) => {
 
 const planKey = (id: PlanId) => String(id);
 const isDemoCommunityPlanId = (id: PlanId) => demoCommunityPlanIds.has(planKey(id));
+const isRemotePlanId = (id: PlanId) => typeof id === "string" && !isDemoCommunityPlanId(id);
+const getPlanDeepLink = (plan: HomeFeedPlan) =>
+  isDemoCommunityPlanId(plan.id) || isRemotePlanId(plan.id) ? buildPlanStartAppUrl(planKey(plan.id)) : undefined;
 
 const seededRank = (value: string) => {
   let hash = 0;
@@ -300,6 +303,8 @@ export default function App() {
   const [viewingOwnProfile, setViewingOwnProfile] = useState(true);
   const [viewingExpertId, setViewingExpertId] = useState("gena");
   const [refreshTick, setRefreshTick] = useState(0);
+  const [startParamHandled, setStartParamHandled] = useState(false);
+  const [appToast, setAppToast] = useState("");
   const [moderatorHiddenPlanIds, setModeratorHiddenPlanIds] = useState<PlanId[]>([]);
   const [remoteProfiles, setRemoteProfiles] = useState<Record<string, ExpertProfile>>({});
   const [feedShuffleSeed] = useState(() => crypto.randomUUID());
@@ -666,6 +671,60 @@ export default function App() {
       console.error("Supabase profile connections fetch failed", error);
     });
   }, [loadConnectionSets, profileConnectionsOwnerId, refreshTick, screen]);
+
+  useEffect(() => {
+    if (startParamHandled) return;
+    const startParam = getTelegramStartParam();
+    const match = startParam.match(/^plan_(.+)$/);
+    if (!match) {
+      setStartParamHandled(true);
+      return;
+    }
+
+    let cancelled = false;
+    const rawPlanId = decodeURIComponent(match[1]);
+    const openStartPlan = async () => {
+      const localPlan = allPlanDetails.find((plan) => planKey(plan.id) === rawPlanId);
+      if (localPlan) {
+        setActivePlanId(localPlan.id);
+        setPlanEventOrigin("home");
+        setPreviousScreen("home");
+        setScreen("planEvent");
+        setStartParamHandled(true);
+        return;
+      }
+
+      try {
+        const remotePlan = await fetchPlan(rawPlanId);
+        if (cancelled) return;
+        if (!remotePlan || remotePlan.hidden) {
+          setAppToast("План не найден или удалён");
+          window.setTimeout(() => setAppToast(""), 2400);
+          setStartParamHandled(true);
+          return;
+        }
+        const sanitizedPlan = sanitizePlan(remotePlan);
+        setRemotePublicPlans((plans) => plans.some((plan) => planKey(plan.id) === planKey(sanitizedPlan.id)) ? plans : [sanitizedPlan, ...plans]);
+        setActivePlanId(sanitizedPlan.id);
+        setPlanEventOrigin("home");
+        setPreviousScreen("home");
+        setScreen("planEvent");
+      } catch (error) {
+        console.error("Supabase startapp plan fetch failed", error);
+        if (!cancelled) {
+          setAppToast("План не найден или удалён");
+          window.setTimeout(() => setAppToast(""), 2400);
+        }
+      } finally {
+        if (!cancelled) setStartParamHandled(true);
+      }
+    };
+
+    void openStartPlan();
+    return () => {
+      cancelled = true;
+    };
+  }, [allPlanDetails, startParamHandled]);
 
   useEffect(() => {
     if (screen !== "profile" || viewingOwnProfile || isDemoProfileId(viewingExpertId)) return;
@@ -1452,7 +1511,7 @@ export default function App() {
               backgroundGradient={feedPlan.gradient}
               tag={feedPlan.tag}
               schedule={feedPlan.schedule}
-              shareUrl={feedPlan.shareUrl}
+              shareUrl={getPlanDeepLink(feedPlan)}
               participantAvatars={participantAvatars}
               participantsLabel={participantCount === 0 ? "0 чел." : `${participantCount} чел.`}
               authorName={feedPlan.author.name}
@@ -1507,6 +1566,14 @@ export default function App() {
       className="flex flex-col w-full h-screen overflow-hidden bg-white"
       style={{ fontFamily: "var(--font-sans)", height: "100dvh" }}
     >
+      {appToast && (
+        <div
+          className="fixed left-1/2 z-50 -translate-x-1/2 rounded-full px-4 py-2 text-[14px] font-medium text-white shadow-lg"
+          style={{ top: "calc(env(safe-area-inset-top) + 14px)", backgroundColor: GREEN }}
+        >
+          {appToast}
+        </div>
+      )}
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         {renderScreen()}
       </div>
