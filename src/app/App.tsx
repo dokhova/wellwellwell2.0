@@ -10,7 +10,7 @@ import { fetchProfile, fetchProfilesByIds, upsertProfile } from "@/app/lib/api/p
 import { fetchFollowers, fetchFollowing, follow, unfollow } from "@/app/lib/api/follows";
 import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { fetchUserThreadMessages, makeThreadId, sendMessage, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
-import { countJoined, createPlanRemote, deletePlanParticipant, fetchParticipants, fetchPlansByAuthor, fetchPublicPlans, upsertPlanParticipant } from "@/app/lib/api/plans";
+import { countJoined, createPlanRemote, deletePlanParticipant, fetchParticipants, fetchPlansByAuthor, fetchPublicPlans, subscribeToPlanParticipants, upsertPlanParticipant } from "@/app/lib/api/plans";
 import { getTelegramUser, initTelegram } from "@/app/lib/telegram";
 import { HomeScreen } from "@/app/screens/HomeScreen";
 import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
@@ -292,6 +292,7 @@ export default function App() {
   const [highlightedPlanId, setHighlightedPlanId] = useState<PlanId | null>(null);
   const [viewingOwnProfile, setViewingOwnProfile] = useState(true);
   const [viewingExpertId, setViewingExpertId] = useState("gena");
+  const [refreshTick, setRefreshTick] = useState(0);
   const [remoteProfiles, setRemoteProfiles] = useState<Record<string, ExpertProfile>>({});
   const [feedShuffleSeed] = useState(() => crypto.randomUUID());
   const [editableProfile, setEditableProfile] = useState<ExpertProfile>(() =>
@@ -306,6 +307,7 @@ export default function App() {
   const [remotePublicPlans, setRemotePublicPlans] = useState<HomeFeedPlan[]>([]);
   const [profileRemotePlans, setProfileRemotePlans] = useState<Record<string, HomeFeedPlan[]>>({});
   const [joinedCounts, setJoinedCounts] = useState<Record<string, number>>({});
+  const [joinedParticipantPeers, setJoinedParticipantPeers] = useState<Record<string, ChatPeer[]>>({});
   const [deletedPlanIds, setDeletedPlanIds] = useState<PlanId[]>(() => readJson(deletedPlansStorageKey, []));
   const [myFollowing, setMyFollowing] = useState<ExpertConnection[]>(() => readJson<ExpertConnection[]>(followingStorageKey, []).map(sanitizeConnection));
   const [dbFollowing, setDbFollowing] = useState<ExpertConnection[]>([]);
@@ -337,14 +339,12 @@ export default function App() {
   const deletedPlanIdSet = new Set(deletedPlanIds.map(planKey));
   const isJoinedPlan = (id: PlanId) => myParticipantIds.some((item) => planKey(item.id) === planKey(id));
   const demoPlansWithParticipants = demoCommunityPlans.map((plan) => {
-    const joinedCount = joinedCounts[planKey(plan.id)] ?? 0;
-    const participants = isJoinedPlan(plan.id) && editableProfile.photoUrl
-      ? [...plan.participants, editableProfile.photoUrl]
-      : plan.participants;
+    const joinedPeers = joinedParticipantPeers[planKey(plan.id)] ?? [];
+    const joinedAvatars = joinedPeers.map((peer) => peer.avatarUrl).filter((url): url is string => Boolean(url));
     return {
       ...plan,
-      participants,
-      participantsLabel: `${plan.participants.length + joinedCount} чел.`,
+      participants: [...plan.participants, ...joinedAvatars],
+      participantsLabel: `${plan.participants.length + joinedPeers.length} чел.`,
     };
   });
   const remotePlansWithCounts = remotePublicPlans.map((plan) => {
@@ -398,6 +398,39 @@ export default function App() {
       isFollowedByMe: followed,
     })), []);
 
+  const loadPlanParticipants = useCallback(async (planId: PlanId) => {
+    const id = planKey(planId);
+    const rows = await fetchParticipants(id);
+    const joinedRows = rows.filter((row) => row.status === "joined");
+    const joinedIds = Array.from(new Set(joinedRows.map((row) => row.user_id)));
+    const remoteIds = joinedIds.filter((userId) => userId !== currentUserId && !isDemoProfileId(userId));
+    const profiles = await fetchProfilesByIds(remoteIds);
+    const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+    const peers = joinedIds.map((userId) => {
+      if (userId === currentUserId) {
+        return {
+          id: currentUserId,
+          name: currentAuthor.name,
+          avatarUrl: currentAuthor.avatarUrl,
+          realUser: true,
+        } satisfies ChatPeer;
+      }
+      const profile = profileById.get(userId);
+      return {
+        id: userId,
+        name: profile?.name ?? "Участник",
+        avatarUrl: sanitizeImageUrl(profile?.photoUrl ?? null),
+        realUser: true,
+      } satisfies ChatPeer;
+    });
+    setJoinedParticipantPeers((items) => ({ ...items, [id]: peers }));
+    setJoinedCounts((items) => ({ ...items, [id]: joinedIds.length }));
+    if (joinedIds.includes(currentUserId)) {
+      const ref = { kind: "plan", id } satisfies ParticipantPlanRef;
+      setMyParticipantIds((items) => items.some((item) => participantKey(item) === participantKey(ref)) ? items : [ref, ...items]);
+    }
+  }, [currentAuthor.avatarUrl, currentAuthor.name, currentUserId]);
+
   const mergeRemoteThreads = useCallback((rows: MessageRow[], profiles: ExpertProfile[] = []) => {
     const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
     const rowsByThread = new Map<string, MessageRow[]>();
@@ -446,6 +479,16 @@ export default function App() {
   useEffect(() => initTelegram(), []);
 
   useEffect(() => {
+    const refreshVisibleScreen = () => {
+      if (document.visibilityState === "visible") {
+        setRefreshTick((value) => value + 1);
+      }
+    };
+    document.addEventListener("visibilitychange", refreshVisibleScreen);
+    return () => document.removeEventListener("visibilitychange", refreshVisibleScreen);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     const loadRemotePlans = async () => {
       try {
@@ -454,7 +497,12 @@ export default function App() {
         const publicRemotePlans = plans.map(sanitizePlan);
         setRemotePublicPlans(publicRemotePlans);
         const countEntries = await Promise.all(publicRemotePlans.map(async (plan) => [planKey(plan.id), await countJoined(planKey(plan.id))] as const));
-        if (!cancelled) setJoinedCounts(Object.fromEntries(countEntries));
+        if (!cancelled) {
+          setJoinedCounts((items) => ({
+            ...items,
+            ...Object.fromEntries(countEntries),
+          }));
+        }
       } catch (error) {
         console.error("Supabase public plans fetch failed", error);
       }
@@ -464,7 +512,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshTick, screen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -498,7 +546,23 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [currentUserId]);
+  }, [currentUserId, refreshTick]);
+
+  useEffect(() => {
+    if (screen !== "planEvent") return;
+    void loadPlanParticipants(activePlanId).catch((error) => {
+      console.error("Supabase plan participants fetch failed", error);
+    });
+  }, [activePlanId, loadPlanParticipants, refreshTick, screen]);
+
+  useEffect(() => {
+    if (screen !== "planEvent") return;
+    return subscribeToPlanParticipants(planKey(activePlanId), () => {
+      void loadPlanParticipants(activePlanId).catch((error) => {
+        console.error("Supabase plan participants realtime refresh failed", error);
+      });
+    });
+  }, [activePlanId, loadPlanParticipants, screen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -630,7 +694,7 @@ export default function App() {
       cancelled = true;
       unsubscribe();
     };
-  }, [currentUserId, localPeerById, mergeRemoteThreads, remoteProfiles, screen]);
+  }, [currentUserId, localPeerById, mergeRemoteThreads, refreshTick, remoteProfiles, screen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -849,15 +913,21 @@ export default function App() {
     const plan = allPlans.find((item) => planKey(item.id) === planKey(id));
     const ref = { kind: plan?.kind ?? "plan", id } satisfies ParticipantPlanRef;
     const key = participantKey(ref);
+    const idKey = planKey(id);
+    const currentPeer = { id: currentUserId, name: currentAuthor.name, avatarUrl: currentAuthor.avatarUrl, realUser: true } satisfies ChatPeer;
+    const wasJoined = myParticipantIds.some((item) => participantKey(item) === key);
     setMyParticipantIds((ids) => ids.some((item) => participantKey(item) === key) ? ids : [ref, ...ids]);
-    if (isDemoCommunityPlanId(id)) {
-      setJoinedCounts((items) => ({ ...items, [planKey(id)]: (items[planKey(id)] ?? 0) + 1 }));
-      void upsertPlanParticipant(planKey(id), currentUserId, "joined").catch((error) => {
-        console.error("Supabase demo plan join failed", error);
-        setMyParticipantIds((ids) => ids.filter((item) => participantKey(item) !== key));
-        setJoinedCounts((items) => ({ ...items, [planKey(id)]: Math.max(0, (items[planKey(id)] ?? 1) - 1) }));
-      });
-    }
+    setJoinedParticipantPeers((items) => ({
+      ...items,
+      [idKey]: items[idKey]?.some((peer) => peer.id === currentUserId) ? items[idKey] : [...(items[idKey] ?? []), currentPeer],
+    }));
+    if (!wasJoined) setJoinedCounts((items) => ({ ...items, [idKey]: (items[idKey] ?? 0) + 1 }));
+    void upsertPlanParticipant(idKey, currentUserId, "joined").catch((error) => {
+      console.error("Supabase plan join failed", error);
+      setMyParticipantIds((ids) => ids.filter((item) => participantKey(item) !== key));
+      setJoinedParticipantPeers((items) => ({ ...items, [idKey]: (items[idKey] ?? []).filter((peer) => peer.id !== currentUserId) }));
+      if (!wasJoined) setJoinedCounts((items) => ({ ...items, [idKey]: Math.max(0, (items[idKey] ?? 1) - 1) }));
+    });
   };
 
   const addPlanToMine = (id: PlanId) => {
@@ -876,11 +946,19 @@ export default function App() {
     setMyParticipantIds((ids) => ids.filter((item) => !idsToRemove.has(planKey(item.id))));
     setCheckedItemKeys((keys) => keys.filter((key) => !Array.from(idsToRemove).some((planId) => key.endsWith(`:${planId}`))));
     idsToRemove.forEach((planId) => {
-      if (!isDemoCommunityPlanId(planId)) return;
+      const removedRef = { kind: "plan", id: planId } satisfies ParticipantPlanRef;
+      const removedKey = participantKey(removedRef);
+      const wasJoined = myParticipantIds.some((item) => participantKey(item) === removedKey);
+      const currentPeer = { id: currentUserId, name: currentAuthor.name, avatarUrl: currentAuthor.avatarUrl, realUser: true } satisfies ChatPeer;
+      setJoinedParticipantPeers((items) => ({ ...items, [planId]: (items[planId] ?? []).filter((peer) => peer.id !== currentUserId) }));
       setJoinedCounts((items) => ({ ...items, [planId]: Math.max(0, (items[planId] ?? 1) - 1) }));
       void deletePlanParticipant(planId, currentUserId).catch((error) => {
-        console.error("Supabase demo plan leave failed", error);
-        setMyParticipantIds((ids) => ids.some((item) => planKey(item.id) === planId) ? ids : [{ kind: "plan", id: planId }, ...ids]);
+        console.error("Supabase plan leave failed", error);
+        if (wasJoined) setMyParticipantIds((ids) => ids.some((item) => participantKey(item) === removedKey) ? ids : [removedRef, ...ids]);
+        setJoinedParticipantPeers((items) => ({
+          ...items,
+          [planId]: items[planId]?.some((peer) => peer.id === currentUserId) ? items[planId] : [...(items[planId] ?? []), currentPeer],
+        }));
         setJoinedCounts((items) => ({ ...items, [planId]: (items[planId] ?? 0) + 1 }));
       });
     });
@@ -1144,14 +1222,19 @@ export default function App() {
       case "planEvent": {
         const feedPlan = allPlanDetails.find(plan => plan.id === activePlanId);
         if (feedPlan) {
-          const participantsCount = Number.parseInt(feedPlan.participantsLabel, 10) || feedPlan.participants.length;
           const isDemoPlan = isDemoCommunityPlanId(feedPlan.id);
-          const participantItems = isDemoPlan
-            ? [
-                ...getDemoCommunityParticipantPeers(planKey(feedPlan.id)),
-                ...(isJoinedPlan(feedPlan.id) && currentAuthor.avatarUrl ? [{ id: currentUserId, name: currentAuthor.name, avatarUrl: currentAuthor.avatarUrl, realUser: true }] : []),
-              ]
-            : participantChatPeers;
+          const joinedPeers = joinedParticipantPeers[planKey(feedPlan.id)] ?? [];
+          const baseParticipantItems = isDemoPlan
+            ? getDemoCommunityParticipantPeers(planKey(feedPlan.id))
+            : feedPlan.participants.map((avatarUrl, index) => ({
+                id: `${planKey(feedPlan.id)}-participant-${index}`,
+                name: "Участник",
+                avatarUrl,
+              }));
+          const participantItems = [...baseParticipantItems, ...joinedPeers]
+            .filter((participant, index, items) => items.findIndex((item) => item.id === participant.id) === index);
+          const participantAvatars = participantItems.map((participant) => participant.avatarUrl).filter((url): url is string => Boolean(url));
+          const participantCount = participantItems.length;
           return (
             <EventDetailScreen
               title={feedPlan.isChallenge ? `Челлендж: ${feedPlan.title}` : feedPlan.title}
@@ -1160,8 +1243,8 @@ export default function App() {
               tag={feedPlan.tag}
               schedule={feedPlan.schedule}
               shareUrl={feedPlan.shareUrl}
-              participantAvatars={feedPlan.participants}
-              participantsLabel={feedPlan.participantsLabel}
+              participantAvatars={participantAvatars}
+              participantsLabel={participantCount === 0 ? "0 чел." : `${participantCount} чел.`}
               authorName={feedPlan.author.name}
               authorAvatarUrl={feedPlan.author.avatarUrl}
               authorId={feedPlan.author.id}
@@ -1172,8 +1255,8 @@ export default function App() {
                 time: feedPlan.timeDate,
                 location: feedPlan.address ?? "",
                 locationSub: "",
-                participants: participantsCount,
-                plusN: participantsCount > feedPlan.participants.length ? `+${participantsCount - feedPlan.participants.length}` : "",
+                participants: participantCount,
+                plusN: participantCount > participantAvatars.length ? `+${participantCount - participantAvatars.length}` : "",
                 joinLabel: "Присоединиться",
               }}
               format={feedPlan.format}
@@ -1190,6 +1273,7 @@ export default function App() {
               currentAuthor={currentAuthor}
               canDelete={feedPlan.author.id === currentUserId}
               onDelete={() => deletePlan(feedPlan.id)}
+              refreshKey={refreshTick}
             />
           );
         }

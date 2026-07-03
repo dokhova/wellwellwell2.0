@@ -187,9 +187,8 @@ export function CreateScreen({
     }
 
     const id = Date.now();
-    const selectedAvatars = selectedParticipantItems.map((person) => person.avatarUrl).filter((url): url is string => Boolean(url));
-    const participantAvatars = [currentAuthor.avatarUrl, ...selectedAvatars].filter((url): url is string => Boolean(url));
-    const participantCount = Math.max(1, new Set([currentAuthor.id ?? "me", ...selectedParticipants]).size);
+    const participantAvatars = [currentAuthor.avatarUrl].filter((url): url is string => Boolean(url));
+    const participantCount = 1;
     const newPlan: HomeFeedPlan = {
       id,
       kind: "plan",

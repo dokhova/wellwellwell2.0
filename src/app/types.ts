@@ -150,6 +150,7 @@ export interface EventDetailProps {
   };
   canDelete?: boolean;
   onDelete?: () => void;
+  refreshKey?: number;
 }
 
 export type Period = "День" | "Неделя" | "Месяц";

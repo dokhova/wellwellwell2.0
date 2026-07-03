@@ -138,3 +138,20 @@ export const deletePlanParticipant = async (planId: string, userId: string) => {
 
   if (error) throw error;
 };
+
+export const subscribeToPlanParticipants = (planId: string, onChange: () => void) => {
+  if (!supabase) return () => {};
+
+  const channel = supabase
+    .channel(`plan-participants:${planId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "plan_participants", filter: `plan_id=eq.${planId}` },
+      () => onChange()
+    )
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+};

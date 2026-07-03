@@ -129,7 +129,7 @@ export function EventDetailScreen({
   readTime, badgeDate, paragraphs, meta, format = "offline", duration, tag, schedule, shareUrl,
   participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, planId, onJoin, onLeave, onProfile,
   authorId, onMessageAuthor, participantItems, onMessageParticipant,
-  currentAuthor, canDelete = false, onDelete,
+  currentAuthor, canDelete = false, onDelete, refreshKey,
 }: EventDetailProps) {
   void authorVerified;
   void readTime;
@@ -144,6 +144,9 @@ export function EventDetailScreen({
   const [copied, setCopied] = useState(false);
   const description = paragraphs.join("\n\n");
   const participantAvatars = planParticipantAvatars?.length ? planParticipantAvatars : DETAIL_AVATARS;
+  const participants = participantItems?.length
+    ? participantItems
+    : participantAvatars.map((url, index) => ({ id: `participant-${index}`, name: "Участник", avatarUrl: url }));
   const organizerAction = onProfile ?? (() => setSheet("profile"));
   const needsDescriptionClamp = description.length > 260;
   const formatLabel = format === "online" ? "Онлайн" : "Офлайн";
@@ -220,7 +223,12 @@ export function EventDetailScreen({
     const loadComments = async () => {
       try {
         const rows = await fetchComments(String(planId));
-        if (!cancelled) setComments((localItems) => [...localItems, ...rows.map(mapCommentRow)]);
+        if (!cancelled) {
+          setComments((localItems) => [
+            ...localItems.filter((item) => !item.persisted),
+            ...rows.map(mapCommentRow),
+          ]);
+        }
       } catch (error) {
         console.error("Supabase comments fetch failed", error);
       }
@@ -230,7 +238,7 @@ export function EventDetailScreen({
     return () => {
       cancelled = true;
     };
-  }, [planId]);
+  }, [planId, refreshKey]);
 
   const sendComment = () => {
     const text = comment.trim();
@@ -336,8 +344,12 @@ export function EventDetailScreen({
             </div>
             <div className="absolute inset-x-4 bottom-[18px] flex flex-col items-center text-center">
               <div className="flex -space-x-2">
-                {participantAvatars.slice(0, 4).map((url, i) => (
-                  <img loading="lazy" decoding="async" key={i} src={url} alt="" className="h-[30px] w-[30px] rounded-full border-2 border-white object-cover" />
+                {participants.slice(0, 4).map((participant, i) => (
+                  participant.avatarUrl ? (
+                    <img loading="lazy" decoding="async" key={participant.id ?? i} src={participant.avatarUrl} alt="" className="h-[30px] w-[30px] rounded-full border-2 border-white object-cover" />
+                  ) : (
+                    <span key={participant.id ?? i} className="h-[30px] w-[30px] rounded-full border-2 border-white bg-white/30" />
+                  )
                 ))}
               </div>
               <p className="mt-1.5 text-[12px] leading-4 text-white/85">{participantCountLabel}</p>
@@ -449,8 +461,12 @@ export function EventDetailScreen({
                 </div>
                 <div className="flex items-center">
                   <div className="flex -space-x-2">
-                    {participantAvatars.slice(0, 3).map((url, i) => (
-                      <img loading="lazy" decoding="async" key={i} src={url} alt="" className="h-7 w-7 rounded-full border object-cover" style={{ borderColor: "var(--surface)" }} />
+                    {participants.slice(0, 3).map((participant, i) => (
+                      participant.avatarUrl ? (
+                        <img loading="lazy" decoding="async" key={participant.id ?? i} src={participant.avatarUrl} alt="" className="h-7 w-7 rounded-full border object-cover" style={{ borderColor: "var(--surface)" }} />
+                      ) : (
+                        <span key={participant.id ?? i} className="h-7 w-7 rounded-full border bg-secondary" style={{ borderColor: "var(--surface)" }} />
+                      )
                     ))}
                   </div>
                   {overflowLabel && (
@@ -470,11 +486,14 @@ export function EventDetailScreen({
       {sheet === "participants" && (
         <HomeSheet title="Участники" onClose={() => setSheet(null)}>
           <div className="space-y-2">
-            {participantAvatars.map((url, i) => {
-              const participant = participantItems?.[i] ?? { id: `participant-${i}`, name: `Участник ${i + 1}`, avatarUrl: url };
+            {participants.map((participant, i) => {
               return (
                 <div key={`${participant.id}-${i}`} className="flex w-full items-center gap-3 rounded-2xl bg-gray-100 px-4 py-3 text-left">
-                  <img loading="lazy" decoding="async" src={participant.avatarUrl ?? url} alt="" className="h-9 w-9 rounded-full object-cover" />
+                  {participant.avatarUrl ? (
+                    <img loading="lazy" decoding="async" src={participant.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover" />
+                  ) : (
+                    <span className="h-9 w-9 rounded-full bg-secondary" />
+                  )}
                   <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-gray-900">{participant.name}</span>
                   {onMessageParticipant && (
                     <button
