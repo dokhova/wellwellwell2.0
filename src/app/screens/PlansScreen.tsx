@@ -1,6 +1,6 @@
 import { CalendarPlus, Check, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
-import type { HomeFeedPlan, Screen } from "@/app/types";
+import type { HomeFeedPlan, PlanId, Screen } from "@/app/types";
 import { normalizePlanTag, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
 import { GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES } from "@/app/data/constants";
 import { getPlanWeekItems } from "@/app/lib/planProgress";
@@ -91,12 +91,12 @@ export function PlansScreen({
   highlightedPlanId,
 }: {
   onNavigate: (s: Screen, from?: Screen) => void;
-  onPlanOpen: (id: number) => void;
+  onPlanOpen: (id: PlanId) => void;
   participantPlans: HomeFeedPlan[];
   checkedItemKeys: string[];
   onToggleCheck: (key: string) => void;
-  onRemoveParticipant: (id: number, scope?: "single" | "program") => void;
-  highlightedPlanId?: number | null;
+  onRemoveParticipant: (id: PlanId, scope?: "single" | "program") => void;
+  highlightedPlanId?: PlanId | null;
 }) {
   const isEmpty = participantPlans.length === 0;
   const [removingPlan, setRemovingPlan] = useState<HomeFeedPlan | null>(null);

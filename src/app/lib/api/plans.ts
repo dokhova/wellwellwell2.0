@@ -1,0 +1,111 @@
+import type { HomeFeedPlan } from "@/app/types";
+import { supabase } from "@/app/lib/supabase";
+
+type PlanRow = {
+  id: string;
+  author_id: string;
+  title: string;
+  description: string;
+  cover_url: string | null;
+  starts_at: string | null;
+  payload: HomeFeedPlan | null;
+  created_at: string;
+};
+
+export type PlanParticipantRow = {
+  plan_id: string;
+  user_id: string;
+  status: "invited" | "joined" | "declined";
+};
+
+const getStartsAt = (plan: HomeFeedPlan) => {
+  if (plan.schedule.start) return new Date(plan.schedule.start).toISOString();
+  return null;
+};
+
+export const createPlanRemote = async (plan: HomeFeedPlan): Promise<HomeFeedPlan | null> => {
+  if (!supabase) return null;
+
+  const id = crypto.randomUUID();
+  const remotePlan: HomeFeedPlan = {
+    ...plan,
+    id,
+    shareUrl: `https://wellwellwell.app/plans/${id}`,
+  };
+
+  const { error } = await supabase.from("plans").insert({
+    id,
+    author_id: plan.author.id ?? "",
+    title: plan.title,
+    description: plan.description,
+    cover_url: plan.coverUrl ?? null,
+    starts_at: getStartsAt(plan),
+    payload: remotePlan,
+  });
+
+  if (error) throw error;
+  return remotePlan;
+};
+
+export const fetchPublicPlans = async (): Promise<HomeFeedPlan[]> => {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("plans")
+    .select("id, author_id, title, description, cover_url, starts_at, payload, created_at")
+    .order("created_at", { ascending: false })
+    .limit(100)
+    .returns<PlanRow[]>();
+
+  if (error) throw error;
+  return (data ?? []).map((row) => row.payload ? { ...row.payload, id: row.id } : null).filter((plan): plan is HomeFeedPlan => Boolean(plan));
+};
+
+export const fetchPlan = async (planId: string): Promise<HomeFeedPlan | null> => {
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("plans")
+    .select("id, author_id, title, description, cover_url, starts_at, payload, created_at")
+    .eq("id", planId)
+    .maybeSingle<PlanRow>();
+
+  if (error) throw error;
+  return data?.payload ? { ...data.payload, id: data.id } : null;
+};
+
+export const fetchParticipants = async (planId: string): Promise<PlanParticipantRow[]> => {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("plan_participants")
+    .select("plan_id, user_id, status")
+    .eq("plan_id", planId)
+    .returns<PlanParticipantRow[]>();
+
+  if (error) throw error;
+  return data ?? [];
+};
+
+export const countJoined = async (planId: string): Promise<number> => {
+  if (!supabase) return 0;
+
+  const { count, error } = await supabase
+    .from("plan_participants")
+    .select("plan_id", { count: "exact", head: true })
+    .eq("plan_id", planId)
+    .eq("status", "joined");
+
+  if (error) throw error;
+  return count ?? 0;
+};
+
+export const upsertPlanParticipant = async (planId: string, userId: string, status: PlanParticipantRow["status"]) => {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from("plan_participants")
+    .upsert({ plan_id: planId, user_id: userId, status }, { onConflict: "plan_id,user_id" });
+
+  if (error) throw error;
+};

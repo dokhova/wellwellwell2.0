@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Copy, Filter, MoreVertical, Plus, Search, Share2, Trash2, Users } from "lucide-react";
-import type { ChatPeer, HomeFeedPlan, Screen, TagFilter } from "@/app/types";
-import { CATEGORY_CHIPS, homeFeedPlans, normalizePlanTag, PLAN_TAG_LABELS } from "@/app/data/plans";
+import type { ChatPeer, HomeFeedPlan, PlanId, Screen, TagFilter } from "@/app/types";
+import { CATEGORY_CHIPS, normalizePlanTag, PLAN_TAG_LABELS } from "@/app/data/plans";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
 import { HomeSheet } from "@/app/components/HomeSheet";
 
@@ -171,17 +171,21 @@ export function HomeScreen({
   onPlanOpen,
   onAuthorOpen,
   onMessagePeer,
+  canMessageAuthor,
+  plans,
 }: {
   onNavigate: (s: Screen, from?: Screen) => void;
-  onPlanOpen: (id: number, from?: Screen) => void;
+  onPlanOpen: (id: PlanId, from?: Screen) => void;
   onAuthorOpen: (expertId: string) => void;
   onMessagePeer: (peer: ChatPeer) => void;
+  canMessageAuthor?: (authorId?: string) => boolean;
+  plans: HomeFeedPlan[];
 }) {
   const [tagFilter, setTagFilter] = useState<TagFilter>("all");
   const [sheet, setSheet] = useState<"share" | "author" | null>(null);
   const [activePlan, setActivePlan] = useState<HomeFeedPlan | null>(null);
   const [copied, setCopied] = useState(false);
-  const plansWithTag = homeFeedPlans.map((plan) => ({
+  const plansWithTag = plans.map((plan) => ({
     ...plan,
     tag: normalizePlanTag(plan.tag),
   }));
@@ -306,7 +310,9 @@ export function HomeScreen({
         <HomeSheet title={activePlan.author.name} onClose={() => setSheet(null)}>
           <div className="space-y-2">
             <button onClick={() => { setSheet(null); onAuthorOpen(activePlan.author.id ?? "gena"); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Открыть профиль</button>
-            <button onClick={() => { setSheet(null); onMessagePeer({ id: activePlan.author.id ?? activePlan.author.name, name: activePlan.author.name, avatarUrl: activePlan.author.avatarUrl }); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Написать</button>
+            {(canMessageAuthor?.(activePlan.author.id) ?? true) && (
+              <button onClick={() => { setSheet(null); onMessagePeer({ id: activePlan.author.id ?? activePlan.author.name, name: activePlan.author.name, avatarUrl: activePlan.author.avatarUrl }); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Написать</button>
+            )}
             <button onClick={() => setSheet(null)} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Пожаловаться</button>
           </div>
         </HomeSheet>

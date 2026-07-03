@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, CheckCheck, MessageCircle, Search, Send, X } from "lucide-react";
 import type { ChatMessage, ChatPeer, ChatThread } from "@/app/types";
 import { GREEN, GREEN_LIGHT, UNSPLASH } from "@/app/data/constants";
-import { fetchMessages, makeThreadId, markThreadMessagesRead, sendMessage, subscribeToThread, type MessageRow } from "@/app/lib/api/chat";
+import { fetchMessages, makeThreadId, markThreadMessagesRead, sendMessage, subscribeToThread, updateInviteStatus, type MessageRow } from "@/app/lib/api/chat";
 import { searchProfiles } from "@/app/lib/api/profiles";
 import { sanitizeImageUrl } from "@/app/lib/api/storage";
+import { fetchPlan, upsertPlanParticipant } from "@/app/lib/api/plans";
+import type { HomeFeedPlan } from "@/app/types";
 
 const QUICK_MESSAGES = [
   "Привет! Готов(а) начать?",
@@ -23,6 +25,9 @@ const mapMessageRow = (message: MessageRow, currentUserId: string): ChatMessage 
   createdAt: new Date(message.created_at).getTime(),
   readAt: message.read_at ? new Date(message.read_at).getTime() : null,
   status: "sent",
+  kind: message.kind ?? "text",
+  planId: message.plan_id,
+  inviteStatus: message.invite_status,
 });
 
 function PeerAvatar({ peer, size = 44 }: { peer: ChatPeer; size?: number }) {
@@ -200,6 +205,8 @@ export function ChatScreen({
   onSendMessage,
   onReceiveRemoteMessage,
   onConfirmRemoteMessage,
+  onPeerProfile,
+  onAcceptInvitePlan,
 }: {
   peer: ChatPeer;
   messages: ChatMessage[];
@@ -209,6 +216,8 @@ export function ChatScreen({
   onSendMessage: (peer: ChatPeer, text: string, sender: ChatMessage["sender"], status?: ChatMessage["status"], messageId?: string) => ChatMessage | null;
   onReceiveRemoteMessage: (peer: ChatPeer, message: ChatMessage) => void;
   onConfirmRemoteMessage: (peer: ChatPeer, localId: string, message: ChatMessage) => void;
+  onPeerProfile: (peer: ChatPeer) => void;
+  onAcceptInvitePlan: (plan: HomeFeedPlan) => void;
 }) {
   const [text, setText] = useState("");
   const [typing, setTyping] = useState(false);
@@ -288,17 +297,37 @@ export function ChatScreen({
     }
   };
 
+  const respondToInvite = (message: ChatMessage, accepted: boolean) => {
+    if (!message.planId) return;
+    const nextStatus = accepted ? "accepted" : "declined";
+    void upsertPlanParticipant(message.planId, currentUserId, accepted ? "joined" : "declined")
+      .then(() => updateInviteStatus(message.id, nextStatus))
+      .then((updatedMessage) => {
+        if (updatedMessage) onReceiveRemoteMessage(peer, mapMessageRow(updatedMessage, currentUserId));
+        if (!accepted || !message.planId) return null;
+        return fetchPlan(message.planId);
+      })
+      .then((plan) => {
+        if (plan) onAcceptInvitePlan(plan);
+      })
+      .catch((error) => {
+        console.error("Supabase invite response failed", error);
+      });
+  };
+
   return (
     <div className="flex h-full flex-col bg-surface">
       <div className="flex h-14 flex-shrink-0 items-center gap-3 border-b border-border bg-card px-4">
         <button onClick={onBack} className="flex h-10 w-8 items-center justify-start active:opacity-80">
           <ArrowLeft size={20} strokeWidth={2} />
         </button>
-        <PeerAvatar peer={peer} size={36} />
-        <div className="min-w-0 flex-1">
+        <button onClick={() => onPeerProfile(peer)} className="flex flex-shrink-0 items-center active:opacity-80" aria-label="Открыть профиль">
+          <PeerAvatar peer={peer} size={36} />
+        </button>
+        <button onClick={() => onPeerProfile(peer)} className="min-w-0 flex-1 text-left active:opacity-80">
           <p className="truncate text-[16px] font-semibold text-foreground">{peer.name}</p>
           <p className="text-[12px] leading-4 text-muted-foreground">{peer.cannedReplies?.length ? "демо-ответы включены" : "чат готов к реальному собеседнику"}</p>
-        </div>
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -318,7 +347,24 @@ export function ChatScreen({
                   className="max-w-[78%] rounded-2xl px-3.5 py-2.5"
                   style={mine ? { backgroundColor: GREEN, color: "#fff" } : { backgroundColor: "var(--card)", color: "var(--foreground)" }}
                 >
-                  <p className="text-[14px] leading-5">{message.text}</p>
+                  {message.kind === "invite" ? (
+                    <div className="min-w-[210px]">
+                      <p className="text-[14px] font-semibold leading-5">Приглашение в план</p>
+                      <p className="mt-1 text-[14px] leading-5">{message.text}</p>
+                      {message.inviteStatus ? (
+                        <p className={`mt-2 text-[12px] font-semibold ${mine ? "text-white/80" : "text-muted-foreground"}`}>
+                          {message.inviteStatus === "accepted" ? "Приглашение принято" : "Отклонено"}
+                        </p>
+                      ) : !mine ? (
+                        <div className="mt-3 flex gap-2">
+                          <button onClick={() => respondToInvite(message, true)} className="rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold" style={{ color: GREEN }}>Принять</button>
+                          <button onClick={() => respondToInvite(message, false)} className="rounded-full px-3 py-1.5 text-[12px] font-semibold" style={{ backgroundColor: "var(--muted)", color: "var(--foreground)" }}>Отказаться</button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="text-[14px] leading-5">{message.text}</p>
+                  )}
                   <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${mine ? "text-white/70" : "text-muted-foreground"}`}>
                     <span>{formatChatTime(message.createdAt)}</span>
                     {mine && isRealPeer && message.status === "sent" && (

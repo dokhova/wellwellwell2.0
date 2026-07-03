@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { ArrowLeft, Check, Edit3, MessageCircle, Plus, Trash2, UserPlus } from "lucide-react";
-import type { Article, ChatPeer, HomeFeedPlan, Screen } from "@/app/types";
+import type { Article, ChatPeer, HomeFeedPlan, PlanId, Screen } from "@/app/types";
 import { formatNearestDate, getNextOccurrence, weekDates, weekDateMonths } from "@/app/data/calendar";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
 import { profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
@@ -166,14 +166,15 @@ export function ProfileConnectionsScreen({
 export function ProfileScreen(props: {
   onNavigate: (s: Screen, from?: Screen) => void;
   onArticle: (a: Article) => void;
-  onPlanOpen: (id: number) => void;
+  onPlanOpen: (id: PlanId) => void;
   onConnectionsOpen: (type: ConnectionType) => void;
   onEdit: () => void;
   onBack?: () => void;
   onAddPlan: () => void;
-  onRemovePlan: (id: number) => void;
+  onRemovePlan: (id: PlanId) => void;
   onToggleFollow?: (profile: ExpertProfile, nextFollowed: boolean) => void;
   onMessageProfile?: (peer: ChatPeer) => void;
+  canMessage?: boolean;
   profile: ExpertProfile;
   plans: HomeFeedPlan[];
   isMe: boolean;
@@ -322,14 +323,18 @@ export function ProfileScreen(props: {
 
           {!props.isMe && (
             <div className="mt-5 grid grid-cols-[1fr_1.25fr] gap-2.5">
-              <button
-                onClick={() => props.onMessageProfile?.({ id: props.profile.id, name: props.profile.name, avatarUrl: props.profile.photoUrl, cannedReplies: props.profile.cannedReplies })}
-                className="flex h-12 items-center justify-center gap-2 rounded-xl border text-[15px] font-semibold active:opacity-90"
-                style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
-              >
-                <MessageCircle size={18} strokeWidth={2.1} />
-                Написать
-              </button>
+              {props.canMessage !== false ? (
+                <button
+                  onClick={() => props.onMessageProfile?.({ id: props.profile.id, name: props.profile.name, avatarUrl: props.profile.photoUrl, cannedReplies: props.profile.cannedReplies })}
+                  className="flex h-12 items-center justify-center gap-2 rounded-xl border text-[15px] font-semibold active:opacity-90"
+                  style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+                >
+                  <MessageCircle size={18} strokeWidth={2.1} />
+                  Написать
+                </button>
+              ) : (
+                <div />
+              )}
               <button
                 onClick={() => setIsFollowed((value) => {
                   props.onToggleFollow?.(props.profile, !value);

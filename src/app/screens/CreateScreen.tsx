@@ -1,11 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import confetti from "canvas-confetti";
 import { ArrowLeft, Check, ChevronDown, Clock, Eye, Image as ImageIcon, Lock, MapPin, Plus, Repeat2, Search, Sparkles, Users, X } from "lucide-react";
 import type { HomeFeedPlan, PartOfDay, PlanRepeat, Schedule, Screen, TimeMode, Visibility } from "@/app/types";
-import { ALL_DAYS, EVENT_PARTICIPANTS, GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES, WEEKDAY_VALUES } from "@/app/data/constants";
-import { DEFAULT_PLAN_AUTHOR, DEFAULT_PLAN_PARTICIPANTS, homeFeedPlans, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
+import { ALL_DAYS, GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES, WEEKDAY_VALUES } from "@/app/data/constants";
+import { DEFAULT_PLAN_AUTHOR, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
 import { HomeSheet } from "@/app/components/HomeSheet";
-import { uploadPhoto } from "@/app/lib/api/storage";
+import { sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
+import { searchProfiles } from "@/app/lib/api/profiles";
 
 type CreateStep = "welcome" | "name" | "description" | "image" | "schedule" | "finalOptions" | "success";
 type PlanDraft = { title: string; description: string; coverImage: string | null; schedule: Schedule };
@@ -59,6 +60,7 @@ const defaultSchedule = (): Schedule => ({
 });
 
 const defaultPlan = (): PlanDraft => ({ title: "", description: "", coverImage: null, schedule: defaultSchedule() });
+const DEMO_EXPERT_IDS = new Set(["maria-kuznetsova", "dmitry-orlov", "svetlana-voronova", "alexey-petrov", "yulia-belova"]);
 
 export function CreateScreen({
   onNavigate,
@@ -72,21 +74,7 @@ export function CreateScreen({
   currentAuthor?: HomeFeedPlan["author"];
 }) {
   const initialDateTime = useMemo(() => getLocalDateTime(), []);
-  const allPeople = useMemo<Person[]>(() => {
-    const people = [
-      ...homeFeedPlans.map((plan) => ({
-        id: plan.author.id ?? plan.author.name,
-        name: plan.author.name,
-        avatarUrl: plan.author.avatarUrl,
-      })),
-      ...EVENT_PARTICIPANTS.map((participant) => ({
-        id: participant.id,
-        name: participant.name,
-        avatarUrl: participant.avatar,
-      })),
-    ];
-    return Array.from(new Map(people.map((person) => [person.id, person])).values());
-  }, []);
+  const [people, setPeople] = useState<Person[]>([]);
 
   const [step, setStep] = useState<CreateStep>("welcome");
   const [history, setHistory] = useState<CreateStep[]>([]);
@@ -97,6 +85,7 @@ export function CreateScreen({
   const [scheduleError, setScheduleError] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("all");
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
+  const [selectedPeople, setSelectedPeople] = useState<Person[]>([]);
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const [participantQuery, setParticipantQuery] = useState("");
   const [locationMode, setLocationMode] = useState<"online" | "offline">("online");
@@ -111,8 +100,31 @@ export function CreateScreen({
   const repeat = currentSchedule.repeat ?? { type: "days", days: 21 };
   const startParts = splitDateTime(exactStart);
   const endParts = splitDateTime(exactEnd);
-  const selectedParticipantItems = allPeople.filter((person) => selectedParticipants.includes(person.id));
-  const filteredPeople = allPeople.filter((person) => person.name.toLowerCase().includes(participantQuery.trim().toLowerCase()));
+  const selectedParticipantItems = selectedPeople.filter((person) => selectedParticipants.includes(person.id));
+  const filteredPeople = people;
+
+  useEffect(() => {
+    if (!participantsOpen || !participantQuery.trim()) {
+      setPeople([]);
+      return;
+    }
+    let cancelled = false;
+    const loadPeople = async () => {
+      try {
+        const profiles = await searchProfiles(participantQuery);
+        if (cancelled) return;
+        setPeople(profiles
+          .filter((profile) => profile.id !== currentAuthor.id && !DEMO_EXPERT_IDS.has(profile.id))
+          .map((profile) => ({ id: profile.id, name: profile.name, avatarUrl: sanitizeImageUrl(profile.photoUrl) })));
+      } catch (error) {
+        console.error("Supabase participant search failed", error);
+      }
+    };
+    void loadPeople();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAuthor.id, participantQuery, participantsOpen]);
 
   const goTo = (next: CreateStep) => {
     setHistory((items) => [...items, step]);
@@ -170,7 +182,7 @@ export function CreateScreen({
 
     const id = Date.now();
     const selectedAvatars = selectedParticipantItems.map((person) => person.avatarUrl).filter((url): url is string => Boolean(url));
-    const participantAvatars = [currentAuthor.avatarUrl, ...selectedAvatars, ...DEFAULT_PLAN_PARTICIPANTS].filter((url): url is string => Boolean(url));
+    const participantAvatars = [currentAuthor.avatarUrl, ...selectedAvatars].filter((url): url is string => Boolean(url));
     const participantCount = Math.max(1, new Set([currentAuthor.id ?? "me", ...selectedParticipants]).size);
     const newPlan: HomeFeedPlan = {
       id,
@@ -400,7 +412,10 @@ export function CreateScreen({
               return (
                 <button
                   key={person.id}
-                  onClick={() => setSelectedParticipants((items) => active ? items.filter((id) => id !== person.id) : [...items, person.id])}
+                  onClick={() => {
+                    setSelectedParticipants((items) => active ? items.filter((id) => id !== person.id) : [...items, person.id]);
+                    setSelectedPeople((items) => active ? items.filter((item) => item.id !== person.id) : items.some((item) => item.id === person.id) ? items : [...items, person]);
+                  }}
                   className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left"
                   style={active ? { backgroundColor: GREEN_LIGHT } : { backgroundColor: "var(--card)" }}
                 >

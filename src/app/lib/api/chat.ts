@@ -8,6 +8,9 @@ export type MessageRow = {
   photo_url: string | null;
   created_at: string;
   read_at: string | null;
+  kind: "text" | "invite" | null;
+  plan_id: string | null;
+  invite_status: "accepted" | "declined" | null;
 };
 
 export type SendMessageInput = {
@@ -16,6 +19,9 @@ export type SendMessageInput = {
   senderId: string;
   text: string;
   photoUrl?: string | null;
+  kind?: "text" | "invite";
+  planId?: string | null;
+  inviteStatus?: "accepted" | "declined" | null;
 };
 
 export const makeThreadId = (a: string, b: string) => [a, b].sort((left, right) => left.localeCompare(right)).join("_");
@@ -25,7 +31,7 @@ export const fetchMessages = async (threadId: string): Promise<MessageRow[]> => 
 
   const { data, error } = await supabase
     .from("messages")
-    .select("id, thread_id, sender_id, text, photo_url, created_at, read_at")
+    .select("id, thread_id, sender_id, text, photo_url, created_at, read_at, kind, plan_id, invite_status")
     .eq("thread_id", threadId)
     .order("created_at", { ascending: true })
     .returns<MessageRow[]>();
@@ -39,7 +45,7 @@ export const fetchUserThreadMessages = async (currentUserId: string): Promise<Me
 
   const { data, error } = await supabase
     .from("messages")
-    .select("id, thread_id, sender_id, text, photo_url, created_at, read_at")
+    .select("id, thread_id, sender_id, text, photo_url, created_at, read_at, kind, plan_id, invite_status")
     .or(`thread_id.like.${currentUserId}_%,thread_id.like.%_${currentUserId}`)
     .order("created_at", { ascending: false })
     .returns<MessageRow[]>();
@@ -59,8 +65,25 @@ export const sendMessage = async (input: SendMessageInput): Promise<MessageRow |
       sender_id: input.senderId,
       text: input.text,
       photo_url: input.photoUrl ?? null,
+      kind: input.kind ?? "text",
+      plan_id: input.planId ?? null,
+      invite_status: input.inviteStatus ?? null,
     })
-    .select("id, thread_id, sender_id, text, photo_url, created_at, read_at")
+    .select("id, thread_id, sender_id, text, photo_url, created_at, read_at, kind, plan_id, invite_status")
+    .single<MessageRow>();
+
+  if (error) throw error;
+  return data;
+};
+
+export const updateInviteStatus = async (messageId: string, status: "accepted" | "declined"): Promise<MessageRow | null> => {
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("messages")
+    .update({ invite_status: status })
+    .eq("id", messageId)
+    .select("id, thread_id, sender_id, text, photo_url, created_at, read_at, kind, plan_id, invite_status")
     .single<MessageRow>();
 
   if (error) throw error;

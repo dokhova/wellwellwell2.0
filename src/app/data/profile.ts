@@ -9,7 +9,7 @@ import expertAvatarAlexeyPetrov from "@/imports/avatar_04.jpg";
 import expertAvatarYuliaBelova from "@/imports/avatar_05.jpg";
 import { P_AVATARS, UNSPLASH } from "@/app/data/constants";
 import { homeFeedPlans, normalizePlanTag } from "@/app/data/plans";
-import type { PlanTag } from "@/app/types";
+import type { PlanId, PlanTag } from "@/app/types";
 
 export const habits = [
   { icon: "🌅", name: "Утренняя зарядка", done: 7, total: 7, streak: 14 },
@@ -45,7 +45,7 @@ export interface ExpertConnection {
 }
 
 export interface ExpertProfilePlan {
-  id: number;
+  id: PlanId;
   title: string;
   axis: "Движение" | "Восстановление" | "Развитие";
   weeksCount: number | null;

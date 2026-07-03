@@ -20,7 +20,8 @@ export type TimeMode = "exact" | "partOfDay";
 export type PartOfDay = "morning" | "day" | "evening";
 export type Visibility = "all" | "onlyMe";
 export type PlanKind = "plan";
-export type ParticipantPlanRef = { kind: PlanKind; id: number };
+export type PlanId = string | number;
+export type ParticipantPlanRef = { kind: PlanKind; id: PlanId };
 
 export interface ChatPeer {
   id: string;
@@ -37,6 +38,9 @@ export interface ChatMessage {
   createdAt: number;
   readAt?: number | null;
   status?: "sending" | "sent";
+  kind?: "text" | "invite";
+  planId?: string | null;
+  inviteStatus?: "accepted" | "declined" | null;
 }
 
 export interface ChatThread {
@@ -69,7 +73,7 @@ export interface Schedule {
 }
 
 export interface HomeFeedPlan {
-  id: number;
+  id: PlanId;
   kind?: PlanKind;
   visibility?: Visibility;
   tag?: PlanTag;
@@ -130,9 +134,9 @@ export interface EventDetailProps {
   duration?: string;
   onBack: () => void;
   initiallyJoined?: boolean;
-  planId?: number;
-  onJoin?: (planId: number) => void;
-  onLeave?: (planId: number) => void;
+  planId?: PlanId;
+  onJoin?: (planId: PlanId) => void;
+  onLeave?: (planId: PlanId) => void;
   onProfile?: () => void;
   authorId?: string;
   onMessageAuthor?: (peer: ChatPeer) => void;

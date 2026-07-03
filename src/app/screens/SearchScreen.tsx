@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, MessageCircle, Search, X } from "lucide-react";
-import type { ChatPeer, HomeFeedPlan } from "@/app/types";
+import type { ChatPeer, HomeFeedPlan, PlanId } from "@/app/types";
 import { experts, type ExpertProfile } from "@/app/data/profile";
 import { GREEN } from "@/app/data/constants";
 import { searchProfiles } from "@/app/lib/api/profiles";
@@ -82,10 +82,12 @@ function PersonCard({
   person,
   onProfile,
   onMessage,
+  canMessage,
 }: {
   person: ExpertProfile;
   onProfile: () => void;
   onMessage: () => void;
+  canMessage: boolean;
 }) {
   return (
     <button onClick={onProfile} className="mx-4 flex items-center gap-3 rounded-[20px] bg-white p-4 text-left active:opacity-90">
@@ -94,17 +96,19 @@ function PersonCard({
         <p className="truncate text-[15px] font-semibold text-gray-900">{person.name}</p>
         {person.username && <p className="mt-0.5 truncate text-[12px] text-gray-500">@{person.username}</p>}
       </div>
-      <button
-        onClick={(event) => {
-          event.stopPropagation();
-          onMessage();
-        }}
-        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full"
-        style={{ backgroundColor: GREEN }}
-        aria-label="Написать"
-      >
-        <MessageCircle size={17} strokeWidth={2} color="#fff" />
-      </button>
+      {canMessage && (
+        <button
+          onClick={(event) => {
+            event.stopPropagation();
+            onMessage();
+          }}
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full"
+          style={{ backgroundColor: GREEN }}
+          aria-label="Написать"
+        >
+          <MessageCircle size={17} strokeWidth={2} color="#fff" />
+        </button>
+      )}
     </button>
   );
 }
@@ -116,13 +120,15 @@ export function SearchScreen({
   currentUserId,
   onProfile,
   onMessagePeer,
+  canMessageProfile,
 }: {
   onBack: () => void;
   plans: HomeFeedPlan[];
-  onPlanOpen: (id: number) => void;
+  onPlanOpen: (id: PlanId) => void;
   currentUserId: string;
   onProfile: (profile: ExpertProfile) => void;
   onMessagePeer: (peer: ChatPeer) => void;
+  canMessageProfile?: (profile: ExpertProfile) => boolean;
 }) {
   const [query, setQuery] = useState("");
   const [remotePeople, setRemotePeople] = useState<ExpertProfile[]>([]);
@@ -202,6 +208,7 @@ export function SearchScreen({
             person={person}
             onProfile={() => onProfile(person)}
             onMessage={() => onMessagePeer({ id: person.id, name: person.name, avatarUrl: sanitizeImageUrl(person.photoUrl) })}
+            canMessage={canMessageProfile?.(person) ?? true}
           />
         ))}
         {results.map((plan) => (
