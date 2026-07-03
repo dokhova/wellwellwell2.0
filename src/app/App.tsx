@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Article, ChatMessage, ChatPeer, ChatThread, HomeFeedPlan, ParticipantPlanRef, PlanId, Screen } from "@/app/types";
 import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
 import { formatNearestDate, getNextOccurrence } from "@/app/data/calendar";
-import { experts, expertProfile, profileFollowers, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
+import { experts, expertProfile, profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
 import { demoCommunityPlanIds, demoCommunityPlans, getDemoCommunityParticipantPeers } from "@/app/data/demoCommunity";
 import { fetchProfile, fetchProfilesByIds, upsertProfile } from "@/app/lib/api/profiles";
@@ -53,10 +53,11 @@ const SUPPORT_PEER: ChatPeer = {
 };
 
 const SUPPORT_MESSAGE = "Привет! Well Well Well помогает собирать привычки и планы тренировок — создавай свои события или присоединяйся к чужим, зови друзей в чат. Если возникнут вопросы — пишите сюда, наша команда ответит";
-const MODERATOR_IDS = ["МОЙ_ID"];
+const MODERATOR_IDS = ["353298824"];
 const DEMO_PROFILE_IDS = new Set(experts.filter((profile) => profile.isDemo).map((profile) => profile.id));
 const isDemoProfileId = (id?: string | null) => Boolean(id && DEMO_PROFILE_IDS.has(id));
 const isDemoProfile = (profile: Pick<ExpertProfile, "isDemo">) => profile.isDemo === true;
+const removeDemoConnections = (items: ExpertConnection[]) => items.filter((item) => !isDemoProfileId(item.id));
 
 const normalizeProfile = (profile: ExpertProfile): ExpertProfile => {
   const rawPhotoUrls = profile.photoUrls?.length ? profile.photoUrls : profile.photoUrl ? [profile.photoUrl] : [];
@@ -322,7 +323,9 @@ export default function App() {
   const [joinedCounts, setJoinedCounts] = useState<Record<string, number>>({});
   const [joinedParticipantPeers, setJoinedParticipantPeers] = useState<Record<string, ChatPeer[]>>({});
   const [deletedPlanIds, setDeletedPlanIds] = useState<PlanId[]>(() => readJson(deletedPlansStorageKey, []));
-  const [myFollowing, setMyFollowing] = useState<ExpertConnection[]>(() => readJson<ExpertConnection[]>(followingStorageKey, []).map(sanitizeConnection));
+  const [myFollowing, setMyFollowing] = useState<ExpertConnection[]>(() =>
+    removeDemoConnections(readJson<ExpertConnection[]>(followingStorageKey, []).map(sanitizeConnection))
+  );
   const [dbFollowing, setDbFollowing] = useState<ExpertConnection[]>([]);
   const [dbFollowers, setDbFollowers] = useState<ExpertConnection[]>([]);
   const [profileFollowCounts, setProfileFollowCounts] = useState<Record<string, { followers: number; following: number }>>({});
@@ -419,10 +422,10 @@ export default function App() {
     Array.from(new Map(items.map((item) => [item.id, sanitizeConnection(item)])).values());
 
   const localDemoFollowingFor = useCallback((ownerId: string) =>
-    ownerId === currentUserId ? myFollowing : [], [currentUserId, myFollowing]);
+    ownerId === expertProfile.id ? profileFollowing.map(sanitizeConnection) : [], []);
 
   const localDemoFollowersFor = useCallback((ownerId: string) =>
-    ownerId === currentUserId ? profileFollowers.map(sanitizeConnection) : [], [currentUserId]);
+    ownerId === expertProfile.id ? profileFollowers.map(sanitizeConnection) : [], []);
 
   const idsToConnections = useCallback(async (ids: string[], followedByMeIds: Set<string>) => {
     const uniqueIds = Array.from(new Set(ids));
@@ -862,7 +865,11 @@ export default function App() {
   }, [deletedPlanIds, deletedPlansStorageKey]);
 
   useEffect(() => {
-    writeJson(followingStorageKey, myFollowing.map(sanitizeConnection));
+    const cleanedFollowing = removeDemoConnections(myFollowing.map(sanitizeConnection));
+    writeJson(followingStorageKey, cleanedFollowing);
+    if (cleanedFollowing.length !== myFollowing.length) {
+      setMyFollowing(cleanedFollowing);
+    }
   }, [followingStorageKey, myFollowing]);
 
   useEffect(() => {

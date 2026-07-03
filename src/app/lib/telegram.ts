@@ -19,11 +19,10 @@ declare global {
   }
 }
 
-export const BOT_USERNAME = "BOT_USERNAME_PLACEHOLDER";
-export const APP_NAME = "APP_NAME_PLACEHOLDER";
+export const BOT_USERNAME = "WellWellWell_New_bot";
 
 export const buildPlanStartAppUrl = (planId: string) =>
-  `https://t.me/${BOT_USERNAME}/${APP_NAME}?startapp=plan_${encodeURIComponent(planId)}`;
+  `https://t.me/${BOT_USERNAME}?startapp=plan_${encodeURIComponent(planId)}`;
 
 export const getTelegramStartParam = () => window.Telegram?.WebApp?.initDataUnsafe?.start_param ?? "";
 
