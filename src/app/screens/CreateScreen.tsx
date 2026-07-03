@@ -60,7 +60,6 @@ const defaultSchedule = (): Schedule => ({
 });
 
 const defaultPlan = (): PlanDraft => ({ title: "", description: "", coverImage: null, schedule: defaultSchedule() });
-const DEMO_EXPERT_IDS = new Set(["maria-kuznetsova", "dmitry-orlov", "svetlana-voronova", "alexey-petrov", "yulia-belova"]);
 
 export function CreateScreen({
   onNavigate,
@@ -114,7 +113,7 @@ export function CreateScreen({
         const profiles = await searchProfiles(participantQuery);
         if (cancelled) return;
         setPeople(profiles
-          .filter((profile) => profile.id !== currentAuthor.id && !DEMO_EXPERT_IDS.has(profile.id))
+          .filter((profile) => profile.id !== currentAuthor.id && !profile.isDemo)
           .map((profile) => ({ id: profile.id, name: profile.name, avatarUrl: sanitizeImageUrl(profile.photoUrl) })));
       } catch (error) {
         console.error("Supabase participant search failed", error);

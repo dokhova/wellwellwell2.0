@@ -126,3 +126,15 @@ export const upsertPlanParticipant = async (planId: string, userId: string, stat
 
   if (error) throw error;
 };
+
+export const deletePlanParticipant = async (planId: string, userId: string) => {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from("plan_participants")
+    .delete()
+    .eq("plan_id", planId)
+    .eq("user_id", userId);
+
+  if (error) throw error;
+};

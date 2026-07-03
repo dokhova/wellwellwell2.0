@@ -8,6 +8,7 @@ import expertAvatarSvetlanaVoronova from "@/imports/avatar_03.jpg";
 import expertAvatarAlexeyPetrov from "@/imports/avatar_04.jpg";
 import expertAvatarYuliaBelova from "@/imports/avatar_05.jpg";
 import { P_AVATARS, UNSPLASH } from "@/app/data/constants";
+import { demoCommunity, demoCommunityAssets } from "@/app/data/demoCommunity";
 import { homeFeedPlans, normalizePlanTag } from "@/app/data/plans";
 import type { PlanId, PlanTag } from "@/app/types";
 
@@ -67,6 +68,8 @@ export interface ExpertProfile {
   plansCount: number;
   isFollowedByMe: boolean;
   isMe: boolean;
+  isDemo?: boolean;
+  tags?: string[];
   cannedReplies?: string[];
 }
 
@@ -130,6 +133,7 @@ export const expertProfile: ExpertProfile = {
   plansCount: expertPlans.length,
   isFollowedByMe: false,
   isMe: false,
+  isDemo: true,
   cannedReplies: [
     "Привет. Начни спокойно, без гонки за темпом.",
     "Главное — регулярность. Если пропустишь день, просто возвращайся к плану.",
@@ -151,6 +155,7 @@ export const experts: ExpertProfile[] = [
     plansCount: 3,
     isFollowedByMe: false,
     isMe: false,
+    isDemo: true,
     cannedReplies: [
       "План проходит нормально, если пульс не улетает в первые минуты.",
       "Смотри не на разовый результат, а на динамику за неделю.",
@@ -169,6 +174,7 @@ export const experts: ExpertProfile[] = [
     plansCount: 3,
     isFollowedByMe: false,
     isMe: false,
+    isDemo: true,
     cannedReplies: [
       "Начинаем мягко. Первые тренировки должны казаться слишком лёгкими.",
       "Если сбилось дыхание, переходи на шаг и возвращайся к бегу позже.",
@@ -187,6 +193,7 @@ export const experts: ExpertProfile[] = [
     plansCount: 3,
     isFollowedByMe: false,
     isMe: false,
+    isDemo: true,
     cannedReplies: [
       "Проверь технику на разминке: корпус ровный, шаг короткий.",
       "Боль игнорировать не надо. Лучше снизить объём и сохранить движение.",
@@ -205,12 +212,31 @@ export const experts: ExpertProfile[] = [
     plansCount: 3,
     isFollowedByMe: false,
     isMe: false,
+    isDemo: true,
     cannedReplies: [
       "Привет. В этом плане важна терпеливая работа, без резких скачков.",
       "Если тренировка прошла тяжело, следующий день делаем легче.",
       "Увидимся на тренировке. Разберём темп по факту самочувствия.",
     ],
   },
+  ...demoCommunity.people.map((person) => {
+    const avatarUrl = demoCommunityAssets.avatars[person.avatar];
+    return {
+      id: person.id,
+      telegramId: 0,
+      name: person.name,
+      bio: person.bio,
+      photoUrl: avatarUrl,
+      photoUrls: [avatarUrl],
+      followersCount: person.plan.participantIds.length,
+      followingCount: 0,
+      plansCount: 1,
+      isFollowedByMe: false,
+      isMe: false,
+      isDemo: true,
+      tags: [...person.tags],
+    };
+  }),
 ];
 
 export const getExpertPlans = (expertId: string): ExpertProfilePlan[] =>

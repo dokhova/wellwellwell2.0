@@ -314,6 +314,15 @@ export function ProfileScreen(props: {
               {isBioExpanded ? "Свернуть" : "Подробнее"}
             </button>
           )}
+          {props.profile.tags?.length ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {props.profile.tags.map((tag) => (
+                <span key={tag} className="rounded-full bg-muted px-3 py-1.5 text-[13px] font-medium text-foreground">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : null}
 
           <div className="mt-5 flex items-center justify-between rounded-2xl bg-muted px-1">
             <ProfileStat value={props.profile.followersCount} label="Подписчики" onClick={() => props.onConnectionsOpen("followers")} />
@@ -388,17 +397,20 @@ export function ProfileScreen(props: {
               <h2 className="mb-3 text-[19px] font-bold leading-6 text-foreground">Планы</h2>
               {props.plans.length > 0 ? (
                 <div className="space-y-2.5">
-                  {visiblePlans.map((plan, index) => (
-                    <PlanListCard
-                      key={plan.id}
-                      plan={plan}
-                      dayNumber={weekDates[index % weekDates.length]}
-                      monthLabel={monthShortByName[weekDateMonths[index % weekDateMonths.length]] ?? weekDateMonths[index % weekDateMonths.length]}
-                      scheduleMeta={`${plan.timeDate} · Активен`}
-                      onOpen={() => props.onPlanOpen(plan.id)}
-                      showToggle={false}
-                    />
-                  ))}
+                  {visiblePlans.map((plan, index) => {
+                    const nearestDate = formatNearestDate(plan.schedule);
+                    return (
+                      <PlanListCard
+                        key={plan.id}
+                        plan={plan}
+                        dayNumber={nearestDate.dayNumber}
+                        monthLabel={nearestDate.monthLabel || (monthShortByName[weekDateMonths[index % weekDateMonths.length]] ?? weekDateMonths[index % weekDateMonths.length])}
+                        scheduleMeta={`${plan.timeDate} · Активен`}
+                        onOpen={() => props.onPlanOpen(plan.id)}
+                        showToggle={false}
+                      />
+                    );
+                  })}
                   {hasMorePlans && (
                     <button
                       onClick={() => setShowAllPlans(true)}

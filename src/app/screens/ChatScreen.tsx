@@ -75,7 +75,7 @@ export function ChatsScreen({
         const profiles = await searchProfiles(normalizedQuery);
         if (cancelled) return;
         setRemotePeers(profiles
-          .filter((profile) => profile.id !== currentUserId)
+          .filter((profile) => profile.id !== currentUserId && !profile.isDemo)
           .map((profile) => ({
             id: profile.id,
             name: profile.name,
