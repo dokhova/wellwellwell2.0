@@ -12,6 +12,7 @@ import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/st
 import { fetchUserThreadMessages, makeThreadId, sendMessage, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
 import { countJoined, createPlanRemote, deletePlanParticipant, deletePlanRemote, fetchParticipants, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, updatePlanRemote, upsertPlanParticipant } from "@/app/lib/api/plans";
 import { buildPlanStartAppUrl, getTelegramStartParam, getTelegramUser, initTelegram } from "@/app/lib/telegram";
+import { checkBackendHealth } from "@/app/lib/health";
 import { HomeScreen } from "@/app/screens/HomeScreen";
 import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
 import { CreateScreen, type CreatedPlanResult } from "@/app/screens/CreateScreen";
@@ -580,6 +581,21 @@ export default function App() {
   useEffect(() => initTelegram(), []);
 
   useEffect(() => {
+    let cancelled = false;
+    void checkBackendHealth().then((health) => {
+      if (health.ok) return;
+      console.error(`Backend health check failed: ${health.reason}`);
+      if (!cancelled && import.meta.env.DEV) {
+        setAppToast(`Backend недоступен: ${health.reason}`);
+        window.setTimeout(() => setAppToast(""), 4200);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const refreshVisibleScreen = () => {
       if (document.visibilityState === "visible") {
         setRefreshTick((value) => value + 1);
@@ -867,6 +883,12 @@ export default function App() {
         await upsertProfile(mirroredProfile);
       } catch (error) {
         console.error("Supabase profile sync failed", error);
+        window.setTimeout(() => {
+          if (cancelled) return;
+          void upsertProfile(telegramProfile).catch((retryError) => {
+            console.error("Supabase profile sync retry failed", retryError);
+          });
+        }, 3000);
       }
     };
 

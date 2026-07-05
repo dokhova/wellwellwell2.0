@@ -34,6 +34,11 @@ const mapProfileToRow = (profile: ExpertProfile) => {
   };
 };
 
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const getSupabaseUnavailableError = (operation: string) =>
+  new Error(`Supabase is not configured; ${operation} cannot be completed. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.`);
+
 export const mapRowToProfile = (row: ProfileRow): ExpertProfile => {
   const photoUrl = sanitizeImageUrl(row.photo_url);
   const photoUrls = sanitizePhotoUrls(row.photo_urls);
@@ -62,10 +67,25 @@ export const mapRowToProfile = (row: ProfileRow): ExpertProfile => {
 };
 
 export const upsertProfile = async (profile: ExpertProfile) => {
-  if (!supabase) return;
+  if (!supabase) {
+    const error = getSupabaseUnavailableError("profile upsert");
+    console.error("Supabase profile upsert failed:", error.message);
+    throw error;
+  }
 
-  const { error } = await supabase.from("profiles").upsert(mapProfileToRow(profile));
-  if (error) throw error;
+  const row = mapProfileToRow(profile);
+  const upsertOnce = async () => {
+    const { error } = await supabase.from("profiles").upsert(row);
+    if (error) throw error;
+  };
+
+  try {
+    await upsertOnce();
+  } catch (error) {
+    console.error("Supabase profile upsert failed; retrying once in 3s.", error);
+    await wait(3000);
+    await upsertOnce();
+  }
 };
 
 export const fetchProfile = async (id: string): Promise<ExpertProfile | null> => {
@@ -82,7 +102,7 @@ export const fetchProfile = async (id: string): Promise<ExpertProfile | null> =>
 };
 
 export const searchProfiles = async (query: string): Promise<ExpertProfile[]> => {
-  if (!supabase) return [];
+  if (!supabase) throw getSupabaseUnavailableError("profile search");
 
   const normalizedQuery = query.trim();
   if (!normalizedQuery) return [];

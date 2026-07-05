@@ -132,6 +132,8 @@ export function SearchScreen({
 }) {
   const [query, setQuery] = useState("");
   const [remotePeople, setRemotePeople] = useState<ExpertProfile[]>([]);
+  const [peopleSearchError, setPeopleSearchError] = useState("");
+  const [peopleSearchLoading, setPeopleSearchLoading] = useState(false);
   const normalizedQuery = query.trim().toLowerCase();
   const results = normalizedQuery
     ? plans.filter((plan) =>
@@ -158,16 +160,28 @@ export function SearchScreen({
   useEffect(() => {
     if (!normalizedQuery) {
       setRemotePeople([]);
+      setPeopleSearchError("");
+      setPeopleSearchLoading(false);
       return;
     }
 
     let cancelled = false;
     const loadPeople = async () => {
+      setPeopleSearchLoading(true);
+      setPeopleSearchError("");
       try {
         const profiles = await searchProfiles(normalizedQuery);
-        if (!cancelled) setRemotePeople(profiles);
+        if (!cancelled) {
+          setRemotePeople(profiles.filter((profile) => profile.id !== currentUserId));
+        }
       } catch (error) {
         console.error("Supabase profile search failed", error);
+        if (!cancelled) {
+          setRemotePeople([]);
+          setPeopleSearchError("Не удалось выполнить поиск, попробуйте позже");
+        }
+      } finally {
+        if (!cancelled) setPeopleSearchLoading(false);
       }
     };
 
@@ -202,6 +216,16 @@ export function SearchScreen({
         </div>
       </div>
       <div className="flex-1 overflow-y-auto py-3 space-y-3">
+        {peopleSearchError && (
+          <div className="mx-4 rounded-2xl bg-white px-4 py-3 text-[14px] leading-5 text-red-600">
+            {peopleSearchError}
+          </div>
+        )}
+        {!peopleSearchError && peopleSearchLoading && normalizedQuery && (
+          <div className="mx-4 rounded-2xl bg-white px-4 py-3 text-[14px] leading-5 text-gray-500">
+            Ищем людей...
+          </div>
+        )}
         {people.map((person) => (
           <PersonCard
             key={person.id}
@@ -218,7 +242,7 @@ export function SearchScreen({
             onPress={() => onPlanOpen(plan.id)}
           />
         ))}
-        {!hasResults && (
+        {!peopleSearchError && !hasResults && (
           <div className="flex flex-col items-center justify-center py-16 gap-2">
             <Search size={32} strokeWidth={1.5} color="#D1D5DB" />
             <p className="text-[14px] text-gray-400">Ничего не найдено</p>
