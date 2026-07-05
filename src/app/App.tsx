@@ -1,5 +1,5 @@
 import { ArrowLeft, Calendar, CheckCircle2, Home, MessageCircle, Plus, User } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Article, ChatMessage, ChatPeer, ChatThread, HomeFeedPlan, ParticipantPlanRef, PlanId, Screen } from "@/app/types";
 import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
 import { formatNearestDate, getNextOccurrence } from "@/app/data/calendar";
@@ -43,10 +43,80 @@ const writeJson = (key: string, value: unknown) => {
   }
 };
 
+const isRemovedLegacyDemoRecord = (value: unknown) => {
+  try {
+    const text = JSON.stringify(value).toLowerCase();
+    const removedId = ["ge", "na"].join("");
+    const removedFirstName = "\u0433\u0435\u043d\u0430";
+    const removedLastName = "\u043b\u043e\u0445\u0442\u0438\u043d";
+    return text.includes(removedId)
+      || text.includes(removedFirstName)
+      || text.includes(removedLastName)
+      || text.includes("цифровой детокс");
+  } catch {
+    return false;
+  }
+};
+
+const purgeRemovedLegacyDemoLocalData = ({
+  createdPlansStorageKey,
+  myPlansStorageKey,
+  checkedItemsStorageKey,
+  followingStorageKey,
+  chatThreadIdsStorageKey,
+  chatThreadStorageKey,
+}: {
+  createdPlansStorageKey: string;
+  myPlansStorageKey: string;
+  checkedItemsStorageKey: string;
+  followingStorageKey: string;
+  chatThreadIdsStorageKey: string;
+  chatThreadStorageKey: (peerId: string) => string;
+}) => {
+  const createdPlans = readJson<HomeFeedPlan[]>(createdPlansStorageKey, []);
+  const removedPlanIds = new Set(createdPlans.filter(isRemovedLegacyDemoRecord).map((plan) => planKey(plan.id)));
+  const cleanedCreatedPlans = createdPlans.filter((plan) => !removedPlanIds.has(planKey(plan.id)));
+  if (cleanedCreatedPlans.length !== createdPlans.length) writeJson(createdPlansStorageKey, cleanedCreatedPlans);
+
+  if (removedPlanIds.size > 0) {
+    const myPlans = readJson<Array<PlanId | ParticipantPlanRef>>(myPlansStorageKey, []);
+    const cleanedMyPlans = myPlans.filter((item) => {
+      const id = typeof item === "number" || typeof item === "string" ? item : item.id;
+      return !removedPlanIds.has(planKey(id));
+    });
+    if (cleanedMyPlans.length !== myPlans.length) writeJson(myPlansStorageKey, cleanedMyPlans);
+
+    const checkedItemKeys = readJson<string[]>(checkedItemsStorageKey, []);
+    const cleanedCheckedItemKeys = checkedItemKeys.filter((key) => !Array.from(removedPlanIds).some((id) => key.endsWith(`:${id}`)));
+    if (cleanedCheckedItemKeys.length !== checkedItemKeys.length) writeJson(checkedItemsStorageKey, cleanedCheckedItemKeys);
+  }
+
+  const following = readJson<ExpertConnection[]>(followingStorageKey, []);
+  const cleanedFollowing = following.filter((connection) => !isRemovedLegacyDemoRecord(connection));
+  if (cleanedFollowing.length !== following.length) writeJson(followingStorageKey, cleanedFollowing);
+
+  const chatThreadIds = readJson<string[]>(chatThreadIdsStorageKey, []);
+  const cleanedChatThreadIds = chatThreadIds.filter((id) => {
+    const threadKey = chatThreadStorageKey(id);
+    const thread = readJson<ChatThread | null>(threadKey, null);
+    const shouldRemove = isRemovedLegacyDemoRecord(id) || isRemovedLegacyDemoRecord(thread);
+    if (shouldRemove) {
+      try {
+        window.localStorage.removeItem(threadKey);
+      } catch (error) {
+        console.error(`localStorage remove failed for ${threadKey}`, error);
+      }
+    }
+    return !shouldRemove;
+  });
+  if (cleanedChatThreadIds.length !== chatThreadIds.length) writeJson(chatThreadIdsStorageKey, cleanedChatThreadIds);
+};
+
 const SUPPORT_PEER: ChatPeer = {
   id: "wellwellwell-support",
   name: "Well Well Well",
   avatarUrl: appLogo as unknown as string,
+  isDemo: true,
   cannedReplies: [
     "Спасибо за сообщение. В демо-версии команда ответит здесь позже.",
     "Мы уже собираем обратную связь по планам и чатам.",
@@ -58,6 +128,7 @@ const MODERATOR_IDS = ["353298824"];
 const DEMO_PROFILE_IDS = new Set(experts.filter((profile) => profile.isDemo).map((profile) => profile.id));
 const isDemoProfileId = (id?: string | null) => Boolean(id && DEMO_PROFILE_IDS.has(id));
 const isDemoProfile = (profile: Pick<ExpertProfile, "isDemo">) => profile.isDemo === true;
+const isDemoPeer = (peer: Pick<ChatPeer, "isDemo">) => peer.isDemo === true;
 const removeDemoConnections = (items: ExpertConnection[]) => items.filter((item) => !isDemoProfileId(item.id));
 
 const normalizeProfile = (profile: ExpertProfile): ExpertProfile => {
@@ -73,6 +144,7 @@ const normalizeProfile = (profile: ExpertProfile): ExpertProfile => {
     photoUrls,
     photoUrl,
     coverUrls,
+    cannedReplies: keepDemoFields ? profile.cannedReplies : undefined,
     isDemo: keepDemoFields ? true : undefined,
     tags: keepDemoFields ? profile.tags : undefined,
   };
@@ -104,6 +176,7 @@ const sanitizeChatThread = (thread: ChatThread): ChatThread => ({
   peer: {
     ...thread.peer,
     avatarUrl: sanitizeImageUrl(thread.peer.avatarUrl),
+    isDemo: thread.peer.id === SUPPORT_PEER.id ? true : thread.peer.isDemo,
   },
   messages: sortChatMessages(thread.messages),
 });
@@ -296,10 +369,22 @@ export default function App() {
   const checkedItemsStorageKey = `${storagePrefix}:checkedItems`;
   const createdPlansStorageKey = `${storagePrefix}:createdPlans`;
   const deletedPlansStorageKey = `${storagePrefix}:deletedPlans`;
-  const homeDemoPlanOrderStorageKey = `${storagePrefix}:homeDemoPlanOrder`;
   const followingStorageKey = `${storagePrefix}:following`;
   const chatThreadIdsStorageKey = `${storagePrefix}:chatThreadIds`;
   const chatThreadStorageKey = (peerId: string) => `${storagePrefix}:chat:${encodeURIComponent(peerId)}`;
+
+  const [removedLegacyDemoLocalDataPurged] = useState(() => {
+    purgeRemovedLegacyDemoLocalData({
+      createdPlansStorageKey,
+      myPlansStorageKey,
+      checkedItemsStorageKey,
+      followingStorageKey,
+      chatThreadIdsStorageKey,
+      chatThreadStorageKey,
+    });
+    return true;
+  });
+  void removedLegacyDemoLocalDataPurged;
 
   const [screen, setScreen] = useState<Screen>("home");
   const [detailOrigin, setDetailOrigin] = useState<Screen>("plans");
@@ -317,7 +402,7 @@ export default function App() {
   const [profileConnectionsOwnerId, setProfileConnectionsOwnerId] = useState("");
   const [highlightedPlanId, setHighlightedPlanId] = useState<PlanId | null>(null);
   const [viewingOwnProfile, setViewingOwnProfile] = useState(true);
-  const [viewingExpertId, setViewingExpertId] = useState("gena");
+  const [viewingExpertId, setViewingExpertId] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
   const [startParamHandled, setStartParamHandled] = useState(false);
   const [appToast, setAppToast] = useState("");
@@ -325,12 +410,7 @@ export default function App() {
   const [remoteProfiles, setRemoteProfiles] = useState<Record<string, ExpertProfile>>({});
   const [homeDemoPlanOrder] = useState(() => {
     const currentIds = demoCommunityPlans.slice(0, 12).map((plan) => planKey(plan.id));
-    const storedIds = readJson<string[]>(homeDemoPlanOrderStorageKey, []);
-    const validStoredIds = storedIds.filter((id) => currentIds.includes(id));
-    const missingIds = currentIds.filter((id) => !validStoredIds.includes(id));
-    const nextIds = validStoredIds.length ? [...validStoredIds, ...missingIds] : shuffleIds(currentIds);
-    writeJson(homeDemoPlanOrderStorageKey, nextIds);
-    return nextIds;
+    return shuffleIds(currentIds);
   });
   const [editableProfile, setEditableProfile] = useState<ExpertProfile>(() =>
     normalizeProfile(readJson(profileStorageKey, buildTelegramProfile(telegramUser)))
@@ -370,6 +450,7 @@ export default function App() {
       ...storedThreads,
     ];
   });
+  const homeScrollTopRef = useRef(0);
   const currentUserId = editableProfile.id;
   const isModerator = MODERATOR_IDS.includes(currentUserId);
   const currentAuthor = {
@@ -380,22 +461,41 @@ export default function App() {
   const deletedPlanIdSet = new Set(deletedPlanIds.map(planKey));
   const moderatorHiddenPlanIdSet = new Set(moderatorHiddenPlanIds.map(planKey));
   const isJoinedPlan = (id: PlanId) => myParticipantIds.some((item) => planKey(item.id) === planKey(id));
+  const getPlanParticipantPresentation = (plan: HomeFeedPlan) => {
+    const id = planKey(plan.id);
+    const joinedPeers = joinedParticipantPeers[id] ?? [];
+    const joinedAvatarEntries = joinedPeers
+      .filter((peer) => peer.id !== plan.author.id)
+      .map((peer) => peer.avatarUrl)
+      .filter((url): url is string => Boolean(url));
+    const avatars = Array.from(new Set([...plan.participants, ...joinedAvatarEntries]));
+    const joinedCount = joinedCounts[id] ?? 0;
+    const count = Math.max(avatars.length, joinedCount);
+    return {
+      avatars,
+      label: `${count} чел.`,
+      count,
+    };
+  };
   const demoPlansWithParticipants = demoCommunityPlans.map((plan) => {
-    const joinedPeers = joinedParticipantPeers[planKey(plan.id)] ?? [];
-    const joinedAvatars = joinedPeers.map((peer) => peer.avatarUrl).filter((url): url is string => Boolean(url));
+    const participantPresentation = getPlanParticipantPresentation(plan);
     return {
       ...plan,
-      participants: [...plan.participants, ...joinedAvatars],
-      participantsLabel: `${plan.participants.length + joinedPeers.length} чел.`,
+      participants: participantPresentation.avatars,
+      participantsLabel: participantPresentation.label,
     };
   });
   const remotePlansWithCounts = remotePublicPlans.map((plan) => {
-    const joinedCount = joinedCounts[planKey(plan.id)];
-    return joinedCount === undefined ? plan : { ...plan, participantsLabel: `${joinedCount} чел.` };
+    const participantPresentation = getPlanParticipantPresentation(plan);
+    return {
+      ...plan,
+      participants: participantPresentation.avatars,
+      participantsLabel: participantPresentation.label,
+    };
   });
   const allPlans = [...demoPlansWithParticipants, ...createdPlans, ...remotePlansWithCounts, ...homeFeedPlans]
     .filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index)
-    .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)));
+    .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && plan.hidden !== true && !moderatorHiddenPlanIdSet.has(planKey(plan.id)));
   const allPlanDetails = [
     ...demoPlansWithParticipants,
     ...createdPlans.flatMap((plan) => plan.items?.length ? plan.items : []),
@@ -403,7 +503,7 @@ export default function App() {
     ...remotePlansWithCounts,
     ...homeFeedPlans,
   ].filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index)
-    .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)));
+    .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && plan.hidden !== true && !moderatorHiddenPlanIdSet.has(planKey(plan.id)));
   const participantKey = (ref: ParticipantPlanRef) => `${ref.kind}:${ref.id}`;
   const myParticipantKeys = new Set(myParticipantIds.map(participantKey));
   const myPlans = allPlans.filter((plan) =>
@@ -435,6 +535,7 @@ export default function App() {
     name: participant.name,
     avatarUrl: participant.avatar,
     cannedReplies: participant.cannedReplies,
+    isDemo: true,
   })), []);
   const chatSearchPeers: ChatPeer[] = useMemo(() => [], []);
   const localPeerById = useMemo(() => new Map(chatSearchPeers.map((peer) => [peer.id, peer])), [chatSearchPeers]);
@@ -563,7 +664,7 @@ export default function App() {
           const hasLatestMessage = existing.messages.some((message) => message.id === latestMessage.id);
           nextThreads[existingIndex] = {
             ...existing,
-            peer: existing.peer.cannedReplies?.length ? existing.peer : peer,
+            peer: isDemoPeer(existing.peer) ? existing.peer : peer,
             messages: sortChatMessages(hasLatestMessage
               ? existing.messages.map((message) => message.id === latestMessage.id ? { ...message, ...latestMessage } : message)
               : [...existing.messages, latestMessage]),
@@ -805,7 +906,6 @@ export default function App() {
   }, [screen, viewingExpertId, viewingOwnProfile]);
 
   useEffect(() => {
-    if (screen !== "chats") return;
     let cancelled = false;
 
     const loadRemoteThreads = async () => {
@@ -834,6 +934,7 @@ export default function App() {
     const unsubscribe = subscribeToUserMessages(currentUserId, (message) => {
       const peerId = getPeerIdFromThreadId(message.thread_id, currentUserId);
       if (!peerId) return;
+      if (screen === "chat" && activeChatPeer?.id === peerId) return;
       if (remoteProfiles[peerId] || localPeerById.has(peerId)) {
         mergeRemoteThreads([message]);
         return;
@@ -857,7 +958,7 @@ export default function App() {
       cancelled = true;
       unsubscribe();
     };
-  }, [currentUserId, localPeerById, mergeRemoteThreads, refreshTick, remoteProfiles, screen]);
+  }, [activeChatPeer?.id, currentUserId, localPeerById, mergeRemoteThreads, refreshTick, remoteProfiles, screen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1042,7 +1143,6 @@ export default function App() {
   };
 
   const openChatWithPeer = (peer: ChatPeer) => {
-    if (peer.isDemo === true) return;
     const nextPeer = getCannedPeer(peer);
     setActiveChatPeer(nextPeer);
     setChatThreads((threads) => threads.map((thread) => thread.peer.id === nextPeer.id ? { ...thread, unreadCount: 0 } : thread));
@@ -1249,8 +1349,16 @@ export default function App() {
 
   const hidePlanFromHome = (plan: HomeFeedPlan) => {
     if (!canHidePlanFromHome(plan)) return;
-    setModeratorHiddenPlanIds((ids) => ids.some((id) => planKey(id) === planKey(plan.id)) ? ids : [plan.id, ...ids]);
-    setRemotePublicPlans((plans) => plans.filter((item) => planKey(item.id) !== planKey(plan.id)));
+    const idKey = planKey(plan.id);
+    setModeratorHiddenPlanIds((ids) => ids.some((id) => planKey(id) === idKey) ? ids : [plan.id, ...ids]);
+    setRemotePublicPlans((plans) => plans.filter((item) => planKey(item.id) !== idKey));
+    setCreatedPlans((plans) => plans.filter((item) => planKey(item.id) !== idKey));
+    setProfileRemotePlans((items) => Object.fromEntries(Object.entries(items).map(([authorId, plans]) => [
+      authorId,
+      plans.filter((item) => planKey(item.id) !== idKey),
+    ])));
+    setMyParticipantIds((items) => items.filter((item) => planKey(item.id) !== idKey));
+    setCheckedItemKeys((keys) => keys.filter((key) => !key.endsWith(`:${idKey}`)));
     void setPlanHidden(planKey(plan.id), true).catch((error) => {
       console.error("Supabase plan hide failed", error);
       setModeratorHiddenPlanIds((ids) => ids.filter((id) => planKey(id) !== planKey(plan.id)));
@@ -1404,6 +1512,10 @@ export default function App() {
             canMessageAuthor={(authorId) => !isDemoProfileId(authorId)}
             canHidePlan={canHidePlanFromHome}
             onHidePlan={hidePlanFromHome}
+            initialScrollTop={homeScrollTopRef.current}
+            onScrollTopChange={(scrollTop) => {
+              homeScrollTopRef.current = scrollTop;
+            }}
           />
         );
       case "plans":
@@ -1457,7 +1569,7 @@ export default function App() {
         return <DetailScreen onNavigate={navigate} backTo={detailOrigin} />;
       case "article":
         return activeArticle
-          ? <ArticleScreen article={activeArticle} onBack={() => setScreen(articleOrigin)} onProfile={() => openExpertProfile("gena")} />
+          ? <ArticleScreen article={activeArticle} onBack={() => setScreen(articleOrigin)} onProfile={() => setScreen("profile")} />
           : null;
       case "search":
         return (
@@ -1640,6 +1752,7 @@ export default function App() {
                 avatarUrl,
               }));
           const participantItems = [...baseParticipantItems, ...joinedPeers]
+            .filter((participant) => participant.id !== feedPlan.author.id)
             .filter((participant, index, items) => items.findIndex((item) => item.id === participant.id) === index);
           const participantAvatars = participantItems.map((participant) => participant.avatarUrl).filter((url): url is string => Boolean(url));
           const participantCount = participantItems.length;
@@ -1674,7 +1787,8 @@ export default function App() {
               initiallyJoined={myParticipantIds.some((item) => item.id === feedPlan.id)}
               onJoin={addCatalogPlanToRoutine}
               onLeave={removePlanFromMine}
-              onProfile={() => openExpertProfile(feedPlan.author.id ?? "gena")}
+              onProfile={() => feedPlan.author.id ? openExpertProfile(feedPlan.author.id) : setScreen("profile")}
+              onProfileOpen={openExpertProfile}
               onMessageAuthor={isDemoProfileId(feedPlan.author.id) ? undefined : (peer) => openChatWithPeer({ ...peer, id: feedPlan.author.id ?? peer.id })}
               participantItems={participantItems}
               onMessageParticipant={isDemoPlan ? undefined : openChatWithPeer}
@@ -1699,7 +1813,7 @@ export default function App() {
 
   const showNav = !NO_BOTTOM_NAV.includes(screen);
   const unreadChatsCount = chatThreads
-    .filter((thread) => !thread.peer.cannedReplies?.length)
+    .filter((thread) => !isDemoPeer(thread.peer))
     .reduce((sum, thread) => sum + (thread.unreadCount ?? 0), 0);
 
   return (
@@ -1725,6 +1839,7 @@ export default function App() {
           {([
             { id: "home" as Screen, label: "Главная", Icon: Home },
             { id: "plans" as Screen, label: "Мои планы", Icon: Calendar },
+            { id: "create" as Screen, label: "Создать", Icon: Plus },
             { id: "chats" as Screen, label: "Чаты", Icon: MessageCircle },
             { id: "profile" as Screen, label: "Профиль", Icon: User },
           ] as { id: Screen; label: string; Icon: React.FC<{ size: number; strokeWidth: number; color: string }> }[]).map(({ id, label, Icon }) => {

@@ -1,4 +1,4 @@
-import { CalendarPlus, Check, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { CalendarPlus, Check, ChevronRight, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { HomeFeedPlan, PlanId, Screen } from "@/app/types";
 import { normalizePlanTag, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
@@ -144,17 +144,7 @@ export function PlansScreen({
         <div className="min-w-0 flex-1 text-center">
           <h1 className="text-[20px] font-semibold leading-6 text-foreground">Мои планы</h1>
         </div>
-        {!isEmpty ? (
-          <button
-            onClick={() => onNavigate("create", "plans")}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-foreground active:opacity-85"
-            aria-label="Создать план"
-          >
-            <Plus size={22} strokeWidth={1.9} />
-          </button>
-        ) : (
-          <div className="h-10 w-10" />
-        )}
+        <div className="h-10 w-10" />
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -164,11 +154,7 @@ export function PlansScreen({
               <CalendarPlus size={24} strokeWidth={1.9} color={GREEN} />
             </div>
             <p className="text-[17px] font-semibold text-foreground">Планов пока нет</p>
-            <p className="mt-2 text-[14px] leading-5 text-muted-foreground">Присоединяйся к планам или создавай свои — они появятся здесь</p>
-            <button onClick={() => onNavigate("create", "plans")} className="mt-5 flex h-11 items-center gap-2 rounded-full px-5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
-              <Plus size={16} strokeWidth={2.2} />
-              Создать
-            </button>
+            <p className="mt-2 text-[14px] leading-5 text-muted-foreground">Присоединяйся к планам или создавай свои через нижнюю навигацию — они появятся здесь</p>
           </div>
         ) : (
           <>

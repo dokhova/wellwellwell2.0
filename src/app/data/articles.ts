@@ -31,10 +31,10 @@ export const articles: Article[] = [
     id: 3,
     title: "Челлендж: Вечерний цифровой детокс",
     excerpt: "Свет экрана вечером подавляет мелатонин и сдвигает циркадные часы.",
-    author: "Гена Лохтин",
+    author: "Well Well Well",
     readTime: "8 мин чтения",
     coverUrl: cover2 as unknown as string,
-    avatarUrl: UNSPLASH.avatarGena,
+    avatarUrl: avatarBrand as unknown as string,
   },
   {
     id: 4,

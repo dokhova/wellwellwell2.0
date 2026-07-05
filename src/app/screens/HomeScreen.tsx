@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Copy, Filter, MoreVertical, Plus, Search, Share2, Trash2, Users } from "lucide-react";
 import type { ChatPeer, HomeFeedPlan, PlanId, Screen, TagFilter } from "@/app/types";
 import { CATEGORY_CHIPS, normalizePlanTag, PLAN_TAG_LABELS } from "@/app/data/plans";
@@ -174,6 +174,8 @@ export function HomeScreen({
   canMessageAuthor,
   canHidePlan,
   onHidePlan,
+  initialScrollTop = 0,
+  onScrollTopChange,
   plans,
 }: {
   onNavigate: (s: Screen, from?: Screen) => void;
@@ -183,8 +185,11 @@ export function HomeScreen({
   canMessageAuthor?: (authorId?: string) => boolean;
   canHidePlan?: (plan: HomeFeedPlan) => boolean;
   onHidePlan?: (plan: HomeFeedPlan) => void;
+  initialScrollTop?: number;
+  onScrollTopChange?: (scrollTop: number) => void;
   plans: HomeFeedPlan[];
 }) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const [tagFilter, setTagFilter] = useState<TagFilter>("all");
   const [sheet, setSheet] = useState<"share" | "author" | null>(null);
   const [activePlan, setActivePlan] = useState<HomeFeedPlan | null>(null);
@@ -216,6 +221,12 @@ export function HomeScreen({
     setSheet("author");
   };
 
+  useEffect(() => {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement) return;
+    scrollElement.scrollTop = initialScrollTop;
+  }, [initialScrollTop]);
+
   return (
     <div className="relative flex flex-col h-full bg-surface">
       <div className="h-12 px-4 flex items-center justify-between">
@@ -230,7 +241,11 @@ export function HomeScreen({
       </div>
 
       {/* Feed */}
-      <div className="flex-1 overflow-y-auto px-4 pt-2 pb-6 space-y-6">
+      <div
+        ref={scrollRef}
+        onScroll={(event) => onScrollTopChange?.(event.currentTarget.scrollTop)}
+        className="flex-1 overflow-y-auto px-4 pt-2 pb-6 space-y-6"
+      >
         <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex gap-2">
             {CATEGORY_CHIPS.map((chip) => {
@@ -255,7 +270,9 @@ export function HomeScreen({
               key={plan.id}
               plan={plan}
               onOpen={() => onPlanOpen(plan.id, "home")}
-              onAuthor={() => onAuthorOpen(plan.author.id ?? "gena")}
+              onAuthor={() => {
+                if (plan.author.id) onAuthorOpen(plan.author.id);
+              }}
               onShare={() => openShare(plan)}
               onAuthorMenu={() => openAuthorMenu(plan)}
             />
@@ -313,7 +330,7 @@ export function HomeScreen({
       {sheet === "author" && activePlan && (
         <HomeSheet title={activePlan.author.name} onClose={() => setSheet(null)}>
           <div className="space-y-2">
-            <button onClick={() => { setSheet(null); onAuthorOpen(activePlan.author.id ?? "gena"); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Открыть профиль</button>
+            <button onClick={() => { setSheet(null); if (activePlan.author.id) onAuthorOpen(activePlan.author.id); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Открыть профиль</button>
             {(canMessageAuthor?.(activePlan.author.id) ?? true) && (
               <button onClick={() => { setSheet(null); onMessagePeer({ id: activePlan.author.id ?? activePlan.author.name, name: activePlan.author.name, avatarUrl: activePlan.author.avatarUrl }); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Написать</button>
             )}

@@ -185,7 +185,9 @@ export const setPlanHidden = async (planId: string, hidden: boolean) => {
   const { error } = await supabase
     .from("plans")
     .update({ hidden })
-    .eq("id", planId);
+    .eq("id", planId)
+    .select("id")
+    .single();
 
   if (error) throw error;
 };

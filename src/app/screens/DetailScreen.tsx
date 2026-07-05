@@ -2,7 +2,7 @@ import challengeImg from "@/imports/challenge-opt.jpg";
 import type { Screen } from "@/app/types";
 import { articleBodies } from "@/app/data/articles";
 import { eventMeta } from "@/app/data/plans";
-import { UNSPLASH } from "@/app/data/constants";
+import appLogo from "@/imports/avatar-brand.png";
 import { EventDetailScreen } from "@/app/screens/EventDetailScreen";
 
 export function DetailScreen({ onNavigate, backTo }: { onNavigate: (s: Screen, from?: Screen) => void; backTo: Screen }) {
@@ -10,8 +10,8 @@ export function DetailScreen({ onNavigate, backTo }: { onNavigate: (s: Screen, f
     <EventDetailScreen
       title="Челлендж: Вечерний цифровой детокс"
       coverSrc={challengeImg}
-      authorName="Гена Лохтин"
-      authorAvatarUrl={UNSPLASH.avatarGena}
+      authorName="Well Well Well"
+      authorAvatarUrl={appLogo as unknown as string}
       authorVerified
       badgeDate="22 июня 2026"
       paragraphs={articleBodies[3]}

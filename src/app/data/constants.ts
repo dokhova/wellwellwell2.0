@@ -18,7 +18,6 @@ export const UNSPLASH = {
   shoes: "https://images.unsplash.com/photo-1571008887538-b36bb32f4571?crop=entropy&cs=tinysrgb&fit=crop&w=300&h=300&q=80",
   marathon: "https://images.unsplash.com/photo-1571008887538-b36bb32f4571?crop=entropy&cs=tinysrgb&fit=crop&w=300&h=400&q=80&crop=top",
   avatarMaria: expertAvatarMariaKuznetsova as unknown as string,
-  avatarGena: expertAvatarMariaKuznetsova as unknown as string,
   avatarDmitry: expertAvatarDmitryOrlov as unknown as string,
   userAvatar: expertAvatarMariaKuznetsova as unknown as string,
 };
@@ -45,4 +44,4 @@ export const EVENT_PARTICIPANTS = [
   { id: "yulia-belova", name: "Юлия Белова", avatar: expertAvatarYuliaBelova as unknown as string, cannedReplies: ["В этом плане важна терпеливая работа, без резких скачков.", "Если тренировка прошла тяжело, следующий день делаем легче."] },
 ];
 
-export const NO_BOTTOM_NAV: Screen[] = ["article", "search", "planEvent", "detail", "profileConnections", "editProfile", "addPlan", "chat"];
+export const NO_BOTTOM_NAV: Screen[] = ["article", "search", "planEvent", "detail", "profileConnections", "editProfile", "addPlan", "create", "chat"];

@@ -354,7 +354,11 @@ export function ProfileScreen(props: {
           {!props.isMe && props.canMessage !== false && (
             <div className="mt-5">
               <button
-                onClick={() => props.onMessageProfile?.({ id: props.profile.id, name: props.profile.name, avatarUrl: props.profile.photoUrl, cannedReplies: props.profile.cannedReplies })}
+                onClick={() => props.onMessageProfile?.(
+                  props.profile.isDemo === true
+                    ? { id: props.profile.id, name: props.profile.name, avatarUrl: props.profile.photoUrl, cannedReplies: props.profile.cannedReplies, isDemo: true }
+                    : { id: props.profile.id, name: props.profile.name, avatarUrl: props.profile.photoUrl, realUser: true },
+                )}
                 className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border text-[15px] font-semibold active:opacity-90"
                 style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
               >

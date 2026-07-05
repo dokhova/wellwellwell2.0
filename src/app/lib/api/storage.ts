@@ -69,7 +69,9 @@ export const uploadPhoto = async (file: File): Promise<string | null> => {
   const fileName = `${Date.now()}-${crypto.randomUUID()}.${extension}`;
 
   try {
-    const { error } = await supabase.storage.from("photos").upload(fileName, uploadFile);
+    const { error } = await supabase.storage.from("photos").upload(fileName, uploadFile, {
+      cacheControl: "31536000",
+    });
     if (error) {
       console.error("Supabase photo upload failed:", error.message, error);
       return null;

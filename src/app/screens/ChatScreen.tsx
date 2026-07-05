@@ -226,7 +226,9 @@ export function ChatScreen({
   const [sending, setSending] = useState(false);
   const timeoutRef = useRef<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const isRealPeer = !peer.cannedReplies?.length;
+  const isDemoPeer = peer.isDemo === true;
+  const demoReplies = isDemoPeer ? peer.cannedReplies ?? [] : [];
+  const isRealPeer = !isDemoPeer;
   const threadId = isRealPeer ? makeThreadId(currentUserId, peer.id) : "";
   const sortedMessages = [...messages].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
 
@@ -290,11 +292,11 @@ export function ChatScreen({
       });
     }
 
-    if (peer.cannedReplies?.length) {
+    if (isDemoPeer && demoReplies.length) {
       setTyping(true);
-      const replyIndex = sortedMessages.filter((message) => message.sender === "peer").length % peer.cannedReplies.length;
+      const replyIndex = sortedMessages.filter((message) => message.sender === "peer").length % demoReplies.length;
       timeoutRef.current = window.setTimeout(() => {
-        onSendMessage(peer, peer.cannedReplies?.[replyIndex] ?? "", "peer");
+        onSendMessage(peer, demoReplies[replyIndex] ?? "", "peer");
         setTyping(false);
       }, 1100 + Math.round(Math.random() * 400));
     }
@@ -329,12 +331,12 @@ export function ChatScreen({
         </button>
         <button onClick={() => onPeerProfile(peer)} className="min-w-0 flex-1 text-left active:opacity-80">
           <p className="truncate text-[16px] font-semibold text-foreground">{peer.name}</p>
-          <p className="text-[12px] leading-4 text-muted-foreground">{peer.cannedReplies?.length ? "демо-ответы включены" : "чат готов к реальному собеседнику"}</p>
+          <p className="text-[12px] leading-4 text-muted-foreground">{isDemoPeer ? "демо-ответы включены" : "чат готов к реальному собеседнику"}</p>
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        {sortedMessages.length === 0 && (
+        {isDemoPeer && sortedMessages.length === 0 && (
           <div className="mb-4 rounded-2xl bg-card px-4 py-3 text-[13px] leading-5 text-muted-foreground">
             Это локальный демо-чат. Сообщения сохраняются только на этом устройстве.
           </div>

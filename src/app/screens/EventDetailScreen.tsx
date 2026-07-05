@@ -32,6 +32,7 @@ function CommentsBlock({
   currentAuthor,
   planAuthorId,
   onDelete,
+  onProfileOpen,
 }: {
   comment: string;
   setComment: (v: string) => void;
@@ -40,6 +41,7 @@ function CommentsBlock({
   currentAuthor?: { id: string; name: string; avatarUrl: string | null };
   planAuthorId?: string;
   onDelete: (comment: LocalComment) => void;
+  onProfileOpen?: (profileId: string) => void;
 }) {
   const canSend = comment.trim().length > 0;
 
@@ -78,7 +80,15 @@ function CommentsBlock({
             const canDelete = currentAuthor && (item.authorId === currentAuthor.id || planAuthorId === currentAuthor.id);
             return (
             <div key={item.id} className="flex gap-2.5">
-              <img loading="lazy" decoding="async" src={item.avatarUrl} alt="" className="h-8 w-8 flex-shrink-0 rounded-full object-cover" />
+              <button
+                onClick={() => {
+                  if (item.authorId) onProfileOpen?.(item.authorId);
+                }}
+                className="h-8 w-8 flex-shrink-0 rounded-full active:opacity-80"
+                aria-label="Открыть профиль"
+              >
+                <img loading="lazy" decoding="async" src={item.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
+              </button>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
                   <p className="truncate text-[14px] font-medium text-foreground">{item.author}</p>
@@ -129,7 +139,7 @@ export function EventDetailScreen({
   readTime, badgeDate, paragraphs, meta, format = "offline", duration, tag, schedule, shareUrl,
   participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, planId, onJoin, onLeave, onProfile,
   authorId, onMessageAuthor, participantItems, onMessageParticipant,
-  currentAuthor, canDelete = false, onDelete, canEdit = false, onEdit, canHide = false, onHide, refreshKey,
+  currentAuthor, canDelete = false, onDelete, canEdit = false, onEdit, canHide = false, onHide, refreshKey, onProfileOpen,
 }: EventDetailProps) {
   void authorVerified;
   void readTime;
@@ -389,7 +399,17 @@ export function EventDetailScreen({
               <div className="flex -space-x-2">
                 {participants.slice(0, 4).map((participant, i) => (
                   participant.avatarUrl ? (
-                    <img loading="lazy" decoding="async" key={participant.id ?? i} src={participant.avatarUrl} alt="" className="h-[30px] w-[30px] rounded-full border-2 border-white object-cover" />
+                    <button
+                      key={participant.id ?? i}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onProfileOpen?.(participant.id);
+                      }}
+                      className="h-[30px] w-[30px] rounded-full active:opacity-80"
+                      aria-label="Открыть профиль"
+                    >
+                      <img loading="lazy" decoding="async" src={participant.avatarUrl} alt="" className="h-[30px] w-[30px] rounded-full border-2 border-white object-cover" />
+                    </button>
                   ) : (
                     <span key={participant.id ?? i} className="h-[30px] w-[30px] rounded-full border-2 border-white bg-white/30" />
                   )
@@ -506,7 +526,17 @@ export function EventDetailScreen({
                   <div className="flex -space-x-2">
                     {participants.slice(0, 3).map((participant, i) => (
                       participant.avatarUrl ? (
-                        <img loading="lazy" decoding="async" key={participant.id ?? i} src={participant.avatarUrl} alt="" className="h-7 w-7 rounded-full border object-cover" style={{ borderColor: "var(--surface)" }} />
+                        <button
+                          key={participant.id ?? i}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onProfileOpen?.(participant.id);
+                          }}
+                          className="h-7 w-7 rounded-full active:opacity-80"
+                          aria-label="Открыть профиль"
+                        >
+                          <img loading="lazy" decoding="async" src={participant.avatarUrl} alt="" className="h-7 w-7 rounded-full border object-cover" style={{ borderColor: "var(--surface)" }} />
+                        </button>
                       ) : (
                         <span key={participant.id ?? i} className="h-7 w-7 rounded-full border bg-secondary" style={{ borderColor: "var(--surface)" }} />
                       )
@@ -523,7 +553,7 @@ export function EventDetailScreen({
           </div>
         </div>
 
-        <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} currentAuthor={currentAuthor} planAuthorId={authorId} onDelete={removeComment} />
+        <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} currentAuthor={currentAuthor} planAuthorId={authorId} onDelete={removeComment} onProfileOpen={onProfileOpen} />
       </div>
 
       {sheet === "participants" && (
@@ -532,12 +562,29 @@ export function EventDetailScreen({
             {participants.map((participant, i) => {
               return (
                 <div key={`${participant.id}-${i}`} className="flex w-full items-center gap-3 rounded-2xl bg-gray-100 px-4 py-3 text-left">
-                  {participant.avatarUrl ? (
-                    <img loading="lazy" decoding="async" src={participant.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover" />
-                  ) : (
-                    <span className="h-9 w-9 rounded-full bg-secondary" />
-                  )}
-                  <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-gray-900">{participant.name}</span>
+                  <button
+                    onClick={() => {
+                      setSheet(null);
+                      onProfileOpen?.(participant.id);
+                    }}
+                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full active:opacity-80"
+                    aria-label="Открыть профиль"
+                  >
+                    {participant.avatarUrl ? (
+                      <img loading="lazy" decoding="async" src={participant.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover" />
+                    ) : (
+                      <span className="h-9 w-9 rounded-full bg-secondary" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSheet(null);
+                      onProfileOpen?.(participant.id);
+                    }}
+                    className="min-w-0 flex-1 truncate text-left text-[15px] font-medium text-gray-900 active:opacity-80"
+                  >
+                    {participant.name}
+                  </button>
                   {onMessageParticipant && (
                     <button
                       onClick={() => {

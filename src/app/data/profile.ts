@@ -43,7 +43,6 @@ export const myArticles = [
 
 export const subscriptionAvatars = [
   UNSPLASH.avatarMaria,
-  UNSPLASH.avatarGena,
   UNSPLASH.avatarDmitry,
   P_AVATARS.w2,
   P_AVATARS.m1,
