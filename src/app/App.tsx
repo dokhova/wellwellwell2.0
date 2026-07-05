@@ -1043,7 +1043,7 @@ export default function App() {
 
   const navigate = (s: Screen, from?: Screen) => {
     if (s === "detail" && from) setDetailOrigin(from);
-    if (s === "create" && from) setCreateOrigin(from);
+    if (s === "create") setCreateOrigin(from ?? screen);
     if (s === "search") setSearchOrigin(from ?? screen);
     if (s === "profile") setViewingOwnProfile(!from);
     setPreviousScreen(screen);
@@ -1061,6 +1061,20 @@ export default function App() {
     setPlanEventOrigin(from);
     setPreviousScreen(screen);
     setScreen("planEvent");
+    if (isDemoCommunityPlanId(id)) return;
+    void fetchPlan(planKey(id)).then((remotePlan) => {
+      if (!remotePlan || remotePlan.hidden) return;
+      const sanitizedPlan = sanitizePlan(remotePlan);
+      const replaceOrPrepend = (plans: HomeFeedPlan[]) =>
+        plans.some((plan) => planKey(plan.id) === planKey(sanitizedPlan.id))
+          ? plans.map((plan) => planKey(plan.id) === planKey(sanitizedPlan.id) ? sanitizedPlan : plan)
+          : [sanitizedPlan, ...plans];
+      setRemotePublicPlans(replaceOrPrepend);
+      setCreatedPlans((plans) => plans.map((plan) => planKey(plan.id) === planKey(sanitizedPlan.id) ? sanitizedPlan : plan));
+      setProfileRemotePlans((items) => Object.fromEntries(Object.entries(items).map(([authorId, plans]) => [authorId, plans.map((plan) => planKey(plan.id) === planKey(sanitizedPlan.id) ? sanitizedPlan : plan)])));
+    }).catch((error) => {
+      console.error("Supabase plan refresh before open failed", error);
+    });
   };
 
   const openExpertProfile = (expertId: string) => {
@@ -1309,36 +1323,41 @@ export default function App() {
   };
 
   const updatePlan = (plan: HomeFeedPlan) => {
-    const sanitizedPlan = sanitizePlan(plan);
+    const basePlan = allPlanDetails.find((item) => planKey(item.id) === planKey(plan.id)) ?? plan;
+    const basePresentation = getPlanParticipantPresentation(basePlan);
+    const sanitizedPlan = sanitizePlan({
+      ...plan,
+      participants: basePresentation.avatars.length ? basePresentation.avatars : basePlan.participants,
+      participantsLabel: basePresentation.count > 0 ? basePresentation.label : basePlan.participantsLabel,
+    });
     const idKey = planKey(sanitizedPlan.id);
     const replacePlan = (items: HomeFeedPlan[]) => items.map((item) => planKey(item.id) === idKey ? sanitizedPlan : item);
     setCreatedPlans(replacePlan);
     setRemotePublicPlans(replacePlan);
     setProfileRemotePlans((items) => Object.fromEntries(Object.entries(items).map(([authorId, plans]) => [authorId, replacePlan(plans)])));
-    void updatePlanRemote(sanitizedPlan).catch((error) => {
-      console.error("Supabase plan update failed", error);
-    });
-    void fetchParticipants(idKey).then((rows) => {
-      const participantIds = Array.from(new Set(rows
-        .filter((row) => row.status === "joined")
-        .map((row) => row.user_id)))
-        .filter((participantId) => participantId !== currentUserId && !isDemoProfileId(participantId));
-      participantIds.forEach((participantId) => {
-        const threadId = makeThreadId(currentUserId, participantId);
-        void sendMessage({
-          id: crypto.randomUUID(),
-          threadId,
-          senderId: currentUserId,
-          text: `В план «${sanitizedPlan.title}» внесены изменения`,
-          kind: "plan_update",
-          planId: idKey,
-        }).catch((error) => {
-          console.error("Supabase plan update message failed", error);
-        });
-      });
-    }).catch((error) => {
-      console.error("Supabase plan update participants fetch failed", error);
-    });
+    void (async () => {
+      try {
+        await updatePlanRemote(sanitizedPlan);
+        const rows = await fetchParticipants(idKey);
+        const participantIds = Array.from(new Set(rows
+          .filter((row) => row.status === "joined")
+          .map((row) => row.user_id)))
+          .filter((participantId) => participantId !== currentUserId && !isDemoProfileId(participantId));
+        await Promise.all(participantIds.map((participantId) => {
+          const threadId = makeThreadId(currentUserId, participantId);
+          return sendMessage({
+            id: crypto.randomUUID(),
+            threadId,
+            senderId: currentUserId,
+            text: `Пользователь ${currentAuthor.name} внес(ла) изменения в план «${sanitizedPlan.title}»`,
+            kind: "plan_update",
+            planId: idKey,
+          });
+        }));
+      } catch (error) {
+        console.error("Supabase plan update or participant notification failed", error);
+      }
+    })();
     setEditingPlanId(null);
     setActivePlanId(sanitizedPlan.id);
     setScreen("planEvent");
@@ -1837,7 +1856,7 @@ export default function App() {
           style={{ paddingBottom: "max(env(safe-area-inset-bottom), 8px)" }}
         >
           {([
-            { id: "home" as Screen, label: "Главная", Icon: Home },
+            { id: "home" as Screen, label: "Лента", Icon: Home },
             { id: "plans" as Screen, label: "Мои планы", Icon: Calendar },
             { id: "create" as Screen, label: "Создать", Icon: Plus },
             { id: "chats" as Screen, label: "Чаты", Icon: MessageCircle },
@@ -1845,7 +1864,7 @@ export default function App() {
           ] as { id: Screen; label: string; Icon: React.FC<{ size: number; strokeWidth: number; color: string }> }[]).map(({ id, label, Icon }) => {
             const isActive = screen === id || (id === "plans" && (screen === "detail" || screen === "planEvent")) || (id === "home" && screen === "search");
             return (
-              <button key={id} onClick={() => navigate(id)} className="relative flex flex-col items-center gap-0.5 px-4 py-1">
+              <button key={id} onClick={() => navigate(id, id === "create" ? screen : undefined)} className="relative flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 py-1">
                 <span className="relative">
                   <Icon size={22} strokeWidth={isActive ? 2.2 : 1.7} color={isActive ? GREEN : "#9CA3AF"} />
                   {id === "chats" && unreadChatsCount > 0 && (
@@ -1854,7 +1873,7 @@ export default function App() {
                     </span>
                   )}
                 </span>
-                <span className="text-[11px] font-medium" style={{ color: isActive ? GREEN : "#9CA3AF" }}>{label}</span>
+                <span className="whitespace-nowrap text-[10px] font-medium" style={{ color: isActive ? GREEN : "#9CA3AF" }}>{label}</span>
               </button>
             );
           })}

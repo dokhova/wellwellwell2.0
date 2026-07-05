@@ -373,11 +373,11 @@ export function EventDetailScreen({
               {canHide && (
                 <button
                   onClick={() => {
-                    const confirmed = window.confirm("Скрыть план с главной?");
+                    const confirmed = window.confirm("Скрыть план из ленты?");
                     if (confirmed) onHide?.();
                   }}
                   className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-black/50 active:opacity-85"
-                  aria-label="Скрыть с главной"
+                  aria-label="Скрыть из ленты"
                 >
                   <Eye size={16} strokeWidth={2} color="#fff" />
                 </button>

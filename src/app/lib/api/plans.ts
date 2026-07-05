@@ -64,7 +64,9 @@ export const updatePlanRemote = async (plan: HomeFeedPlan): Promise<HomeFeedPlan
       starts_at: getStartsAt(plan),
       payload: plan,
     })
-    .eq("id", String(plan.id));
+    .eq("id", String(plan.id))
+    .select("id")
+    .single();
 
   if (error) throw error;
   return plan;

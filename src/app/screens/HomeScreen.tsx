@@ -335,7 +335,7 @@ export function HomeScreen({
               <button onClick={() => { setSheet(null); onMessagePeer({ id: activePlan.author.id ?? activePlan.author.name, name: activePlan.author.name, avatarUrl: activePlan.author.avatarUrl }); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Написать</button>
             )}
             {canHidePlan?.(activePlan) && (
-              <button onClick={() => { setSheet(null); onHidePlan?.(activePlan); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Скрыть с главной</button>
+              <button onClick={() => { setSheet(null); onHidePlan?.(activePlan); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Скрыть из ленты</button>
             )}
             <button onClick={() => setSheet(null)} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Пожаловаться</button>
           </div>
