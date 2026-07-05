@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { ArrowLeft, Image as ImageIcon, X } from "lucide-react";
-import type { ExpertProfile } from "@/app/data/profile";
-import { GREEN } from "@/app/data/constants";
+import { useEffect, useState, type ChangeEvent } from "react";
+import { ArrowLeft, Image as ImageIcon, Plus, X } from "lucide-react";
+import { ImageCropSheet } from "@/app/components/ImageCropSheet";
+import { DEFAULT_COVER_URLS, type ExpertProfile } from "@/app/data/profile";
+import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
 import { uploadPhoto } from "@/app/lib/api/storage";
+
+type CropTarget = "avatar" | "cover";
 
 export function EditProfileScreen({
   profile,
@@ -15,28 +18,46 @@ export function EditProfileScreen({
 }) {
   const [name, setName] = useState(profile.name);
   const [bio, setBio] = useState(profile.bio);
-  const [photoUrls, setPhotoUrls] = useState<string[]>(
-    profile.photoUrls?.length ? profile.photoUrls : profile.photoUrl ? [profile.photoUrl] : []
-  );
-  const coverPhotoUrl = photoUrls[0] ?? null;
+  const [photoUrl, setPhotoUrl] = useState<string | null>(profile.photoUrl);
+  const [coverUrls, setCoverUrls] = useState<string[]>(profile.coverUrls ?? []);
+  const [cropRequest, setCropRequest] = useState<{ target: CropTarget; imageUrl: string } | null>(null);
+  const visibleCoverUrls = coverUrls.length ? coverUrls : DEFAULT_COVER_URLS;
   const initials = name
     .split(" ")
     .map((part) => part[0])
     .slice(0, 2)
     .join("");
 
-  const handlePhotoPick = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []);
-    if (files.length > 0) {
-      const nextPhotoUrls = await Promise.all(
-        files.map((file) => uploadPhoto(file))
-      );
-      const uploadedUrls = nextPhotoUrls.filter((url): url is string => Boolean(url));
-      if (uploadedUrls.length > 0) {
-        setPhotoUrls((current) => [...current, ...uploadedUrls]);
-      }
+  const closeCrop = () => {
+    if (cropRequest) URL.revokeObjectURL(cropRequest.imageUrl);
+    setCropRequest(null);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (cropRequest) URL.revokeObjectURL(cropRequest.imageUrl);
+    };
+  }, [cropRequest]);
+
+  const handleImagePick = (target: CropTarget) => (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setCropRequest({ target, imageUrl: URL.createObjectURL(file) });
     }
     event.target.value = "";
+  };
+
+  const handleCropComplete = async (file: File) => {
+    if (!cropRequest) return;
+    const uploadedUrl = await uploadPhoto(file);
+    if (uploadedUrl) {
+      if (cropRequest.target === "avatar") {
+        setPhotoUrl(uploadedUrl);
+      } else {
+        setCoverUrls((current) => [...current, uploadedUrl].slice(0, 5));
+      }
+    }
+    closeCrop();
   };
 
   const handleSave = () => {
@@ -45,8 +66,9 @@ export function EditProfileScreen({
         ...profile,
         name: name.trim() || profile.name,
         bio: bio.trim(),
-        photoUrl: photoUrls[0] ?? null,
-        photoUrls,
+        photoUrl,
+        photoUrls: profile.photoUrls,
+        coverUrls,
       });
     } catch (error) {
       console.error("EditProfileScreen save failed", error);
@@ -64,38 +86,62 @@ export function EditProfileScreen({
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-4">
-        <label className="relative mb-5 block aspect-[1.9/1] overflow-hidden rounded-xl bg-gray-200">
-          {coverPhotoUrl ? (
-            <img loading="lazy" decoding="async" src={coverPhotoUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center bg-secondary">
-              <span className="text-[42px] font-bold" style={{ color: GREEN }}>{initials}</span>
+        <div className="mb-6 rounded-xl bg-card px-4 py-4">
+          <span className="mb-3 block text-[13px] leading-4 text-muted-foreground">Аватар</span>
+          <div className="flex items-center gap-4">
+            <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-full bg-secondary">
+              {photoUrl ? (
+                <img loading="lazy" decoding="async" src={photoUrl} alt={name} className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center" style={{ backgroundColor: GREEN_LIGHT }}>
+                  <span className="text-[28px] font-bold" style={{ color: GREEN }}>{initials}</span>
+                </div>
+              )}
             </div>
-          )}
-          <div className="absolute inset-0 bg-black/25" />
-          <span className="absolute left-4 top-4 z-10 flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-1.5 text-[12px] font-medium text-white">
-            <ImageIcon size={14} strokeWidth={2} />
-            Добавить фото
-          </span>
-          <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoPick} />
-        </label>
-
-        {photoUrls.length > 0 && (
-          <div className="mb-5 grid grid-cols-3 gap-2">
-            {photoUrls.map((photoUrl, index) => (
-              <div key={`${photoUrl}-${index}`} className="relative aspect-square overflow-hidden rounded-xl bg-gray-200">
-                <img loading="lazy" decoding="async" src={photoUrl} alt="" className="h-full w-full object-cover" />
-                <button
-                  onClick={() => setPhotoUrls((current) => current.filter((_, photoIndex) => photoIndex !== index))}
-                  className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white active:opacity-85"
-                  aria-label="Удалить фото"
-                >
-                  <X size={15} strokeWidth={2.2} />
-                </button>
-              </div>
-            ))}
+            <label className="flex h-11 items-center gap-2 rounded-xl border px-4 text-[14px] font-semibold text-foreground active:opacity-85">
+              <ImageIcon size={17} strokeWidth={2} />
+              Сменить фото
+              <input type="file" accept="image/*" className="hidden" onChange={handleImagePick("avatar")} />
+            </label>
           </div>
-        )}
+        </div>
+
+        <div className="mb-6 rounded-xl bg-card px-4 py-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <span className="text-[13px] leading-4 text-muted-foreground">Обложки</span>
+            <span className="text-[12px] leading-4 text-muted-foreground">{coverUrls.length}/5</span>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-1">
+            {visibleCoverUrls.map((coverUrl, index) => {
+              const isDefaultCover = coverUrls.length === 0;
+              return (
+                <div key={`${coverUrl}-${index}`} className="relative h-[92px] w-[164px] flex-shrink-0 overflow-hidden rounded-xl bg-gray-200">
+                  <img loading="lazy" decoding="async" src={coverUrl} alt="" className="h-full w-full object-cover" />
+                  {isDefaultCover ? (
+                    <span className="absolute inset-x-2 bottom-2 rounded-full bg-black/45 px-2 py-1 text-center text-[11px] font-medium text-white">
+                      Обложка по умолчанию
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setCoverUrls((current) => current.filter((_, coverIndex) => coverIndex !== index))}
+                      className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white active:opacity-85"
+                      aria-label="Удалить обложку"
+                    >
+                      <X size={15} strokeWidth={2.2} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+            {coverUrls.length < 5 && (
+              <label className="flex h-[92px] w-[116px] flex-shrink-0 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted text-[13px] font-semibold text-foreground active:opacity-85">
+                <Plus size={20} strokeWidth={2.2} />
+                Добавить
+                <input type="file" accept="image/*" className="hidden" onChange={handleImagePick("cover")} />
+              </label>
+            )}
+          </div>
+        </div>
 
         <div className="space-y-4">
           <label className="block">
@@ -128,6 +174,15 @@ export function EditProfileScreen({
           Сохранить
         </button>
       </div>
+
+      {cropRequest && (
+        <ImageCropSheet
+          imageUrl={cropRequest.imageUrl}
+          aspect={cropRequest.target === "avatar" ? 1 : 16 / 9}
+          onCancel={closeCrop}
+          onComplete={handleCropComplete}
+        />
+      )}
     </div>
   );
 }

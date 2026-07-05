@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import useEmblaCarousel from "embla-carousel-react";
-import { ArrowLeft, Check, Edit3, MessageCircle, Plus, Trash2, UserPlus } from "lucide-react";
+import { ArrowLeft, Check, Edit3, MessageCircle, UserPlus } from "lucide-react";
 import type { Article, ChatPeer, HomeFeedPlan, PlanId, Screen } from "@/app/types";
-import { formatNearestDate, getNextOccurrence, weekDates, weekDateMonths } from "@/app/data/calendar";
+import { formatNearestDate, getNextOccurrence, weekDateMonths } from "@/app/data/calendar";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
-import { profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
+import { DEFAULT_COVER_URLS, profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { PlanListCard } from "@/app/screens/PlansScreen";
 
 export type ConnectionType = "followers" | "following";
@@ -192,12 +192,7 @@ export function ProfileScreen(props: {
   const visibleNearestPlans = showAllPlans ? nearestPlans : nearestPlans.slice(0, 2);
   const hasMorePlans = props.plans.length > visiblePlans.length;
   const hasMoreNearestPlans = nearestPlans.length > visibleNearestPlans.length;
-  const photoUrls = props.profile.photoUrls?.length
-    ? props.profile.photoUrls
-    : props.profile.photoUrl
-      ? [props.profile.photoUrl]
-      : [];
-  const hasPhotos = photoUrls.length > 0;
+  const coverUrls = props.profile.coverUrls?.length ? props.profile.coverUrls : DEFAULT_COVER_URLS;
   const monthShortByName: Record<string, string> = {
     января: "Янв",
     февраля: "Фев",
@@ -212,7 +207,7 @@ export function ProfileScreen(props: {
     ноября: "Ноя",
     декабря: "Дек",
   };
-  const heroInitials = props.profile.name
+  const profileInitials = props.profile.name
     .split(" ")
     .map((part) => part[0])
     .slice(0, 2)
@@ -237,26 +232,20 @@ export function ProfileScreen(props: {
   return (
     <div className="h-full overflow-y-auto bg-card">
       <div className="relative flex min-h-full flex-col">
-        <div className={`relative w-full overflow-hidden bg-gray-300 ${props.isMe ? "h-[56dvh] min-h-[430px] max-h-[560px]" : "h-[280px]"}`}>
-          {hasPhotos ? (
-            <div ref={emblaRef} className="h-full overflow-hidden">
-              <div className="flex h-full">
-                {photoUrls.map((photoUrl, index) => (
-                  <div key={`${photoUrl}-${index}`} className="min-w-0 flex-[0_0_100%]">
-                    <img loading="lazy" decoding="async" src={photoUrl} alt={props.profile.name} className="h-full w-full object-cover" />
-                  </div>
-                ))}
-              </div>
+        <div className="relative h-[280px] w-full overflow-hidden bg-gray-300">
+          <div ref={emblaRef} className="h-full overflow-hidden">
+            <div className="flex h-full">
+              {coverUrls.map((coverUrl, index) => (
+                <div key={`${coverUrl}-${index}`} className="min-w-0 flex-[0_0_100%]">
+                  <img loading="lazy" decoding="async" src={coverUrl} alt="" className="h-full w-full object-cover" />
+                </div>
+              ))}
             </div>
-          ) : (
-            <div className="flex h-full w-full items-center justify-center" style={{ background: "linear-gradient(135deg, var(--secondary) 0%, var(--brand-bright) 100%)" }}>
-              <span className="text-[62px] font-bold" style={{ color: GREEN }}>{heroInitials}</span>
-            </div>
-          )}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/42" />
-          {photoUrls.length > 1 && (
-            <div className="absolute bottom-16 left-1/2 z-10 flex -translate-x-1/2 gap-1.5">
-              {photoUrls.map((_, index) => (
+          </div>
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/28 to-transparent" />
+          {coverUrls.length > 1 && (
+            <div className="absolute bottom-9 left-1/2 z-10 flex -translate-x-1/2 gap-1.5">
+              {coverUrls.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => emblaApi?.scrollTo(index)}
@@ -265,7 +254,7 @@ export function ProfileScreen(props: {
                     width: selectedPhotoIndex === index ? 18 : 6,
                     backgroundColor: selectedPhotoIndex === index ? "#fff" : "rgba(255,255,255,0.55)",
                   }}
-                  aria-label={`Фото ${index + 1}`}
+                  aria-label={`Обложка ${index + 1}`}
                 />
               ))}
             </div>
@@ -290,8 +279,33 @@ export function ProfileScreen(props: {
           )}
         </div>
 
-        <section className="relative -mt-12 flex-shrink-0 rounded-t-[28px] bg-card px-5 pb-6 pt-6 shadow-[0_-16px_38px_rgba(0,0,0,0.14)]">
-          <h1 className="text-[34px] font-bold leading-[38px] text-foreground">{props.profile.name}</h1>
+        <section className="relative -mt-[28px] flex-shrink-0 rounded-t-[28px] bg-card px-5 pb-6 pt-0 shadow-[0_-16px_38px_rgba(0,0,0,0.10)]">
+          <div className="flex items-start justify-between gap-3">
+            <div className="-mt-[44px] h-[88px] w-[88px] overflow-hidden rounded-full bg-secondary ring-4 ring-card">
+              {props.profile.photoUrl ? (
+                <img loading="lazy" decoding="async" src={props.profile.photoUrl} alt={props.profile.name} className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center" style={{ backgroundColor: GREEN_LIGHT }}>
+                  <span className="text-[26px] font-bold" style={{ color: GREEN }}>{profileInitials}</span>
+                </div>
+              )}
+            </div>
+            {!props.isMe && (
+              <button
+                onClick={() => setIsFollowed((value) => {
+                  props.onToggleFollow?.(props.profile, !value);
+                  return !value;
+                })}
+                className="mt-4 flex h-10 flex-shrink-0 items-center justify-center gap-1.5 rounded-full border px-5 text-[14px] font-semibold active:opacity-90"
+                style={isFollowed ? { backgroundColor: "var(--muted)", borderColor: "var(--border)", color: "var(--foreground)" } : { backgroundImage: "linear-gradient(90deg, #00887F, #00A99D, #4DD0C4)", borderColor: GREEN, color: "#fff" }}
+              >
+                {isFollowed ? <Check size={16} strokeWidth={2.4} /> : <UserPlus size={16} strokeWidth={2.2} />}
+                {isFollowed ? "Вы подписаны" : "Подписаться"}
+              </button>
+            )}
+          </div>
+
+          <h1 className="mt-3 text-[26px] font-bold leading-8 text-foreground">{props.profile.name}</h1>
           <div className="mt-2 flex items-start gap-2">
             <p
               className="min-w-0 flex-1 text-[15px] leading-5 text-muted-foreground"
@@ -330,30 +344,15 @@ export function ProfileScreen(props: {
             <ProfileStat value={props.profile.followingCount} label="Подписки" onClick={() => props.onConnectionsOpen("following")} />
           </div>
 
-          {!props.isMe && (
-            <div className="mt-5 grid grid-cols-[1fr_1.25fr] gap-2.5">
-              {props.canMessage !== false ? (
-                <button
-                  onClick={() => props.onMessageProfile?.({ id: props.profile.id, name: props.profile.name, avatarUrl: props.profile.photoUrl, cannedReplies: props.profile.cannedReplies })}
-                  className="flex h-12 items-center justify-center gap-2 rounded-xl border text-[15px] font-semibold active:opacity-90"
-                  style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
-                >
-                  <MessageCircle size={18} strokeWidth={2.1} />
-                  Написать
-                </button>
-              ) : (
-                <div />
-              )}
+          {!props.isMe && props.canMessage !== false && (
+            <div className="mt-5">
               <button
-                onClick={() => setIsFollowed((value) => {
-                  props.onToggleFollow?.(props.profile, !value);
-                  return !value;
-                })}
-                className="flex h-12 items-center justify-center gap-2 rounded-xl border text-[15px] font-semibold active:opacity-90"
-                style={isFollowed ? { backgroundColor: "var(--muted)", borderColor: "var(--border)", color: "var(--foreground)" } : { backgroundImage: "linear-gradient(90deg, #00887F, #00A99D, #4DD0C4)", borderColor: GREEN, color: "#fff" }}
+                onClick={() => props.onMessageProfile?.({ id: props.profile.id, name: props.profile.name, avatarUrl: props.profile.photoUrl, cannedReplies: props.profile.cannedReplies })}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border text-[15px] font-semibold active:opacity-90"
+                style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
               >
-                {isFollowed ? <Check size={18} strokeWidth={2.4} /> : <UserPlus size={18} strokeWidth={2.2} />}
-                {isFollowed ? "Вы подписаны" : "Подписаться"}
+                <MessageCircle size={18} strokeWidth={2.1} />
+                Написать
               </button>
             </div>
           )}

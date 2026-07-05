@@ -62,11 +62,14 @@ const removeDemoConnections = (items: ExpertConnection[]) => items.filter((item)
 const normalizeProfile = (profile: ExpertProfile): ExpertProfile => {
   const rawPhotoUrls = profile.photoUrls?.length ? profile.photoUrls : profile.photoUrl ? [profile.photoUrl] : [];
   const photoUrls = rawPhotoUrls.map(sanitizeImageUrl).filter((url): url is string => Boolean(url));
+  const photoUrl = sanitizeImageUrl(profile.photoUrl) ?? photoUrls[0] ?? null;
+  const coverUrls = (profile.coverUrls ?? []).map(sanitizeImageUrl).filter((url): url is string => Boolean(url));
   const keepDemoFields = profile.isDemo === true && isDemoProfileId(profile.id);
   return {
     ...profile,
     photoUrls,
-    photoUrl: photoUrls[0] ?? null,
+    photoUrl,
+    coverUrls,
     isDemo: keepDemoFields ? true : undefined,
     tags: keepDemoFields ? profile.tags : undefined,
   };
@@ -199,6 +202,7 @@ const buildTelegramProfile = (telegramUser: ReturnType<typeof getTelegramUser>):
     bio: "",
     photoUrl: photoUrls[0] ?? null,
     photoUrls,
+    coverUrls: [],
     plansCount: 0,
     isMe: true,
     isFollowedByMe: false,
@@ -925,6 +929,7 @@ export default function App() {
       bio: "",
       photoUrl: connection.avatarUrl,
       photoUrls: connection.avatarUrl ? [connection.avatarUrl] : [],
+      coverUrls: [],
       isMe: false,
       isFollowedByMe: (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === connection.id),
     });
@@ -952,6 +957,7 @@ export default function App() {
       bio: "",
       photoUrl: peer.avatarUrl,
       photoUrls: peer.avatarUrl ? [peer.avatarUrl] : [],
+      coverUrls: [],
       isMe: false,
       isFollowedByMe: false,
     });

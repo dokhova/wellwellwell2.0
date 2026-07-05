@@ -10,6 +10,7 @@ type ProfileRow = {
   bio: string | null;
   photo_url: string | null;
   photo_urls: string[] | null;
+  cover_urls: string[] | null;
 };
 
 const sanitizePhotoUrls = (urls: string[] | null | undefined) =>
@@ -18,6 +19,7 @@ const sanitizePhotoUrls = (urls: string[] | null | undefined) =>
 const mapProfileToRow = (profile: ExpertProfile) => {
   const photoUrls = sanitizePhotoUrls(profile.photoUrls);
   const photoUrl = sanitizeImageUrl(profile.photoUrl) ?? photoUrls[0] ?? null;
+  const coverUrls = sanitizePhotoUrls(profile.coverUrls);
 
   return {
     id: profile.id,
@@ -27,6 +29,7 @@ const mapProfileToRow = (profile: ExpertProfile) => {
     bio: profile.bio,
     photo_url: photoUrl,
     photo_urls: photoUrls,
+    cover_urls: coverUrls,
     updated_at: new Date().toISOString(),
   };
 };
@@ -34,6 +37,7 @@ const mapProfileToRow = (profile: ExpertProfile) => {
 export const mapRowToProfile = (row: ProfileRow): ExpertProfile => {
   const photoUrl = sanitizeImageUrl(row.photo_url);
   const photoUrls = sanitizePhotoUrls(row.photo_urls);
+  const coverUrls = sanitizePhotoUrls(row.cover_urls);
 
   const profile: ExpertProfile = {
     ...expertProfile,
@@ -44,6 +48,7 @@ export const mapRowToProfile = (row: ProfileRow): ExpertProfile => {
     bio: row.bio ?? "",
     photoUrl,
     photoUrls: photoUrls.length ? photoUrls : photoUrl ? [photoUrl] : [],
+    coverUrls,
     plansCount: 0,
     followersCount: 0,
     followingCount: 0,
@@ -68,7 +73,7 @@ export const fetchProfile = async (id: string): Promise<ExpertProfile | null> =>
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, telegram_id, username, name, bio, photo_url, photo_urls")
+    .select("id, telegram_id, username, name, bio, photo_url, photo_urls, cover_urls")
     .eq("id", id)
     .maybeSingle<ProfileRow>();
 
@@ -86,7 +91,7 @@ export const searchProfiles = async (query: string): Promise<ExpertProfile[]> =>
   const pattern = `%${escapedQuery}%`;
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, telegram_id, username, name, bio, photo_url, photo_urls")
+    .select("id, telegram_id, username, name, bio, photo_url, photo_urls, cover_urls")
     .or(`name.ilike.${pattern},username.ilike.${pattern}`)
     .limit(20)
     .returns<ProfileRow[]>();
@@ -100,7 +105,7 @@ export const fetchRecentProfiles = async (): Promise<ExpertProfile[]> => {
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, telegram_id, username, name, bio, photo_url, photo_urls")
+    .select("id, telegram_id, username, name, bio, photo_url, photo_urls, cover_urls")
     .order("updated_at", { ascending: false })
     .limit(20)
     .returns<ProfileRow[]>();
@@ -114,7 +119,7 @@ export const fetchProfilesByIds = async (ids: string[]): Promise<ExpertProfile[]
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, telegram_id, username, name, bio, photo_url, photo_urls")
+    .select("id, telegram_id, username, name, bio, photo_url, photo_urls, cover_urls")
     .in("id", ids)
     .returns<ProfileRow[]>();
 

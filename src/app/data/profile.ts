@@ -12,6 +12,8 @@ import { demoCommunity, demoCommunityAssets } from "@/app/data/demoCommunity";
 import { homeFeedPlans, normalizePlanTag } from "@/app/data/plans";
 import type { PlanId, PlanTag } from "@/app/types";
 
+export const DEFAULT_COVER_URLS = [cover1 as unknown as string, cover2 as unknown as string];
+
 export const habits = [
   { icon: "🌅", name: "Утренняя зарядка", done: 7, total: 7, streak: 14 },
   { icon: "📖", name: "Чтение 20 минут", done: 5, total: 7, streak: 5 },
@@ -63,6 +65,7 @@ export interface ExpertProfile {
   bio: string;
   photoUrl: string | null;
   photoUrls: string[];
+  coverUrls: string[];
   followersCount: number;
   followingCount: number;
   plansCount: number;
@@ -128,6 +131,7 @@ export const expertProfile: ExpertProfile = {
   bio: "Тренирую бегунов пять лет, от первой пробежки до финишной черты. Работаю онлайн и офлайн, люблю тех, кто начинает с нуля и не знает, получится ли.",
   photoUrl: expertAvatarMariaKuznetsova as unknown as string,
   photoUrls: [expertAvatarMariaKuznetsova as unknown as string],
+  coverUrls: [cover1 as unknown as string],
   followersCount: profileFollowers.length,
   followingCount: profileFollowing.length,
   plansCount: expertPlans.length,
@@ -150,6 +154,7 @@ export const experts: ExpertProfile[] = [
     bio: "Меня интересует не финиш сам по себе, а то, что происходит с телом и головой на пути к нему. Готовлю бегунов к полумарафонам и марафонам. В работе опираюсь на физиологию и данные, а не на ощущения.",
     photoUrl: expertAvatarDmitryOrlov as unknown as string,
     photoUrls: [expertAvatarDmitryOrlov as unknown as string],
+    coverUrls: [cover2 as unknown as string],
     followersCount: 2180,
     followingCount: 64,
     plansCount: 3,
@@ -169,6 +174,7 @@ export const experts: ExpertProfile[] = [
     bio: "Специализируюсь на дистанции 5 км — первой серьёзной дистанции для большинства бегунов. Помогаю начать бегать, выстроить регулярность и выйти на первый старт.",
     photoUrl: expertAvatarSvetlanaVoronova as unknown as string,
     photoUrls: [expertAvatarSvetlanaVoronova as unknown as string],
+    coverUrls: [cover3 as unknown as string],
     followersCount: 980,
     followingCount: 73,
     plansCount: 3,
@@ -188,6 +194,7 @@ export const experts: ExpertProfile[] = [
     bio: "Большинство проблем в беге — это не нагрузка и не слабая физподготовка, а неправильная механика движения. Помогаю найти и исправить то, что мешает бежать эффективно и без боли.",
     photoUrl: expertAvatarAlexeyPetrov as unknown as string,
     photoUrls: [expertAvatarAlexeyPetrov as unknown as string],
+    coverUrls: [cover4 as unknown as string],
     followersCount: 1560,
     followingCount: 51,
     plansCount: 3,
@@ -207,6 +214,7 @@ export const experts: ExpertProfile[] = [
     bio: "Тренирую выносливость, физическую и ментальную. Работаю с бегунами, которым мало просто финишировать — они хотят прогрессировать. Специализация — дистанции 10 км и выше.",
     photoUrl: expertAvatarYuliaBelova as unknown as string,
     photoUrls: [expertAvatarYuliaBelova as unknown as string],
+    coverUrls: [cover1 as unknown as string],
     followersCount: 2410,
     followingCount: 92,
     plansCount: 3,
@@ -221,6 +229,7 @@ export const experts: ExpertProfile[] = [
   },
   ...demoCommunity.people.map((person) => {
     const avatarUrl = demoCommunityAssets.avatars[person.avatar];
+    const coverUrl = demoCommunityAssets.covers[person.plan.cover];
     return {
       id: person.id,
       telegramId: 0,
@@ -228,6 +237,7 @@ export const experts: ExpertProfile[] = [
       bio: person.bio,
       photoUrl: avatarUrl,
       photoUrls: [avatarUrl],
+      coverUrls: [coverUrl],
       followersCount: person.plan.participantIds.length,
       followingCount: 0,
       plansCount: 1,
