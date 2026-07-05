@@ -1,7 +1,7 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { ArrowLeft, Image as ImageIcon, Plus, X } from "lucide-react";
 import { ImageCropSheet } from "@/app/components/ImageCropSheet";
-import { DEFAULT_COVER_URLS, type ExpertProfile } from "@/app/data/profile";
+import { DEFAULT_COVER_URLS, resolveCoverUrl, type ExpertProfile } from "@/app/data/profile";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
 import { uploadPhoto } from "@/app/lib/api/storage";
 
@@ -19,9 +19,9 @@ export function EditProfileScreen({
   const [name, setName] = useState(profile.name);
   const [bio, setBio] = useState(profile.bio);
   const [photoUrl, setPhotoUrl] = useState<string | null>(profile.photoUrl);
-  const [coverUrls, setCoverUrls] = useState<string[]>(profile.coverUrls ?? []);
+  const [coverUrls, setCoverUrls] = useState<string[] | null>(profile.coverUrls);
   const [cropRequest, setCropRequest] = useState<{ target: CropTarget; imageUrl: string } | null>(null);
-  const visibleCoverUrls = coverUrls.length ? coverUrls : DEFAULT_COVER_URLS;
+  const visibleCoverUrls = coverUrls === null ? [...DEFAULT_COVER_URLS] : coverUrls;
   const initials = name
     .split(" ")
     .map((part) => part[0])
@@ -54,7 +54,7 @@ export function EditProfileScreen({
       if (cropRequest.target === "avatar") {
         setPhotoUrl(uploadedUrl);
       } else {
-        setCoverUrls((current) => [...current, uploadedUrl].slice(0, 5));
+        setCoverUrls((current) => [...(current ?? []), uploadedUrl].slice(0, 5));
       }
     }
     closeCrop();
@@ -109,31 +109,30 @@ export function EditProfileScreen({
         <div className="mb-6 rounded-xl bg-card px-4 py-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <span className="text-[13px] leading-4 text-muted-foreground">Обложки</span>
-            <span className="text-[12px] leading-4 text-muted-foreground">{coverUrls.length}/5</span>
+            <span className="text-[12px] leading-4 text-muted-foreground">{visibleCoverUrls.length}/5</span>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-1">
             {visibleCoverUrls.map((coverUrl, index) => {
-              const isDefaultCover = coverUrls.length === 0;
+              const isDefaultCover = coverUrl.startsWith("default:");
               return (
                 <div key={`${coverUrl}-${index}`} className="relative h-[92px] w-[164px] flex-shrink-0 overflow-hidden rounded-xl bg-gray-200">
-                  <img loading="lazy" decoding="async" src={coverUrl} alt="" className="h-full w-full object-cover" />
-                  {isDefaultCover ? (
+                  <img loading="lazy" decoding="async" src={resolveCoverUrl(coverUrl)} alt="" className="h-full w-full object-cover" />
+                  {isDefaultCover && (
                     <span className="absolute inset-x-2 bottom-2 rounded-full bg-black/45 px-2 py-1 text-center text-[11px] font-medium text-white">
                       Обложка по умолчанию
                     </span>
-                  ) : (
-                    <button
-                      onClick={() => setCoverUrls((current) => current.filter((_, coverIndex) => coverIndex !== index))}
-                      className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white active:opacity-85"
-                      aria-label="Удалить обложку"
-                    >
-                      <X size={15} strokeWidth={2.2} />
-                    </button>
                   )}
+                  <button
+                    onClick={() => setCoverUrls((current) => (current ?? [...DEFAULT_COVER_URLS]).filter((_, coverIndex) => coverIndex !== index))}
+                    className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white active:opacity-85"
+                    aria-label="Удалить обложку"
+                  >
+                    <X size={15} strokeWidth={2.2} />
+                  </button>
                 </div>
               );
             })}
-            {coverUrls.length < 5 && (
+            {visibleCoverUrls.length < 5 && (
               <label className="flex h-[92px] w-[116px] flex-shrink-0 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted text-[13px] font-semibold text-foreground active:opacity-85">
                 <Plus size={20} strokeWidth={2.2} />
                 Добавить

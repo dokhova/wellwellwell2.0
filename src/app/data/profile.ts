@@ -1,3 +1,5 @@
+import profileCover1 from "@/imports/profile-cover-1.jpg";
+import profileCover2 from "@/imports/profile-cover-2.jpg";
 import cover1 from "@/imports/cover1-opt.jpg";
 import cover2 from "@/imports/cover2-opt.jpg";
 import cover3 from "@/imports/cover3-opt.jpg";
@@ -12,7 +14,14 @@ import { demoCommunity, demoCommunityAssets } from "@/app/data/demoCommunity";
 import { homeFeedPlans, normalizePlanTag } from "@/app/data/plans";
 import type { PlanId, PlanTag } from "@/app/types";
 
-export const DEFAULT_COVER_URLS = [cover1 as unknown as string, cover2 as unknown as string];
+export const DEFAULT_COVER_URLS = ["default:run1", "default:run2"] as const;
+
+const defaultCoverAssetByToken: Record<string, string> = {
+  "default:run1": profileCover1 as unknown as string,
+  "default:run2": profileCover2 as unknown as string,
+};
+
+export const resolveCoverUrl = (coverUrl: string) => defaultCoverAssetByToken[coverUrl] ?? coverUrl;
 
 export const habits = [
   { icon: "🌅", name: "Утренняя зарядка", done: 7, total: 7, streak: 14 },
@@ -65,7 +74,7 @@ export interface ExpertProfile {
   bio: string;
   photoUrl: string | null;
   photoUrls: string[];
-  coverUrls: string[];
+  coverUrls: string[] | null;
   followersCount: number;
   followingCount: number;
   plansCount: number;
@@ -251,7 +260,7 @@ export const experts: ExpertProfile[] = [
 
 export const getExpertPlans = (expertId: string): ExpertProfilePlan[] =>
   homeFeedPlans
-    .filter((plan) => (plan.author.id ?? "gena") === expertId)
+    .filter((plan) => plan.author.id === expertId)
     .map((plan) => ({
       id: plan.id,
       title: plan.isChallenge ? `Челлендж: ${plan.title}` : plan.title,

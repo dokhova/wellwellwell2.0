@@ -52,6 +52,24 @@ export const createPlanRemote = async (plan: HomeFeedPlan): Promise<HomeFeedPlan
   return remotePlan;
 };
 
+export const updatePlanRemote = async (plan: HomeFeedPlan): Promise<HomeFeedPlan | null> => {
+  if (!supabase) return null;
+
+  const { error } = await supabase
+    .from("plans")
+    .update({
+      title: plan.title,
+      description: plan.description,
+      cover_url: plan.coverUrl ?? null,
+      starts_at: getStartsAt(plan),
+      payload: plan,
+    })
+    .eq("id", String(plan.id));
+
+  if (error) throw error;
+  return plan;
+};
+
 export const fetchPublicPlans = async (): Promise<HomeFeedPlan[]> => {
   if (!supabase) return [];
 
@@ -87,6 +105,7 @@ export const fetchPlansByAuthor = async (authorId: string): Promise<HomeFeedPlan
     .from("plans")
     .select("id, author_id, title, description, cover_url, starts_at, payload, hidden, created_at")
     .eq("author_id", authorId)
+    .eq("hidden", false)
     .order("created_at", { ascending: false })
     .returns<PlanRow[]>();
 

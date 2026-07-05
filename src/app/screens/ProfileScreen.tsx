@@ -4,7 +4,7 @@ import { ArrowLeft, Check, Edit3, MessageCircle, UserPlus } from "lucide-react";
 import type { Article, ChatPeer, HomeFeedPlan, PlanId, Screen } from "@/app/types";
 import { formatNearestDate, getNextOccurrence, weekDateMonths } from "@/app/data/calendar";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
-import { DEFAULT_COVER_URLS, profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
+import { DEFAULT_COVER_URLS, profileFollowers, profileFollowing, resolveCoverUrl, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { PlanListCard } from "@/app/screens/PlansScreen";
 
 export type ConnectionType = "followers" | "following";
@@ -192,7 +192,8 @@ export function ProfileScreen(props: {
   const visibleNearestPlans = showAllPlans ? nearestPlans : nearestPlans.slice(0, 2);
   const hasMorePlans = props.plans.length > visiblePlans.length;
   const hasMoreNearestPlans = nearestPlans.length > visibleNearestPlans.length;
-  const coverUrls = props.profile.coverUrls?.length ? props.profile.coverUrls : DEFAULT_COVER_URLS;
+  const coverUrls = props.profile.coverUrls === null ? [...DEFAULT_COVER_URLS] : props.profile.coverUrls ?? [];
+  const resolvedCoverUrls = coverUrls.map(resolveCoverUrl);
   const monthShortByName: Record<string, string> = {
     января: "Янв",
     февраля: "Фев",
@@ -233,19 +234,25 @@ export function ProfileScreen(props: {
     <div className="h-full overflow-y-auto bg-card">
       <div className="relative flex min-h-full flex-col">
         <div className="relative h-[280px] w-full overflow-hidden bg-gray-300">
-          <div ref={emblaRef} className="h-full overflow-hidden">
-            <div className="flex h-full">
-              {coverUrls.map((coverUrl, index) => (
-                <div key={`${coverUrl}-${index}`} className="min-w-0 flex-[0_0_100%]">
-                  <img loading="lazy" decoding="async" src={coverUrl} alt="" className="h-full w-full object-cover" />
-                </div>
-              ))}
+          {resolvedCoverUrls.length > 0 ? (
+            <div ref={emblaRef} className="h-full overflow-hidden">
+              <div className="flex h-full">
+                {resolvedCoverUrls.map((coverUrl, index) => (
+                  <div key={`${coverUrl}-${coverUrls[index]}-${index}`} className="min-w-0 flex-[0_0_100%]">
+                    <img loading="lazy" decoding="async" src={coverUrl} alt="" className="h-full w-full object-cover" />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex h-full w-full items-center justify-center" style={{ background: "linear-gradient(135deg, var(--secondary) 0%, var(--brand-bright) 100%)" }}>
+              <span className="text-[62px] font-bold" style={{ color: GREEN }}>{profileInitials}</span>
+            </div>
+          )}
           <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/28 to-transparent" />
-          {coverUrls.length > 1 && (
+          {resolvedCoverUrls.length > 1 && (
             <div className="absolute bottom-9 left-1/2 z-10 flex -translate-x-1/2 gap-1.5">
-              {coverUrls.map((_, index) => (
+              {resolvedCoverUrls.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => emblaApi?.scrollTo(index)}

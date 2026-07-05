@@ -19,7 +19,7 @@ const sanitizePhotoUrls = (urls: string[] | null | undefined) =>
 const mapProfileToRow = (profile: ExpertProfile) => {
   const photoUrls = sanitizePhotoUrls(profile.photoUrls);
   const photoUrl = sanitizeImageUrl(profile.photoUrl) ?? photoUrls[0] ?? null;
-  const coverUrls = sanitizePhotoUrls(profile.coverUrls);
+  const coverUrls = profile.coverUrls === null ? null : sanitizePhotoUrls(profile.coverUrls);
 
   return {
     id: profile.id,
@@ -48,7 +48,7 @@ export const mapRowToProfile = (row: ProfileRow): ExpertProfile => {
     bio: row.bio ?? "",
     photoUrl,
     photoUrls: photoUrls.length ? photoUrls : photoUrl ? [photoUrl] : [],
-    coverUrls,
+    coverUrls: row.cover_urls === null ? null : coverUrls,
     plansCount: 0,
     followersCount: 0,
     followingCount: 0,

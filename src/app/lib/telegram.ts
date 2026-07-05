@@ -4,6 +4,9 @@ declare global {
       WebApp: {
         ready: () => void;
         expand: () => void;
+        disableVerticalSwipes?: () => void;
+        setHeaderColor?: (color: string) => void;
+        setBackgroundColor?: (color: string) => void;
         initDataUnsafe: {
           start_param?: string;
           user?: {
@@ -42,6 +45,8 @@ export function getTelegramUser() {
 }
 
 export function initTelegram() {
-  window.Telegram?.WebApp?.ready();
-  window.Telegram?.WebApp?.expand();
+  const webApp = window.Telegram?.WebApp;
+  webApp?.ready();
+  webApp?.expand();
+  webApp?.disableVerticalSwipes?.();
 }

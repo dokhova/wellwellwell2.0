@@ -10,7 +10,7 @@ import { fetchProfile, fetchProfilesByIds, upsertProfile } from "@/app/lib/api/p
 import { fetchFollowers, fetchFollowing, follow, unfollow } from "@/app/lib/api/follows";
 import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { fetchUserThreadMessages, makeThreadId, sendMessage, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
-import { countJoined, createPlanRemote, deletePlanParticipant, deletePlanRemote, fetchParticipants, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, upsertPlanParticipant } from "@/app/lib/api/plans";
+import { countJoined, createPlanRemote, deletePlanParticipant, deletePlanRemote, fetchParticipants, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, updatePlanRemote, upsertPlanParticipant } from "@/app/lib/api/plans";
 import { buildPlanStartAppUrl, getTelegramStartParam, getTelegramUser, initTelegram } from "@/app/lib/telegram";
 import { HomeScreen } from "@/app/screens/HomeScreen";
 import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
@@ -63,7 +63,9 @@ const normalizeProfile = (profile: ExpertProfile): ExpertProfile => {
   const rawPhotoUrls = profile.photoUrls?.length ? profile.photoUrls : profile.photoUrl ? [profile.photoUrl] : [];
   const photoUrls = rawPhotoUrls.map(sanitizeImageUrl).filter((url): url is string => Boolean(url));
   const photoUrl = sanitizeImageUrl(profile.photoUrl) ?? photoUrls[0] ?? null;
-  const coverUrls = (profile.coverUrls ?? []).map(sanitizeImageUrl).filter((url): url is string => Boolean(url));
+  const coverUrls = profile.coverUrls === null
+    ? null
+    : (profile.coverUrls ?? []).map(sanitizeImageUrl).filter((url): url is string => Boolean(url));
   const keepDemoFields = profile.isDemo === true && isDemoProfileId(profile.id);
   return {
     ...profile,
@@ -102,7 +104,12 @@ const sanitizeChatThread = (thread: ChatThread): ChatThread => ({
     ...thread.peer,
     avatarUrl: sanitizeImageUrl(thread.peer.avatarUrl),
   },
+  messages: sortChatMessages(thread.messages),
 });
+
+const sortChatMessages = (messages: ChatMessage[]) =>
+  Array.from(new Map(messages.map((message) => [message.id, message])).values())
+    .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
 
 const asRealPeer = (peer: ChatPeer): ChatPeer => {
   const { cannedReplies: _cannedReplies, isDemo: _isDemo, ...realPeer } = peer;
@@ -144,12 +151,13 @@ const isRemotePlanId = (id: PlanId) => typeof id === "string" && !isDemoCommunit
 const getPlanDeepLink = (plan: HomeFeedPlan) =>
   isDemoCommunityPlanId(plan.id) || isRemotePlanId(plan.id) ? buildPlanStartAppUrl(planKey(plan.id)) : undefined;
 
-const seededRank = (value: string) => {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+const shuffleIds = (ids: string[]) => {
+  const next = [...ids];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
   }
-  return hash;
+  return next;
 };
 
 const isTelegramPhotoUrl = (url: string | null | undefined) => {
@@ -202,7 +210,7 @@ const buildTelegramProfile = (telegramUser: ReturnType<typeof getTelegramUser>):
     bio: "",
     photoUrl: photoUrls[0] ?? null,
     photoUrls,
-    coverUrls: [],
+    coverUrls: null,
     plansCount: 0,
     isMe: true,
     isFollowedByMe: false,
@@ -287,6 +295,7 @@ export default function App() {
   const checkedItemsStorageKey = `${storagePrefix}:checkedItems`;
   const createdPlansStorageKey = `${storagePrefix}:createdPlans`;
   const deletedPlansStorageKey = `${storagePrefix}:deletedPlans`;
+  const homeDemoPlanOrderStorageKey = `${storagePrefix}:homeDemoPlanOrder`;
   const followingStorageKey = `${storagePrefix}:following`;
   const chatThreadIdsStorageKey = `${storagePrefix}:chatThreadIds`;
   const chatThreadStorageKey = (peerId: string) => `${storagePrefix}:chat:${encodeURIComponent(peerId)}`;
@@ -298,6 +307,7 @@ export default function App() {
   const [articleOrigin, setArticleOrigin] = useState<Screen>("home");
   const [searchOrigin, setSearchOrigin] = useState<Screen>("home");
   const [activePlanId, setActivePlanId] = useState<PlanId>(1);
+  const [editingPlanId, setEditingPlanId] = useState<PlanId | null>(null);
   const [activeChatPeer, setActiveChatPeer] = useState<ChatPeer | null>(null);
   const [planEventOrigin, setPlanEventOrigin] = useState<Screen>("plans");
   const [previousScreen, setPreviousScreen] = useState<Screen>("plans");
@@ -312,7 +322,15 @@ export default function App() {
   const [appToast, setAppToast] = useState("");
   const [moderatorHiddenPlanIds, setModeratorHiddenPlanIds] = useState<PlanId[]>([]);
   const [remoteProfiles, setRemoteProfiles] = useState<Record<string, ExpertProfile>>({});
-  const [feedShuffleSeed] = useState(() => crypto.randomUUID());
+  const [homeDemoPlanOrder] = useState(() => {
+    const currentIds = demoCommunityPlans.slice(0, 12).map((plan) => planKey(plan.id));
+    const storedIds = readJson<string[]>(homeDemoPlanOrderStorageKey, []);
+    const validStoredIds = storedIds.filter((id) => currentIds.includes(id));
+    const missingIds = currentIds.filter((id) => !validStoredIds.includes(id));
+    const nextIds = validStoredIds.length ? [...validStoredIds, ...missingIds] : shuffleIds(currentIds);
+    writeJson(homeDemoPlanOrderStorageKey, nextIds);
+    return nextIds;
+  });
   const [editableProfile, setEditableProfile] = useState<ExpertProfile>(() =>
     normalizeProfile(readJson(profileStorageKey, buildTelegramProfile(telegramUser)))
   );
@@ -387,7 +405,10 @@ export default function App() {
     .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)));
   const participantKey = (ref: ParticipantPlanRef) => `${ref.kind}:${ref.id}`;
   const myParticipantKeys = new Set(myParticipantIds.map(participantKey));
-  const myPlans = allPlans.filter((plan) => myParticipantKeys.has(participantKey({ kind: plan.kind ?? "plan", id: plan.id })));
+  const myPlans = allPlans.filter((plan) =>
+    myParticipantKeys.has(participantKey({ kind: plan.kind ?? "plan", id: plan.id }))
+    || plan.author.id === currentUserId
+  );
   const catalogPublicPlans = homeFeedPlans
     .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && (plan.visibility ?? "all") === "all")
     .sort((a, b) => getNextOccurrence(a.schedule).getTime() - getNextOccurrence(b.schedule).getTime());
@@ -395,15 +416,19 @@ export default function App() {
     .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && (plan.visibility ?? "all") === "all")
     .filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index);
   const publicPlans = useMemo(() => {
-    const shuffledDemoPlans = demoPlansWithParticipants
-      .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)))
-      .sort((a, b) => seededRank(`${feedShuffleSeed}:demo:${a.id}`) - seededRank(`${feedShuffleSeed}:demo:${b.id}`));
+    const demoPlanById = new Map(demoPlansWithParticipants.map((plan) => [planKey(plan.id), plan]));
+    const orderedTopDemoPlans = homeDemoPlanOrder
+      .map((id) => demoPlanById.get(id))
+      .filter((plan): plan is HomeFeedPlan => Boolean(plan))
+      .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)));
+    const remainingDemoPlans = demoPlansWithParticipants
+      .filter((plan) => !homeDemoPlanOrder.includes(planKey(plan.id)))
+      .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)));
     const sortedPlans = [...catalogPublicPlans, ...justCreatedPublicPlans]
       .filter((plan) => !moderatorHiddenPlanIdSet.has(planKey(plan.id)))
       .sort((a, b) => getParticipantsCount(b) - getParticipantsCount(a));
-    const shuffledTop = sortedPlans.slice(0, 20).sort((a, b) => seededRank(`${feedShuffleSeed}:${a.id}`) - seededRank(`${feedShuffleSeed}:${b.id}`));
-    return [...shuffledDemoPlans, ...shuffledTop, ...sortedPlans.slice(20)];
-  }, [catalogPublicPlans, deletedPlanIdSet, demoPlansWithParticipants, feedShuffleSeed, justCreatedPublicPlans, moderatorHiddenPlanIdSet]);
+    return [...orderedTopDemoPlans, ...remainingDemoPlans, ...sortedPlans];
+  }, [catalogPublicPlans, deletedPlanIdSet, demoPlansWithParticipants, homeDemoPlanOrder, justCreatedPublicPlans, moderatorHiddenPlanIdSet]);
   const participantChatPeers: ChatPeer[] = useMemo(() => EVENT_PARTICIPANTS.map((participant) => ({
     id: participant.id,
     name: participant.name,
@@ -472,9 +497,11 @@ export default function App() {
 
   const loadPlanParticipants = useCallback(async (planId: PlanId) => {
     const id = planKey(planId);
+    const planAuthorId = allPlanDetails.find((plan) => planKey(plan.id) === id)?.author.id;
     const rows = await fetchParticipants(id);
     const joinedRows = rows.filter((row) => row.status === "joined");
-    const joinedIds = Array.from(new Set(joinedRows.map((row) => row.user_id)));
+    const joinedIds = Array.from(new Set(joinedRows.map((row) => row.user_id)))
+      .filter((userId) => userId !== planAuthorId);
     const remoteIds = joinedIds.filter((userId) => userId !== currentUserId && !isDemoProfileId(userId));
     const profiles = await fetchProfilesByIds(remoteIds);
     const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
@@ -501,7 +528,7 @@ export default function App() {
       const ref = { kind: "plan", id } satisfies ParticipantPlanRef;
       setMyParticipantIds((items) => items.some((item) => participantKey(item) === participantKey(ref)) ? items : [ref, ...items]);
     }
-  }, [currentAuthor.avatarUrl, currentAuthor.name, currentUserId]);
+  }, [allPlanDetails, currentAuthor.avatarUrl, currentAuthor.name, currentUserId]);
 
   const mergeRemoteThreads = useCallback((rows: MessageRow[], profiles: ExpertProfile[] = []) => {
     const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
@@ -536,7 +563,9 @@ export default function App() {
           nextThreads[existingIndex] = {
             ...existing,
             peer: existing.peer.cannedReplies?.length ? existing.peer : peer,
-            messages: hasLatestMessage ? existing.messages : [...existing.messages, latestMessage],
+            messages: sortChatMessages(hasLatestMessage
+              ? existing.messages.map((message) => message.id === latestMessage.id ? { ...message, ...latestMessage } : message)
+              : [...existing.messages, latestMessage]),
             updatedAt: Math.max(existing.updatedAt, latestMessage.createdAt),
             unreadCount,
           };
@@ -869,6 +898,14 @@ export default function App() {
   }, [deletedPlanIds, deletedPlansStorageKey]);
 
   useEffect(() => {
+    const availablePlanKeys = new Set(allPlans.map((plan) => planKey(plan.id)));
+    setMyParticipantIds((items) => {
+      const next = items.filter((item) => availablePlanKeys.has(planKey(item.id)));
+      return next.length === items.length ? items : next;
+    });
+  }, [allPlans]);
+
+  useEffect(() => {
     const cleanedFollowing = removeDemoConnections(myFollowing.map(sanitizeConnection));
     writeJson(followingStorageKey, cleanedFollowing);
     if (cleanedFollowing.length !== myFollowing.length) {
@@ -929,7 +966,7 @@ export default function App() {
       bio: "",
       photoUrl: connection.avatarUrl,
       photoUrls: connection.avatarUrl ? [connection.avatarUrl] : [],
-      coverUrls: [],
+      coverUrls: null,
       isMe: false,
       isFollowedByMe: (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === connection.id),
     });
@@ -957,7 +994,7 @@ export default function App() {
       bio: "",
       photoUrl: peer.avatarUrl,
       photoUrls: peer.avatarUrl ? [peer.avatarUrl] : [],
-      coverUrls: [],
+      coverUrls: null,
       isMe: false,
       isFollowedByMe: false,
     });
@@ -1006,7 +1043,7 @@ export default function App() {
       const existing = threads.find((thread) => thread.peer.id === normalizedPeer.id);
       if (existing) {
         return threads.map((thread) => thread.peer.id === normalizedPeer.id
-          ? { ...thread, peer: normalizedPeer, messages: [...thread.messages, message], updatedAt: message.createdAt }
+          ? { ...thread, peer: normalizedPeer, messages: sortChatMessages([...thread.messages, message]), updatedAt: message.createdAt }
           : thread);
       }
       return [{ peer: normalizedPeer, messages: [message], updatedAt: message.createdAt }, ...threads];
@@ -1023,13 +1060,13 @@ export default function App() {
             ? {
                 ...thread,
                 peer,
-                messages: thread.messages.map((item) => item.id === message.id ? { ...item, ...message } : item),
+                messages: sortChatMessages(thread.messages.map((item) => item.id === message.id ? { ...item, ...message } : item)),
                 updatedAt: Math.max(thread.updatedAt, message.createdAt),
               }
             : thread);
         }
         return threads.map((thread) => thread.peer.id === peer.id
-          ? { ...thread, peer, messages: [...thread.messages, message], updatedAt: message.createdAt }
+          ? { ...thread, peer, messages: sortChatMessages([...thread.messages, message]), updatedAt: message.createdAt }
           : thread);
       }
       return [{ peer, messages: [message], updatedAt: message.createdAt }, ...threads];
@@ -1043,9 +1080,9 @@ export default function App() {
       return {
         ...thread,
         peer,
-        messages: thread.messages
+        messages: sortChatMessages(thread.messages
           .filter((item) => !(hasRemoteMessage && item.id === localId))
-          .map((item) => item.id === localId ? message : item),
+          .map((item) => item.id === localId ? { ...item, ...message } : item)),
         updatedAt: Math.max(thread.updatedAt, message.createdAt),
       };
     }));
@@ -1117,14 +1154,72 @@ export default function App() {
   const deletePlan = (id: PlanId) => {
     const plan = allPlans.find((item) => planKey(item.id) === planKey(id));
     if (plan?.author.id && plan.author.id !== currentUserId) return;
+    const idKey = planKey(id);
     setDeletedPlanIds((ids) => ids.some((item) => planKey(item) === planKey(id)) ? ids : [id, ...ids]);
-    setCreatedPlans((plans) => plans.filter((plan) => planKey(plan.id) !== planKey(id)));
-    setMyParticipantIds((ids) => ids.filter((item) => planKey(item.id) !== planKey(id)));
-    setCheckedItemKeys((keys) => keys.filter((key) => !key.endsWith(`:${id}`)));
-    void deletePlanRemote(planKey(id)).catch((error) => {
+    setCreatedPlans((plans) => plans.filter((plan) => planKey(plan.id) !== idKey));
+    setRemotePublicPlans((plans) => plans.filter((plan) => planKey(plan.id) !== idKey));
+    setProfileRemotePlans((items) => Object.fromEntries(Object.entries(items).map(([authorId, plans]) => [
+      authorId,
+      plans.filter((plan) => planKey(plan.id) !== idKey),
+    ])));
+    setMyParticipantIds((ids) => ids.filter((item) => planKey(item.id) !== idKey));
+    setCheckedItemKeys((keys) => keys.filter((key) => !key.endsWith(`:${idKey}`)));
+    setJoinedCounts((items) => {
+      const next = { ...items };
+      delete next[idKey];
+      return next;
+    });
+    setJoinedParticipantPeers((items) => {
+      const next = { ...items };
+      delete next[idKey];
+      return next;
+    });
+    void deletePlanRemote(idKey).catch((error) => {
       console.error("Supabase plan delete failed", error);
     });
     setScreen("plans");
+  };
+
+  const editPlan = (plan: HomeFeedPlan) => {
+    setEditingPlanId(plan.id);
+    setCreateOrigin("planEvent");
+    setScreen("create");
+  };
+
+  const updatePlan = (plan: HomeFeedPlan) => {
+    const sanitizedPlan = sanitizePlan(plan);
+    const idKey = planKey(sanitizedPlan.id);
+    const replacePlan = (items: HomeFeedPlan[]) => items.map((item) => planKey(item.id) === idKey ? sanitizedPlan : item);
+    setCreatedPlans(replacePlan);
+    setRemotePublicPlans(replacePlan);
+    setProfileRemotePlans((items) => Object.fromEntries(Object.entries(items).map(([authorId, plans]) => [authorId, replacePlan(plans)])));
+    void updatePlanRemote(sanitizedPlan).catch((error) => {
+      console.error("Supabase plan update failed", error);
+    });
+    void fetchParticipants(idKey).then((rows) => {
+      const participantIds = Array.from(new Set(rows
+        .filter((row) => row.status === "joined")
+        .map((row) => row.user_id)))
+        .filter((participantId) => participantId !== currentUserId && !isDemoProfileId(participantId));
+      participantIds.forEach((participantId) => {
+        const threadId = makeThreadId(currentUserId, participantId);
+        void sendMessage({
+          id: crypto.randomUUID(),
+          threadId,
+          senderId: currentUserId,
+          text: `В план «${sanitizedPlan.title}» внесены изменения`,
+          kind: "plan_update",
+          planId: idKey,
+        }).catch((error) => {
+          console.error("Supabase plan update message failed", error);
+        });
+      });
+    }).catch((error) => {
+      console.error("Supabase plan update participants fetch failed", error);
+    });
+    setEditingPlanId(null);
+    setActivePlanId(sanitizedPlan.id);
+    setScreen("planEvent");
   };
 
   const canHidePlanFromHome = (plan: HomeFeedPlan) =>
@@ -1148,9 +1243,6 @@ export default function App() {
     const sanitizedPlans = plans.map(sanitizePlan);
     const ids = sanitizedPlans.map((plan) => plan.id);
     setCreatedPlans((items) => [...sanitizedPlans, ...items.filter((item) => !ids.includes(item.id))]);
-    const ref = { kind: "plan", id: ids[0] } satisfies ParticipantPlanRef;
-    const key = participantKey(ref);
-    setMyParticipantIds((items) => items.some((item) => participantKey(item) === key) ? items : [ref, ...items]);
     setHighlightedPlanId(ids[0]);
     window.setTimeout(() => setHighlightedPlanId(null), 1500);
     setViewingOwnProfile(true);
@@ -1158,7 +1250,6 @@ export default function App() {
       void createPlanRemote(plan).then((remotePlan) => {
         if (!remotePlan) return;
         setCreatedPlans((items) => items.map((item) => planKey(item.id) === planKey(plan.id) ? remotePlan : item));
-        setMyParticipantIds((items) => items.map((item) => planKey(item.id) === planKey(plan.id) ? { ...item, id: remotePlan.id } : item));
         setHighlightedPlanId(remotePlan.id);
         result.participants.forEach((participantId) => {
           if (isDemoProfileId(participantId)) return;
@@ -1306,7 +1397,19 @@ export default function App() {
           />
         );
       case "create":
-        return <CreateScreen onNavigate={navigate} backTo={createOrigin} onCreatePlan={createPlan} currentAuthor={currentAuthor} />;
+        return (
+          <CreateScreen
+            onNavigate={(next) => {
+              if (next !== "create") setEditingPlanId(null);
+              navigate(next);
+            }}
+            backTo={createOrigin}
+            onCreatePlan={createPlan}
+            onUpdatePlan={updatePlan}
+            currentAuthor={currentAuthor}
+            editingPlan={editingPlanId ? allPlanDetails.find((plan) => planKey(plan.id) === planKey(editingPlanId)) ?? null : null}
+          />
+        );
       case "chats":
         return <ChatsScreen threads={chatThreads} onOpenThread={openChatWithPeer} currentUserId={currentUserId} availablePeers={chatSearchPeers} />;
       case "chat": {
@@ -1324,6 +1427,7 @@ export default function App() {
             onConfirmRemoteMessage={confirmRemoteChatMessage}
             onPeerProfile={openChatPeerProfile}
             onAcceptInvitePlan={acceptInvitePlan}
+            onPlanOpen={(planId) => openPlanEvent(planId, "chat")}
           />
         );
       }
@@ -1555,6 +1659,8 @@ export default function App() {
               currentAuthor={currentAuthor}
               canDelete={feedPlan.author.id === currentUserId}
               onDelete={() => deletePlan(feedPlan.id)}
+              canEdit={feedPlan.author.id === currentUserId}
+              onEdit={() => editPlan(feedPlan)}
               canHide={canHidePlanFromHome(feedPlan)}
               onHide={() => {
                 hidePlanFromHome(feedPlan);

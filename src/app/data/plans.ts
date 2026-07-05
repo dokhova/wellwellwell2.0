@@ -59,26 +59,30 @@ export const PLAN_TAG_GRADIENTS: Record<PlanTag, string> = {
   other: "linear-gradient(135deg, var(--accent) 0%, var(--muted-foreground) 100%)",
 };
 
-const exactDemoOffsets = [1, 2, 3, 4, 5, 6];
 const weekdayNames = ["Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"];
 
 const withRelativeDemoDate = (plan: HomeFeedPlan, index: number): HomeFeedPlan => {
   if (plan.schedule.mode !== "exact" && plan.schedule.timeMode !== "exact") return plan;
 
-  const baseDate = new Date();
-  baseDate.setHours(0, 0, 0, 0);
-  baseDate.setDate(baseDate.getDate() + (exactDemoOffsets[index] ?? index + 1));
   const originalStart = plan.schedule.start ? new Date(plan.schedule.start) : null;
   const hours = originalStart && !Number.isNaN(originalStart.getTime()) ? originalStart.getHours() : 9;
-  const minutes = originalStart && !Number.isNaN(originalStart.getTime()) ? originalStart.getMinutes() : 0;
-  baseDate.setHours(hours, minutes, 0, 0);
-
-  const nextStart = baseDate.toISOString();
-  const timeLabel = baseDate.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  const partOfDay = hours < 12 ? "morning" : hours < 17 ? "day" : "evening";
+  const partLabel = partOfDay === "morning" ? "Утро" : partOfDay === "day" ? "День" : "Вечер";
+  const weekdayLabel = plan.schedule.weekdays.length === 7
+    ? "Каждый день"
+    : plan.schedule.weekdays.map((weekday) => weekdayNames[weekday % 7]).filter(Boolean).join(", ");
   return {
     ...plan,
-    schedule: { ...plan.schedule, start: nextStart },
-    timeDate: plan.duration === "Каждый день" ? `Каждый день · ${timeLabel}` : `${weekdayNames[baseDate.getDay()]} · ${timeLabel}`,
+    schedule: {
+      ...plan.schedule,
+      mode: "partOfDay",
+      timeMode: "partOfDay",
+      time: null,
+      partOfDay,
+      start: undefined,
+      end: undefined,
+    },
+    timeDate: `${weekdayLabel || "Дни недели"} · ${partLabel}`,
   };
 };
 
@@ -93,10 +97,10 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     habit: { title: "Групповой забег", durationMin: 60 },
     coverUrl: feedCover1 as unknown as string,
     gradient: PLAN_TAG_GRADIENTS.running,
-    schedule: { mode: "exact", timeMode: "exact", time: "09:00", partOfDay: null, weekdays: [6], start: "2026-07-04T09:00:00", repeat: { type: "weekly" } },
+    schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "morning", weekdays: [6], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
     participantsLabel: "5 чел.",
-    timeDate: "Суббота · 09:00",
+    timeDate: "Суббота · Утро",
     address: "Лужники",
     lat: 55.7158,
     lng: 37.5537,
@@ -113,10 +117,10 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     habit: { title: "Разминка перед бегом", durationMin: 5 },
     coverUrl: feedCover2 as unknown as string,
     gradient: PLAN_TAG_GRADIENTS.running,
-    schedule: { mode: "exact", timeMode: "exact", time: "18:55", partOfDay: null, weekdays: [1, 2, 3, 4, 5, 6, 7], start: "2026-07-01T18:55:00", repeat: { type: "weekly" } },
+    schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "evening", weekdays: [1, 2, 3, 4, 5, 6, 7], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
     participantsLabel: "5 чел.",
-    timeDate: "Каждый день · 18:55",
+    timeDate: "Каждый день · Вечер",
     author: { id: "dmitry-orlov", name: "Дмитрий Орлов", avatarUrl: expertAvatarDmitryOrlov as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/2",
   },
@@ -130,10 +134,10 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     habit: { title: "Восстановление после пробежки", durationMin: 8 },
     coverUrl: feedCover3 as unknown as string,
     gradient: PLAN_TAG_GRADIENTS.recovery,
-    schedule: { mode: "exact", timeMode: "exact", time: "20:00", partOfDay: null, weekdays: [1, 2, 3, 4, 5, 6, 7], start: "2026-07-01T20:00:00", repeat: { type: "weekly" } },
+    schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "evening", weekdays: [1, 2, 3, 4, 5, 6, 7], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
     participantsLabel: "5 чел.",
-    timeDate: "Каждый день · 20:00",
+    timeDate: "Каждый день · Вечер",
     author: { id: "maria-kuznetsova", name: "Мария Кузнецова", avatarUrl: expertAvatarMariaKuznetsova as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/3",
   },
@@ -147,10 +151,10 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     habit: { title: "Интервальная тренировка", durationMin: 45 },
     coverUrl: feedCover4 as unknown as string,
     gradient: PLAN_TAG_GRADIENTS.running,
-    schedule: { mode: "exact", timeMode: "exact", time: "19:30", partOfDay: null, weekdays: [2], start: "2026-07-07T19:30:00", repeat: { type: "weekly" } },
+    schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "evening", weekdays: [2], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
     participantsLabel: "5 чел.",
-    timeDate: "Вторник · 19:30",
+    timeDate: "Вторник · Вечер",
     author: { id: "dmitry-orlov", name: "Дмитрий Орлов", avatarUrl: expertAvatarDmitryOrlov as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/4",
   },
@@ -165,10 +169,10 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     habit: { title: "Контрольный забег", durationMin: 35 },
     coverUrl: feedCover5 as unknown as string,
     gradient: PLAN_TAG_GRADIENTS.running,
-    schedule: { mode: "exact", timeMode: "exact", time: "19:00", partOfDay: null, weekdays: [3], start: "2026-07-01T19:00:00", repeat: { type: "weekly" } },
+    schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "evening", weekdays: [3], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
     participantsLabel: "5 чел.",
-    timeDate: "Среда · 19:00",
+    timeDate: "Среда · Вечер",
     author: { id: "maria-kuznetsova", name: "Мария Кузнецова", avatarUrl: expertAvatarMariaKuznetsova as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/5",
   },
@@ -182,10 +186,10 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     habit: { title: "Силовая беговая тренировка", durationMin: 40 },
     coverUrl: feedCover6 as unknown as string,
     gradient: PLAN_TAG_GRADIENTS.running,
-    schedule: { mode: "exact", timeMode: "exact", time: "19:00", partOfDay: null, weekdays: [4], start: "2026-07-02T19:00:00", repeat: { type: "weekly" } },
+    schedule: { mode: "partOfDay", timeMode: "partOfDay", time: null, partOfDay: "evening", weekdays: [4], repeat: { type: "weekly" } },
     participants: DEFAULT_PLAN_PARTICIPANTS,
     participantsLabel: "5 чел.",
-    timeDate: "Четверг · 19:00",
+    timeDate: "Четверг · Вечер",
     author: { id: "svetlana-voronova", name: "Светлана Воронова", avatarUrl: expertAvatarSvetlanaVoronova as unknown as string },
     shareUrl: "https://wellwellwell.app/plans/6",
   },

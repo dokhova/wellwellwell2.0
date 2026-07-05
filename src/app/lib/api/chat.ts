@@ -8,7 +8,7 @@ export type MessageRow = {
   photo_url: string | null;
   created_at: string;
   read_at: string | null;
-  kind: "text" | "invite" | null;
+  kind: "text" | "invite" | "plan_update" | null;
   plan_id: string | null;
   invite_status: "accepted" | "declined" | null;
 };
@@ -19,7 +19,7 @@ export type SendMessageInput = {
   senderId: string;
   text: string;
   photoUrl?: string | null;
-  kind?: "text" | "invite";
+  kind?: "text" | "invite" | "plan_update";
   planId?: string | null;
   inviteStatus?: "accepted" | "declined" | null;
 };

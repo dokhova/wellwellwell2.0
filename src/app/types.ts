@@ -39,7 +39,7 @@ export interface ChatMessage {
   createdAt: number;
   readAt?: number | null;
   status?: "sending" | "sent";
-  kind?: "text" | "invite";
+  kind?: "text" | "invite" | "plan_update";
   planId?: string | null;
   inviteStatus?: "accepted" | "declined" | null;
 }
@@ -151,6 +151,8 @@ export interface EventDetailProps {
   };
   canDelete?: boolean;
   onDelete?: () => void;
+  canEdit?: boolean;
+  onEdit?: () => void;
   canHide?: boolean;
   onHide?: () => void;
   refreshKey?: number;

@@ -207,6 +207,7 @@ export function ChatScreen({
   onConfirmRemoteMessage,
   onPeerProfile,
   onAcceptInvitePlan,
+  onPlanOpen,
 }: {
   peer: ChatPeer;
   messages: ChatMessage[];
@@ -218,6 +219,7 @@ export function ChatScreen({
   onConfirmRemoteMessage: (peer: ChatPeer, localId: string, message: ChatMessage) => void;
   onPeerProfile: (peer: ChatPeer) => void;
   onAcceptInvitePlan: (plan: HomeFeedPlan) => void;
+  onPlanOpen?: (planId: string) => void;
 }) {
   const [text, setText] = useState("");
   const [typing, setTyping] = useState(false);
@@ -226,6 +228,7 @@ export function ChatScreen({
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const isRealPeer = !peer.cannedReplies?.length;
   const threadId = isRealPeer ? makeThreadId(currentUserId, peer.id) : "";
+  const sortedMessages = [...messages].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -289,7 +292,7 @@ export function ChatScreen({
 
     if (peer.cannedReplies?.length) {
       setTyping(true);
-      const replyIndex = messages.filter((message) => message.sender === "peer").length % peer.cannedReplies.length;
+      const replyIndex = sortedMessages.filter((message) => message.sender === "peer").length % peer.cannedReplies.length;
       timeoutRef.current = window.setTimeout(() => {
         onSendMessage(peer, peer.cannedReplies?.[replyIndex] ?? "", "peer");
         setTyping(false);
@@ -331,15 +334,30 @@ export function ChatScreen({
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        {messages.length === 0 && (
+        {sortedMessages.length === 0 && (
           <div className="mb-4 rounded-2xl bg-card px-4 py-3 text-[13px] leading-5 text-muted-foreground">
             Это локальный демо-чат. Сообщения сохраняются только на этом устройстве.
           </div>
         )}
         <div className="space-y-2.5">
-          {messages.map((message) => {
+          {sortedMessages.map((message) => {
             const mine = message.sender === "me";
             const myPeer: ChatPeer = { id: "me", name: "Вы", avatarUrl: myAvatarUrl };
+            if (message.kind === "plan_update") {
+              return (
+                <div key={message.id} className="flex justify-center">
+                  <button
+                    onClick={() => {
+                      if (message.planId) onPlanOpen?.(message.planId);
+                    }}
+                    className="max-w-[86%] rounded-2xl border border-border bg-card px-4 py-3 text-center active:opacity-90"
+                  >
+                    <p className="text-[13px] font-semibold text-foreground">План обновлён</p>
+                    <p className="mt-1 text-[13px] leading-5 text-muted-foreground">{message.text}</p>
+                  </button>
+                </div>
+              );
+            }
             return (
               <div key={message.id} className={`flex items-end gap-2 ${mine ? "justify-end" : "justify-start"}`}>
                 {!mine && <PeerAvatar peer={peer} size={28} />}

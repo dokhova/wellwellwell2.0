@@ -103,8 +103,9 @@ const parseDemoSchedule = (value: string) => {
     weekday,
     weekdayName,
     time,
+    partOfDay: targetHours < 12 ? "morning" : targetHours < 17 ? "day" : "evening",
     start: candidate.toISOString(),
-    timeDate: `${weekdayName} · ${time}`,
+    timeDate: `${weekdayName} · ${targetHours < 12 ? "Утро" : targetHours < 17 ? "День" : "Вечер"}`,
   };
 };
 
@@ -127,12 +128,11 @@ export const demoCommunityPlans: HomeFeedPlan[] = demoCommunity.people.map((pers
     coverUrl: demoCommunityAssets.covers[person.plan.cover],
     gradient: "linear-gradient(135deg, var(--accent) 0%, var(--primary) 100%)",
     schedule: {
-      mode: "exact",
-      timeMode: "exact",
-      time: schedule.time,
-      partOfDay: null,
+      mode: "partOfDay",
+      timeMode: "partOfDay",
+      time: null,
+      partOfDay: schedule.partOfDay,
       weekdays: [schedule.weekday],
-      start: schedule.start,
       repeat: { type: "weekly" },
     },
     participants: participantAvatars,

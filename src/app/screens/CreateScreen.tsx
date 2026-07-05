@@ -65,31 +65,41 @@ export function CreateScreen({
   onNavigate,
   backTo = "plans",
   onCreatePlan,
+  onUpdatePlan,
   currentAuthor = DEFAULT_PLAN_AUTHOR,
+  editingPlan,
 }: {
   onNavigate: (s: Screen) => void;
   backTo?: Screen;
   onCreatePlan: (plans: HomeFeedPlan[], result: CreatedPlanResult) => void;
+  onUpdatePlan?: (plan: HomeFeedPlan, result: CreatedPlanResult) => void;
   currentAuthor?: HomeFeedPlan["author"];
+  editingPlan?: HomeFeedPlan | null;
 }) {
   const initialDateTime = useMemo(() => getLocalDateTime(), []);
+  const isEditing = Boolean(editingPlan);
   const [people, setPeople] = useState<Person[]>([]);
 
-  const [step, setStep] = useState<CreateStep>("welcome");
+  const [step, setStep] = useState<CreateStep>(isEditing ? "name" : "welcome");
   const [history, setHistory] = useState<CreateStep[]>([]);
-  const [draft, setDraft] = useState<PlanDraft>(defaultPlan());
+  const [draft, setDraft] = useState<PlanDraft>(() => editingPlan ? {
+    title: editingPlan.title,
+    description: editingPlan.description,
+    coverImage: editingPlan.coverUrl ?? null,
+    schedule: editingPlan.schedule,
+  } : defaultPlan());
   const [showRepeatPicker, setShowRepeatPicker] = useState(false);
   const [untilWeek, setUntilWeek] = useState(4);
   const [titleError, setTitleError] = useState("");
   const [scheduleError, setScheduleError] = useState("");
-  const [visibility, setVisibility] = useState<Visibility>("all");
+  const [visibility, setVisibility] = useState<Visibility>(editingPlan?.visibility ?? "all");
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [selectedPeople, setSelectedPeople] = useState<Person[]>([]);
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const [participantQuery, setParticipantQuery] = useState("");
   const [participantsLoading, setParticipantsLoading] = useState(false);
-  const [locationMode, setLocationMode] = useState<"online" | "offline">("online");
-  const [locationAddress, setLocationAddress] = useState("");
+  const [locationMode, setLocationMode] = useState<"online" | "offline">(editingPlan?.format ?? "online");
+  const [locationAddress, setLocationAddress] = useState(editingPlan?.address ?? "");
 
   const currentSchedule = draft.schedule;
   const timeMode: TimeMode = currentSchedule.timeMode ?? currentSchedule.mode ?? "partOfDay";
@@ -186,9 +196,31 @@ export function CreateScreen({
       return;
     }
 
+    if (isEditing && editingPlan) {
+      const updatedPlan: HomeFeedPlan = {
+        ...editingPlan,
+        visibility,
+        format: locationMode,
+        title: draft.title.trim(),
+        description: draft.description.trim(),
+        habit: { ...(editingPlan.habit ?? { durationMin: 15 }), title: draft.title.trim() },
+        coverUrl: draft.coverImage ?? undefined,
+        schedule: draft.schedule,
+        timeDate: getTimeDate(draft.schedule),
+        address: locationMode === "offline" && locationAddress.trim() ? locationAddress.trim() : undefined,
+      };
+      const result: CreatedPlanResult = {
+        plan: { ...draft, title: draft.title.trim(), description: draft.description.trim() },
+        visibility,
+        participants: selectedParticipants,
+        location: locationMode === "online" ? "online" : locationAddress.trim() ? { address: locationAddress.trim() } : null,
+        videoMeeting: { enabled: false, link: "" },
+      };
+      onUpdatePlan?.(updatedPlan, result);
+      return;
+    }
+
     const id = Date.now();
-    const participantAvatars = [currentAuthor.avatarUrl].filter((url): url is string => Boolean(url));
-    const participantCount = 1;
     const newPlan: HomeFeedPlan = {
       id,
       kind: "plan",
@@ -202,8 +234,8 @@ export function CreateScreen({
       coverUrl: draft.coverImage ?? undefined,
       gradient: PLAN_TAG_GRADIENTS.other,
       schedule: draft.schedule,
-      participants: Array.from(new Set(participantAvatars)),
-      participantsLabel: participantCount === 1 ? "Только я" : `${participantCount} чел.`,
+      participants: [],
+      participantsLabel: "0 чел.",
       timeDate: getTimeDate(draft.schedule),
       address: locationMode === "offline" && locationAddress.trim() ? locationAddress.trim() : undefined,
       author: currentAuthor,
@@ -385,7 +417,7 @@ export function CreateScreen({
     if (step === "welcome") return <button onClick={() => goTo("name")} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Создать</button>;
     if (step === "description" || step === "image") return <div className="flex gap-3"><button onClick={() => goTo(step === "description" ? "image" : "schedule")} className="h-12 flex-1 rounded-xl bg-card text-[15px] font-semibold">Пропустить</button><button onClick={() => goTo(step === "description" ? "image" : "schedule")} className="h-12 flex-1 rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Далее</button></div>;
     const action = step === "name" ? continueFromName : step === "schedule" ? continueFromSchedule : handleCreate;
-    return <button onClick={action} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>{step === "finalOptions" ? "Создать" : "Далее"}</button>;
+    return <button onClick={action} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>{step === "finalOptions" ? (isEditing ? "Сохранить" : "Создать") : "Далее"}</button>;
   };
 
   const footer = renderFooter();
@@ -394,7 +426,7 @@ export function CreateScreen({
     <div className="flex h-full flex-col bg-surface">
       <div className="flex h-14 flex-shrink-0 items-center justify-between px-4">
         <button onClick={goBack} className="flex h-10 w-10 items-center justify-start">{history.length > 0 ? <ArrowLeft size={20} color="var(--foreground)" /> : <X size={20} color="var(--foreground)" />}</button>
-        <h1 className="text-[16px] font-semibold">Создание</h1>
+        <h1 className="text-[16px] font-semibold">{isEditing ? "Редактирование" : "Создание"}</h1>
         <div className="h-10 w-10" />
       </div>
       {renderProgress()}

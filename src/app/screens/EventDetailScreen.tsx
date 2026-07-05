@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Calendar, Check, ChevronRight, Copy, Eye, MapPin, Plus, Share2, Trash2, Users, Video } from "lucide-react";
+import { ArrowLeft, Calendar, Check, ChevronRight, Copy, Edit3, Eye, MapPin, Plus, Share2, Trash2, Users, Video } from "lucide-react";
 import type { EventDetailProps } from "@/app/types";
 import { DETAIL_AVATARS, normalizePlanTag, PLAN_TAG_GRADIENTS, PLAN_TAG_LABELS } from "@/app/data/plans";
 import { ALL_DAYS, GREEN, PART_OF_DAY_RANGES, UNSPLASH, WEEKDAY_VALUES } from "@/app/data/constants";
@@ -129,7 +129,7 @@ export function EventDetailScreen({
   readTime, badgeDate, paragraphs, meta, format = "offline", duration, tag, schedule, shareUrl,
   participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, planId, onJoin, onLeave, onProfile,
   authorId, onMessageAuthor, participantItems, onMessageParticipant,
-  currentAuthor, canDelete = false, onDelete, canHide = false, onHide, refreshKey,
+  currentAuthor, canDelete = false, onDelete, canEdit = false, onEdit, canHide = false, onHide, refreshKey,
 }: EventDetailProps) {
   void authorVerified;
   void readTime;
@@ -349,6 +349,15 @@ export function EventDetailScreen({
                   aria-label="Удалить план"
                 >
                   <Trash2 size={16} strokeWidth={2} color="#fff" />
+                </button>
+              )}
+              {canEdit && (
+                <button
+                  onClick={onEdit}
+                  className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-black/50 active:opacity-85"
+                  aria-label="Редактировать план"
+                >
+                  <Edit3 size={16} strokeWidth={2} color="#fff" />
                 </button>
               )}
               {canHide && (

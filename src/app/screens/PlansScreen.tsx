@@ -102,22 +102,6 @@ export function PlansScreen({
   const [removingPlan, setRemovingPlan] = useState<HomeFeedPlan | null>(null);
 
   const todayIndex = 0;
-  const monthShort = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
-  const monthNumberByName: Record<string, number> = {
-    января: 0,
-    февраля: 1,
-    марта: 2,
-    апреля: 3,
-    мая: 4,
-    июня: 5,
-    июля: 6,
-    августа: 7,
-    сентября: 8,
-    октября: 9,
-    ноября: 10,
-    декабря: 11,
-  };
-
   const planItems = getPlanWeekItems(participantPlans);
   const nextItem = planItems.find((item) => item.dayIndex >= todayIndex) ?? planItems[0];
 
@@ -209,17 +193,20 @@ export function PlansScreen({
 
             <div className="space-y-2.5">
               {planItems.map((item) => {
-                const { plan, dayIndex, dayNumber, monthName, progressKey } = item;
+                const { plan, dateKey, dayIndex, dayNumber, progressKey } = item;
                 const done = checkedItemKeys.includes(progressKey);
                 const status = getStatus(progressKey, dayIndex);
                 const scheduleMeta = getScheduleMeta(plan, dayIndex, status);
-                const monthIndex = monthNumberByName[monthName] ?? 0;
+                const itemDate = new Date(`${dateKey}T00:00:00`);
+                const monthLabel = Number.isNaN(itemDate.getTime())
+                  ? "Дата"
+                  : itemDate.toLocaleDateString("ru-RU", { month: "short" }).replace(".", "");
                 return (
                   <div key={`${plan.id}-${dayIndex}`} className={`relative rounded-[16px] transition-colors duration-700 ${highlightedPlanId === plan.id ? "bg-secondary" : ""}`}>
                     <PlanListCard
                       plan={plan}
                       dayNumber={dayNumber}
-                      monthLabel={monthShort[monthIndex]}
+                      monthLabel={monthLabel}
                       scheduleMeta={scheduleMeta}
                       done={done}
                       onOpen={() => onPlanOpen(plan.id)}
