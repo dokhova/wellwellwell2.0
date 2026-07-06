@@ -5,6 +5,7 @@ import { DETAIL_AVATARS, normalizePlanTag, PLAN_TAG_GRADIENTS, PLAN_TAG_LABELS }
 import { ALL_DAYS, GREEN, PART_OF_DAY_RANGES, UNSPLASH, WEEKDAY_VALUES } from "@/app/data/constants";
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { addComment, deleteComment, fetchComments, type CommentRow } from "@/app/lib/api/comments";
+import { track } from "@/app/lib/analytics";
 
 type LocalComment = { id: string; authorId: string | null; author: string; avatarUrl: string; time: string; text: string; persisted: boolean };
 
@@ -269,6 +270,7 @@ export function EventDetailScreen({
     ]);
     setComment("");
     if (planId === undefined) return;
+    track("comment_sent", { plan_id: String(planId) });
     void addComment({
       planId: String(planId),
       authorId: author.id,
@@ -314,6 +316,7 @@ export function EventDetailScreen({
   const copyShareLink = async () => {
     if (!shareUrl) return;
     await copyText(shareUrl);
+    if (planId !== undefined) track("plan_link_copied", { plan_id: String(planId), screen: "plan" });
     setCopied(true);
   };
 

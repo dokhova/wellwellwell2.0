@@ -11,8 +11,9 @@ import { fetchFollowers, fetchFollowing, follow, unfollow } from "@/app/lib/api/
 import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { fetchUserThreadMessages, makeThreadId, sendMessage, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
 import { countJoined, createPlanRemote, deletePlanParticipant, deletePlanRemote, fetchParticipants, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, updatePlanRemote, upsertPlanParticipant } from "@/app/lib/api/plans";
-import { buildPlanStartAppUrl, getTelegramStartParam, getTelegramUser, initTelegram } from "@/app/lib/telegram";
+import { buildPlanStartAppUrl, getTelegramStartParam, getTelegramUser, initTelegram, parsePlanStartParam } from "@/app/lib/telegram";
 import { checkBackendHealth } from "@/app/lib/health";
+import { identifyUser, track, type PlanViewSource } from "@/app/lib/analytics";
 import { HomeScreen } from "@/app/screens/HomeScreen";
 import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
 import { CreateScreen, type CreatedPlanResult } from "@/app/screens/CreateScreen";
@@ -221,9 +222,15 @@ const getParticipantsCount = (plan: HomeFeedPlan) => {
 
 const planKey = (id: PlanId) => String(id);
 const isDemoCommunityPlanId = (id: PlanId) => demoCommunityPlanIds.has(planKey(id));
-const isRemotePlanId = (id: PlanId) => typeof id === "string" && !isDemoCommunityPlanId(id);
-const getPlanDeepLink = (plan: HomeFeedPlan) =>
-  isDemoCommunityPlanId(plan.id) || isRemotePlanId(plan.id) ? buildPlanStartAppUrl(planKey(plan.id)) : undefined;
+const getPlanDeepLink = (plan: HomeFeedPlan) => buildPlanStartAppUrl(planKey(plan.id));
+const planSourceFromScreen = (source: Screen): PlanViewSource => {
+  if (source === "home") return "feed";
+  if (source === "plans") return "calendar";
+  if (source === "profile") return "profile";
+  if (source === "search") return "search";
+  return "feed";
+};
+const planIdFromProgressKey = (key: string) => key.slice(key.indexOf(":") + 1);
 
 const shuffleIds = (ids: string[]) => {
   const next = [...ids];
@@ -363,6 +370,8 @@ function AddPlanScreen({
 
 export default function App() {
   const telegramUser = useMemo(() => getTelegramUser(), []);
+  const initialStartParam = useMemo(() => getTelegramStartParam(), []);
+  const initialStartPlan = useMemo(() => parsePlanStartParam(initialStartParam), [initialStartParam]);
   const storagePrefix = `wellwellwell:${telegramUser.id}`;
   const profileStorageKey = `${storagePrefix}:profile`;
   const myPlansStorageKey = `${storagePrefix}:myPlans`;
@@ -682,6 +691,20 @@ export default function App() {
   useEffect(() => initTelegram(), []);
 
   useEffect(() => {
+    const name = [telegramUser.first_name, telegramUser.last_name].filter(Boolean).join(" ").trim();
+    identifyUser({
+      telegramId: telegramUser.id,
+      name,
+      username: telegramUser.username,
+    });
+    track("app_open", {
+      source: initialStartPlan ? "deeplink" : "direct",
+      ...(initialStartPlan ? { plan_id: initialStartPlan.planId } : {}),
+      ...(initialStartPlan?.campaign ? { campaign: initialStartPlan.campaign } : {}),
+    });
+  }, [initialStartPlan, telegramUser]);
+
+  useEffect(() => {
     let cancelled = false;
     void checkBackendHealth().then((health) => {
       if (health.ok) return;
@@ -812,14 +835,14 @@ export default function App() {
         console.error("Supabase profile follows fetch failed", error);
       }
     };
-    if (!isDemoProfileId(viewingExpertId)) void loadViewedConnections();
+    void loadViewedConnections();
     return () => {
       cancelled = true;
     };
   }, [loadConnectionSets, refreshTick, screen, viewingExpertId, viewingOwnProfile]);
 
   useEffect(() => {
-    if (screen !== "profileConnections" || !profileConnectionsOwnerId || isDemoProfileId(profileConnectionsOwnerId)) return;
+    if (screen !== "profileConnections" || !profileConnectionsOwnerId) return;
     void loadConnectionSets(profileConnectionsOwnerId).catch((error) => {
       console.error("Supabase profile connections fetch failed", error);
     });
@@ -827,15 +850,13 @@ export default function App() {
 
   useEffect(() => {
     if (startParamHandled) return;
-    const startParam = getTelegramStartParam();
-    const match = startParam.match(/^plan_(.+)$/);
-    if (!match) {
+    if (!initialStartPlan) {
       setStartParamHandled(true);
       return;
     }
 
     let cancelled = false;
-    const rawPlanId = decodeURIComponent(match[1]);
+    const rawPlanId = initialStartPlan.planId;
     const openStartPlan = async () => {
       const localPlan = allPlanDetails.find((plan) => planKey(plan.id) === rawPlanId);
       if (localPlan) {
@@ -843,6 +864,7 @@ export default function App() {
         setPlanEventOrigin("home");
         setPreviousScreen("home");
         setScreen("planEvent");
+        track("plan_view", { plan_id: planKey(localPlan.id), source: "deeplink" });
         setStartParamHandled(true);
         return;
       }
@@ -862,6 +884,7 @@ export default function App() {
         setPlanEventOrigin("home");
         setPreviousScreen("home");
         setScreen("planEvent");
+        track("plan_view", { plan_id: planKey(sanitizedPlan.id), source: "deeplink" });
       } catch (error) {
         console.error("Supabase startapp plan fetch failed", error);
         if (!cancelled) {
@@ -877,7 +900,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [allPlanDetails, startParamHandled]);
+  }, [allPlanDetails, initialStartPlan, startParamHandled]);
 
   useEffect(() => {
     if (screen !== "profile" || viewingOwnProfile || isDemoProfileId(viewingExpertId)) return;
@@ -1061,6 +1084,7 @@ export default function App() {
     setPlanEventOrigin(from);
     setPreviousScreen(screen);
     setScreen("planEvent");
+    track("plan_view", { plan_id: planKey(id), source: planSourceFromScreen(from) });
     if (isDemoCommunityPlanId(id)) return;
     void fetchPlan(planKey(id)).then((remotePlan) => {
       if (!remotePlan || remotePlan.hidden) return;
@@ -1232,13 +1256,14 @@ export default function App() {
     setScreen("profileConnections");
   };
 
-  const addCatalogPlanToRoutine = (id: PlanId) => {
+  const addCatalogPlanToRoutine = (id: PlanId, source: PlanViewSource = planSourceFromScreen(screen)) => {
     const plan = allPlans.find((item) => planKey(item.id) === planKey(id));
     const ref = { kind: plan?.kind ?? "plan", id } satisfies ParticipantPlanRef;
     const key = participantKey(ref);
     const idKey = planKey(id);
     const currentPeer = { id: currentUserId, name: currentAuthor.name, avatarUrl: currentAuthor.avatarUrl, realUser: true } satisfies ChatPeer;
     const wasJoined = myParticipantIds.some((item) => participantKey(item) === key);
+    if (!wasJoined) track("plan_join", { plan_id: idKey, source });
     setMyParticipantIds((ids) => ids.some((item) => participantKey(item) === key) ? ids : [ref, ...ids]);
     setJoinedParticipantPeers((items) => ({
       ...items,
@@ -1385,7 +1410,11 @@ export default function App() {
   };
 
   const toggleCheckedItem = (key: string) => {
-    setCheckedItemKeys((keys) => keys.includes(key) ? keys.filter((item) => item !== key) : [...keys, key]);
+    setCheckedItemKeys((keys) => {
+      const checked = keys.includes(key);
+      if (!checked) track("plan_check", { plan_id: planIdFromProgressKey(key) });
+      return checked ? keys.filter((item) => item !== key) : [...keys, key];
+    });
   };
 
   const createPlan = (plans: HomeFeedPlan[], result: CreatedPlanResult) => {
@@ -1397,6 +1426,7 @@ export default function App() {
     setViewingOwnProfile(true);
     sanitizedPlans.forEach((plan) => {
       void createPlanRemote(plan).then((remotePlan) => {
+        track("plan_created", { plan_id: planKey(remotePlan?.id ?? plan.id) });
         if (!remotePlan) return;
         setCreatedPlans((items) => items.map((item) => planKey(item.id) === planKey(plan.id) ? remotePlan : item));
         setHighlightedPlanId(remotePlan.id);
@@ -1477,6 +1507,7 @@ export default function App() {
       const connection = { id: profile.id, name: profile.name, avatarUrl: profile.photoUrl, isFollowedByMe: true };
       const wasFollowed = (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === profile.id);
       if (wasFollowed === nextFollowed) return;
+      if (nextFollowed) track("follow", { target_id: profile.id, target_is_demo: false });
       setOptimisticFollowState(profile, nextFollowed);
       setDbFollowing((items) => nextFollowed
         ? items.some((item) => item.id === profile.id) ? items : [connection, ...items]
@@ -1499,6 +1530,9 @@ export default function App() {
       });
       return;
     }
+    const wasDemoFollowed = myFollowing.some((item) => item.id === profile.id);
+    if (wasDemoFollowed === nextFollowed) return;
+    if (nextFollowed) track("follow", { target_id: profile.id, target_is_demo: true });
     setMyFollowing((items) => {
       if (!nextFollowed) return items.filter((item) => item.id !== profile.id);
       if (items.some((item) => item.id === profile.id)) return items;
@@ -1525,7 +1559,7 @@ export default function App() {
           <HomeScreen
             plans={publicPlans}
             onNavigate={navigate}
-            onPlanOpen={openPlanEvent}
+            onPlanOpen={(id) => openPlanEvent(id, "home")}
             onAuthorOpen={openExpertProfile}
             onMessagePeer={openChatWithPeer}
             canMessageAuthor={(authorId) => !isDemoProfileId(authorId)}
@@ -1541,7 +1575,7 @@ export default function App() {
         return (
           <PlansScreen
             onNavigate={navigate}
-            onPlanOpen={openPlanEvent}
+            onPlanOpen={(id) => openPlanEvent(id, "plans")}
             participantPlans={myPlans}
             checkedItemKeys={checkedItemKeys}
             onToggleCheck={toggleCheckedItem}
@@ -1606,20 +1640,27 @@ export default function App() {
         const baseViewedProfile = viewingOwnProfile
           ? editableProfile
           : remoteProfiles[viewingExpertId] ?? experts.find((expert) => expert.id === viewingExpertId) ?? expertProfile;
-        const viewedConnectionSets = connectionSetsByUser[baseViewedProfile.id] ?? {
+        const loadedViewedConnectionSets = connectionSetsByUser[baseViewedProfile.id];
+        const viewedConnectionSets = loadedViewedConnectionSets ?? {
           followers: localDemoFollowersFor(baseViewedProfile.id),
           following: localDemoFollowingFor(baseViewedProfile.id),
         };
+        const viewedFollowersCount = loadedViewedConnectionSets
+          ? loadedViewedConnectionSets.followers.length
+          : isDemoProfile(baseViewedProfile) ? baseViewedProfile.followersCount : viewedConnectionSets.followers.length;
+        const viewedFollowingCount = loadedViewedConnectionSets
+          ? loadedViewedConnectionSets.following.length
+          : isDemoProfile(baseViewedProfile) ? baseViewedProfile.followingCount : viewedConnectionSets.following.length;
         const viewedProfile = viewingOwnProfile
           ? {
               ...baseViewedProfile,
-              followersCount: viewedConnectionSets.followers.length,
-              followingCount: viewedConnectionSets.following.length,
+              followersCount: viewedFollowersCount,
+              followingCount: viewedFollowingCount,
             }
           : {
               ...baseViewedProfile,
-              followersCount: isDemoProfile(baseViewedProfile) ? baseViewedProfile.followersCount : viewedConnectionSets.followers.length,
-              followingCount: isDemoProfile(baseViewedProfile) ? baseViewedProfile.followingCount : viewedConnectionSets.following.length,
+              followersCount: viewedFollowersCount,
+              followingCount: viewedFollowingCount,
               isFollowedByMe: isDemoProfile(baseViewedProfile)
                 ? myFollowing.some((item) => item.id === baseViewedProfile.id)
                 : (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === baseViewedProfile.id),
@@ -1804,7 +1845,7 @@ export default function App() {
               onBack={() => setScreen(planEventOrigin)}
               planId={feedPlan.id}
               initiallyJoined={myParticipantIds.some((item) => item.id === feedPlan.id)}
-              onJoin={addCatalogPlanToRoutine}
+              onJoin={(id) => addCatalogPlanToRoutine(id, planSourceFromScreen(planEventOrigin))}
               onLeave={removePlanFromMine}
               onProfile={() => feedPlan.author.id ? openExpertProfile(feedPlan.author.id) : setScreen("profile")}
               onProfileOpen={openExpertProfile}

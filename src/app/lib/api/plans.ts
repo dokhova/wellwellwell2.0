@@ -34,7 +34,6 @@ export const createPlanRemote = async (plan: HomeFeedPlan): Promise<HomeFeedPlan
   const remotePlan: HomeFeedPlan = {
     ...plan,
     id,
-    shareUrl: `https://wellwellwell.app/plans/${id}`,
   };
 
   const { error } = await supabase.from("plans").insert({

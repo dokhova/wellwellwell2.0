@@ -102,7 +102,7 @@ export interface HomeFeedPlan {
     name: string;
     avatarUrl: string | null;
   };
-  shareUrl: string;
+  shareUrl?: string;
   items?: HomeFeedPlan[];
 }
 

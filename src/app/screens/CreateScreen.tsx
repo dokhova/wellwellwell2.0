@@ -239,7 +239,6 @@ export function CreateScreen({
       timeDate: getTimeDate(draft.schedule),
       address: locationMode === "offline" && locationAddress.trim() ? locationAddress.trim() : undefined,
       author: currentAuthor,
-      shareUrl: `https://wellwellwell.app/plans/${id}`,
     };
     const result: CreatedPlanResult = {
       plan: { ...draft, title: draft.title.trim(), description: draft.description.trim() },

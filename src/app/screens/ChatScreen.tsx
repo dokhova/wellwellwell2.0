@@ -6,6 +6,7 @@ import { fetchMessages, makeThreadId, markThreadMessagesRead, sendMessage, subsc
 import { searchProfiles } from "@/app/lib/api/profiles";
 import { sanitizeImageUrl } from "@/app/lib/api/storage";
 import { fetchPlan, upsertPlanParticipant } from "@/app/lib/api/plans";
+import { track } from "@/app/lib/analytics";
 import type { HomeFeedPlan } from "@/app/types";
 
 const QUICK_MESSAGES = [
@@ -279,6 +280,7 @@ export function ChatScreen({
     if (!body || (isRealPeer && sending)) return;
     const messageId = crypto.randomUUID();
     const localMessage = onSendMessage(peer, body, "me", isRealPeer ? "sending" : undefined, messageId);
+    track("message_sent", {});
     setText("");
 
     if (isRealPeer && threadId) {

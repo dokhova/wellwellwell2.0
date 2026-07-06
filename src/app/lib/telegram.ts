@@ -24,10 +24,24 @@ declare global {
 
 export const BOT_USERNAME = "WellWellWell_New_bot";
 
-export const buildPlanStartAppUrl = (planId: string) =>
-  `https://t.me/${BOT_USERNAME}?startapp=plan_${encodeURIComponent(planId)}`;
+const CAMPAIGN_PATTERN = /^[a-z0-9-]+$/;
+
+export const buildPlanStartAppUrl = (planId: string, campaign?: string) => {
+  const campaignSuffix = campaign && CAMPAIGN_PATTERN.test(campaign) ? `__${campaign}` : "";
+  return `https://t.me/${BOT_USERNAME}?startapp=plan_${encodeURIComponent(planId)}${campaignSuffix}`;
+};
 
 export const getTelegramStartParam = () => window.Telegram?.WebApp?.initDataUnsafe?.start_param ?? "";
+
+export const parsePlanStartParam = (startParam: string) => {
+  const match = startParam.match(/^plan_(.+)$/);
+  if (!match) return null;
+  const [rawPlanId, rawCampaign] = match[1].split("__", 2);
+  return {
+    planId: decodeURIComponent(rawPlanId),
+    campaign: rawCampaign && CAMPAIGN_PATTERN.test(rawCampaign) ? rawCampaign : undefined,
+  };
+};
 
 export function getTelegramUser() {
   // MVP only: initDataUnsafe is not HMAC-validated on the client.

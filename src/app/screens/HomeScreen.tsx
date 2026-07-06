@@ -4,6 +4,10 @@ import type { ChatPeer, HomeFeedPlan, PlanId, Screen, TagFilter } from "@/app/ty
 import { CATEGORY_CHIPS, normalizePlanTag, PLAN_TAG_LABELS } from "@/app/data/plans";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
 import { HomeSheet } from "@/app/components/HomeSheet";
+import { buildPlanStartAppUrl } from "@/app/lib/telegram";
+import { track } from "@/app/lib/analytics";
+
+const planKey = (id: PlanId) => String(id);
 
 function ParticipantAvatarLine({ avatars }: { avatars: string[] }) {
   const visible = avatars.slice(0, 5);
@@ -212,7 +216,8 @@ export function HomeScreen({
 
   const copyActivePlan = async () => {
     if (!activePlan) return;
-    await navigator.clipboard?.writeText(activePlan.shareUrl);
+    await navigator.clipboard?.writeText(buildPlanStartAppUrl(planKey(activePlan.id)));
+    track("plan_link_copied", { plan_id: planKey(activePlan.id), screen: "feed" });
     setCopied(true);
   };
 

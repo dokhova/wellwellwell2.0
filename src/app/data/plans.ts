@@ -105,7 +105,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     lat: 55.7158,
     lng: 37.5537,
     author: { id: "maria-kuznetsova", name: "Мария Кузнецова", avatarUrl: expertAvatarMariaKuznetsova as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/1",
   },
   {
     id: 2,
@@ -122,7 +121,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Каждый день · Вечер",
     author: { id: "dmitry-orlov", name: "Дмитрий Орлов", avatarUrl: expertAvatarDmitryOrlov as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/2",
   },
   {
     id: 3,
@@ -139,7 +137,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Каждый день · Вечер",
     author: { id: "maria-kuznetsova", name: "Мария Кузнецова", avatarUrl: expertAvatarMariaKuznetsova as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/3",
   },
   {
     id: 4,
@@ -156,7 +153,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Вторник · Вечер",
     author: { id: "dmitry-orlov", name: "Дмитрий Орлов", avatarUrl: expertAvatarDmitryOrlov as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/4",
   },
   {
     id: 5,
@@ -174,7 +170,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Среда · Вечер",
     author: { id: "maria-kuznetsova", name: "Мария Кузнецова", avatarUrl: expertAvatarMariaKuznetsova as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/5",
   },
   {
     id: 6,
@@ -191,7 +186,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Четверг · Вечер",
     author: { id: "svetlana-voronova", name: "Светлана Воронова", avatarUrl: expertAvatarSvetlanaVoronova as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/6",
   },
   {
     id: 101,
@@ -208,7 +202,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Утро · 10 недель",
     author: { id: "maria-kuznetsova", name: "Мария Кузнецова", avatarUrl: expertAvatarMariaKuznetsova as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/101",
   },
   {
     id: 102,
@@ -225,7 +218,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Утро · 12 недель",
     author: { id: "maria-kuznetsova", name: "Мария Кузнецова", avatarUrl: expertAvatarMariaKuznetsova as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/102",
   },
   {
     id: 103,
@@ -243,7 +235,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Утро · 12 недель",
     author: { id: "maria-kuznetsova", name: "Мария Кузнецова", avatarUrl: expertAvatarMariaKuznetsova as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/103",
   },
   {
     id: 104,
@@ -260,7 +251,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Утро · 12 недель",
     author: { id: "dmitry-orlov", name: "Дмитрий Орлов", avatarUrl: expertAvatarDmitryOrlov as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/104",
   },
   {
     id: 105,
@@ -277,7 +267,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Утро · 12 недель",
     author: { id: "dmitry-orlov", name: "Дмитрий Орлов", avatarUrl: expertAvatarDmitryOrlov as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/105",
   },
   {
     id: 106,
@@ -295,7 +284,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Утро · 12 недель",
     author: { id: "dmitry-orlov", name: "Дмитрий Орлов", avatarUrl: expertAvatarDmitryOrlov as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/106",
   },
   {
     id: 107,
@@ -312,7 +300,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "svetlana-voronova", name: "Светлана Воронова", avatarUrl: expertAvatarSvetlanaVoronova as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/107",
   },
   {
     id: 108,
@@ -330,7 +317,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "svetlana-voronova", name: "Светлана Воронова", avatarUrl: expertAvatarSvetlanaVoronova as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/108",
   },
   {
     id: 109,
@@ -347,7 +333,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "svetlana-voronova", name: "Светлана Воронова", avatarUrl: expertAvatarSvetlanaVoronova as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/109",
   },
   {
     id: 110,
@@ -364,7 +349,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "alexey-petrov", name: "Алексей Петров", avatarUrl: expertAvatarAlexeyPetrov as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/110",
   },
   {
     id: 111,
@@ -381,7 +365,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "alexey-petrov", name: "Алексей Петров", avatarUrl: expertAvatarAlexeyPetrov as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/111",
   },
   {
     id: 112,
@@ -399,7 +382,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "alexey-petrov", name: "Алексей Петров", avatarUrl: expertAvatarAlexeyPetrov as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/112",
   },
   {
     id: 113,
@@ -416,7 +398,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "yulia-belova", name: "Юлия Белова", avatarUrl: expertAvatarYuliaBelova as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/113",
   },
   {
     id: 114,
@@ -433,7 +414,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "yulia-belova", name: "Юлия Белова", avatarUrl: expertAvatarYuliaBelova as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/114",
   },
   {
     id: 115,
@@ -451,7 +431,6 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
     participantsLabel: "5 чел.",
     timeDate: "Утро · 8 недель",
     author: { id: "yulia-belova", name: "Юлия Белова", avatarUrl: expertAvatarYuliaBelova as unknown as string },
-    shareUrl: "https://wellwellwell.app/plans/115",
   },
 ] satisfies HomeFeedPlan[]).map(withRelativeDemoDate);
 

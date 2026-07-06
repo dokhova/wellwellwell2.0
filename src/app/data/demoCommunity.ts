@@ -144,7 +144,6 @@ export const demoCommunityPlans: HomeFeedPlan[] = demoCommunity.people.map((pers
       name: person.name,
       avatarUrl,
     },
-    shareUrl: `https://wellwellwell.app/plans/${person.plan.id}`,
   };
 });
 
