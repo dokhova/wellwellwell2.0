@@ -372,7 +372,7 @@ function AddPlanScreen({
 export default function App() {
   const telegramUser = useMemo(() => getTelegramUser(), []);
   const initialStartParam = useMemo(() => getTelegramStartParam(), []);
-  const initialStartPlan = useMemo(() => parsePlanStartParam(initialStartParam), [initialStartParam]);
+  const initialStart = useMemo(() => parsePlanStartParam(initialStartParam), [initialStartParam]);
   const storagePrefix = `wellwellwell:${telegramUser.id}`;
   const profileStorageKey = `${storagePrefix}:profile`;
   const myPlansStorageKey = `${storagePrefix}:myPlans`;
@@ -701,11 +701,11 @@ export default function App() {
       username: telegramUser.username,
     });
     track("app_open", {
-      source: initialStartPlan ? "deeplink" : "direct",
-      ...(initialStartPlan ? { plan_id: initialStartPlan.planId } : {}),
-      ...(initialStartPlan?.campaign ? { campaign: initialStartPlan.campaign } : {}),
+      source: initialStart ? "deeplink" : "direct",
+      ...(initialStart?.kind === "plan" ? { plan_id: initialStart.planId } : {}),
+      ...(initialStart?.campaign ? { campaign: initialStart.campaign } : {}),
     });
-  }, [initialStartPlan, telegramUser]);
+  }, [initialStart, telegramUser]);
 
   useEffect(() => {
     let cancelled = false;
@@ -854,13 +854,19 @@ export default function App() {
   useEffect(() => {
     if (startParamHandled) return;
     if (!termsAccepted) return;
-    if (!initialStartPlan) {
+    if (!initialStart) {
+      setStartParamHandled(true);
+      return;
+    }
+    if (initialStart.kind === "plans") {
+      setPreviousScreen("home");
+      setScreen("plans");
       setStartParamHandled(true);
       return;
     }
 
     let cancelled = false;
-    const rawPlanId = initialStartPlan.planId;
+    const rawPlanId = initialStart.planId;
     const openStartPlan = async () => {
       const localPlan = allPlanDetails.find((plan) => planKey(plan.id) === rawPlanId);
       if (localPlan) {
@@ -904,7 +910,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [allPlanDetails, initialStartPlan, startParamHandled, termsAccepted]);
+  }, [allPlanDetails, initialStart, startParamHandled, termsAccepted]);
 
   useEffect(() => {
     if (screen !== "profile" || viewingOwnProfile || isDemoProfileId(viewingExpertId)) return;

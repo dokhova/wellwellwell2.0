@@ -34,10 +34,20 @@ export const buildPlanStartAppUrl = (planId: string, campaign?: string) => {
 export const getTelegramStartParam = () => window.Telegram?.WebApp?.initDataUnsafe?.start_param ?? "";
 
 export const parsePlanStartParam = (startParam: string) => {
+  const plansMatch = startParam.match(/^plans(?:__(.+))?$/);
+  if (plansMatch) {
+    const rawCampaign = plansMatch[1];
+    return {
+      kind: "plans" as const,
+      campaign: rawCampaign && CAMPAIGN_PATTERN.test(rawCampaign) ? rawCampaign : undefined,
+    };
+  }
+
   const match = startParam.match(/^plan_(.+)$/);
   if (!match) return null;
   const [rawPlanId, rawCampaign] = match[1].split("__", 2);
   return {
+    kind: "plan" as const,
     planId: decodeURIComponent(rawPlanId),
     campaign: rawCampaign && CAMPAIGN_PATTERN.test(rawCampaign) ? rawCampaign : undefined,
   };
