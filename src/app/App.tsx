@@ -6,7 +6,7 @@ import { formatNearestDate, getNextOccurrence } from "@/app/data/calendar";
 import { experts, expertProfile, profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
 import { demoCommunityPlanIds, demoCommunityPlans, getDemoCommunityParticipantPeers } from "@/app/data/demoCommunity";
-import { fetchProfile, fetchProfilesByIds, upsertProfile } from "@/app/lib/api/profiles";
+import { acceptProfileTerms, fetchProfile, fetchProfilesByIds, upsertProfile } from "@/app/lib/api/profiles";
 import { fetchFollowers, fetchFollowing, follow, unfollow } from "@/app/lib/api/follows";
 import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { fetchUserThreadMessages, makeThreadId, sendMessage, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
@@ -25,6 +25,7 @@ import { EditProfileScreen } from "@/app/screens/EditProfileScreen";
 import { EventDetailScreen } from "@/app/screens/EventDetailScreen";
 import { ChatScreen, ChatsScreen } from "@/app/screens/ChatScreen";
 import { WorkInProgress } from "@/app/components/WorkInProgress";
+import { WelcomeScreen } from "@/app/screens/WelcomeScreen";
 import appLogo from "@/imports/avatar-brand.png";
 
 const readJson = <T,>(key: string, fallback: T): T => {
@@ -380,6 +381,7 @@ export default function App() {
   const deletedPlansStorageKey = `${storagePrefix}:deletedPlans`;
   const followingStorageKey = `${storagePrefix}:following`;
   const chatThreadIdsStorageKey = `${storagePrefix}:chatThreadIds`;
+  const termsAcceptedStorageKey = `${storagePrefix}:termsAccepted`;
   const chatThreadStorageKey = (peerId: string) => `${storagePrefix}:chat:${encodeURIComponent(peerId)}`;
 
   const [removedLegacyDemoLocalDataPurged] = useState(() => {
@@ -414,6 +416,7 @@ export default function App() {
   const [viewingExpertId, setViewingExpertId] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
   const [startParamHandled, setStartParamHandled] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(() => readJson(termsAcceptedStorageKey, false));
   const [appToast, setAppToast] = useState("");
   const [moderatorHiddenPlanIds, setModeratorHiddenPlanIds] = useState<PlanId[]>([]);
   const [remoteProfiles, setRemoteProfiles] = useState<Record<string, ExpertProfile>>({});
@@ -850,6 +853,7 @@ export default function App() {
 
   useEffect(() => {
     if (startParamHandled) return;
+    if (!termsAccepted) return;
     if (!initialStartPlan) {
       setStartParamHandled(true);
       return;
@@ -900,7 +904,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [allPlanDetails, initialStartPlan, startParamHandled]);
+  }, [allPlanDetails, initialStartPlan, startParamHandled, termsAccepted]);
 
   useEffect(() => {
     if (screen !== "profile" || viewingOwnProfile || isDemoProfileId(viewingExpertId)) return;
@@ -1071,6 +1075,23 @@ export default function App() {
     if (s === "profile") setViewingOwnProfile(!from);
     setPreviousScreen(screen);
     setScreen(s);
+  };
+
+  const acceptTerms = async () => {
+    const acceptedAt = new Date().toISOString();
+    track("terms_accepted", {});
+    try {
+      window.localStorage.setItem(termsAcceptedStorageKey, "true");
+    } catch (error) {
+      console.error("localStorage terms accepted write failed", error);
+    }
+    try {
+      await acceptProfileTerms(editableProfile, acceptedAt);
+    } catch (error) {
+      console.error("Supabase terms accepted update failed", error);
+    } finally {
+      setTermsAccepted(true);
+    }
   };
 
   const openArticle = (a: Article, from: Screen) => {
@@ -1870,6 +1891,10 @@ export default function App() {
       }
     }
   };
+
+  if (!termsAccepted) {
+    return <WelcomeScreen onAccept={acceptTerms} />;
+  }
 
   const showNav = !NO_BOTTOM_NAV.includes(screen);
   const unreadChatsCount = chatThreads

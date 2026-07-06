@@ -88,6 +88,17 @@ export const upsertProfile = async (profile: ExpertProfile) => {
   }
 };
 
+export const acceptProfileTerms = async (profile: ExpertProfile, acceptedAt: string) => {
+  if (!supabase) return;
+
+  const row = {
+    ...mapProfileToRow(profile),
+    terms_accepted_at: acceptedAt,
+  };
+  const { error } = await supabase.from("profiles").upsert(row);
+  if (error) throw error;
+};
+
 export const fetchProfile = async (id: string): Promise<ExpertProfile | null> => {
   if (!supabase) return null;
 
