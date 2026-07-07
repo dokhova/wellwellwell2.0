@@ -1,8 +1,8 @@
-import expertAvatarMariaKuznetsova from "@/imports/avatar_01.jpg";
-import expertAvatarDmitryOrlov from "@/imports/avatar_02.jpg";
-import expertAvatarSvetlanaVoronova from "@/imports/avatar_03.jpg";
-import expertAvatarAlexeyPetrov from "@/imports/avatar_04.jpg";
-import expertAvatarYuliaBelova from "@/imports/avatar_05.jpg";
+import expertAvatarMariaKuznetsova from "@/imports/avatar_01.webp";
+import expertAvatarDmitryOrlov from "@/imports/avatar_02.webp";
+import expertAvatarSvetlanaVoronova from "@/imports/avatar_03.webp";
+import expertAvatarAlexeyPetrov from "@/imports/avatar_04.webp";
+import expertAvatarYuliaBelova from "@/imports/avatar_05.webp";
 import type { Screen, Visibility } from "@/app/types";
 
 export const P_AVATARS = {

@@ -421,7 +421,7 @@ export function ProfileScreen(props: {
             <div className="mt-5">
               <button
                 onClick={() => props.onMessageProfile?.(
-                  props.profile.isDemo === true
+                  props.profile.isDemo === true && !/^\d+$/.test(props.profile.id)
                     ? { id: props.profile.id, name: props.profile.name, avatarUrl: props.profile.photoUrl, cannedReplies: props.profile.cannedReplies, isDemo: true }
                     : { id: props.profile.id, name: props.profile.name, avatarUrl: props.profile.photoUrl, realUser: true },
                 )}

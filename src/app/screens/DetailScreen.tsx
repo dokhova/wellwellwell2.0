@@ -1,4 +1,4 @@
-import challengeImg from "@/imports/challenge-opt.jpg";
+import challengeImg from "@/imports/challenge-opt.webp";
 import type { Screen } from "@/app/types";
 import { articleBodies } from "@/app/data/articles";
 import { eventMeta } from "@/app/data/plans";

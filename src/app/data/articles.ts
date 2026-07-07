@@ -1,7 +1,7 @@
-import cover1 from "@/imports/cover1-opt.jpg";
-import cover2 from "@/imports/cover2-opt.jpg";
-import cover3 from "@/imports/cover3-opt.jpg";
-import cover4 from "@/imports/cover4-opt.jpg";
+import cover1 from "@/imports/cover1-opt.webp";
+import cover2 from "@/imports/cover2-opt.webp";
+import cover3 from "@/imports/cover3-opt.webp";
+import cover4 from "@/imports/cover4-opt.webp";
 import avatarBrand from "@/imports/avatar-brand.png";
 import type { Article } from "@/app/types";
 import { UNSPLASH } from "@/app/data/constants";

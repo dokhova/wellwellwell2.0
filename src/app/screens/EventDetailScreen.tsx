@@ -284,9 +284,12 @@ export function EventDetailScreen({
     ? participantItems
     : participantAvatars.map((url, index) => ({ id: `participant-${index}`, name: "Участник", avatarUrl: url }));
   const mentionCandidates = useMemo(() => {
+    const realParticipants = participants.filter((participant) =>
+      participant.name !== "Участник" && !/(^|-)participant-\d+$/.test(participant.id)
+    );
     const candidates: MentionCandidate[] = [
       { id: authorId ?? authorName, name: authorName, avatarUrl: authorAvatarUrl },
-      ...participants.map((participant) => ({
+      ...realParticipants.map((participant) => ({
         id: participant.id,
         name: participant.name,
         avatarUrl: participant.avatarUrl,

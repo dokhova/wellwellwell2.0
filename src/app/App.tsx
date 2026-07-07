@@ -125,6 +125,7 @@ const SUPPORT_PEER: ChatPeer = {
 const SUPPORT_MESSAGE = "Это сервисный чат WellWellWell. Сюда будут приходить уведомления и новости приложения.";
 const MODERATOR_IDS = ["353298824"];
 const DEMO_PROFILE_IDS = new Set(experts.filter((profile) => profile.isDemo).map((profile) => profile.id));
+const isNumericUserId = (id?: string | null) => Boolean(id && /^\d+$/.test(id));
 const isDemoProfileId = (id?: string | null) => Boolean(id && DEMO_PROFILE_IDS.has(id));
 const isDemoProfile = (profile: Pick<ExpertProfile, "isDemo">) => profile.isDemo === true;
 const isDemoPeer = (peer: Pick<ChatPeer, "isDemo">) => peer.isDemo === true;
@@ -174,10 +175,10 @@ const sanitizeChatThread = (thread: ChatThread): ChatThread => ({
   ...thread,
   peer: thread.peer.id === SUPPORT_PEER.id
     ? SUPPORT_PEER
-    : {
+    : normalizeChatPeer({
         ...thread.peer,
         avatarUrl: sanitizeImageUrl(thread.peer.avatarUrl),
-      },
+      }),
   pinned: thread.peer.id === SUPPORT_PEER.id ? true : thread.pinned,
   messages: sortChatMessages(thread.messages.map((message) => (
     thread.peer.id === SUPPORT_PEER.id && message.id === "support-welcome"
@@ -195,8 +196,13 @@ const asRealPeer = (peer: ChatPeer): ChatPeer => {
   return { ...realPeer, realUser: true };
 };
 
+const normalizeChatPeer = (peer: ChatPeer): ChatPeer => {
+  if (isNumericUserId(peer.id)) return asRealPeer(peer);
+  return peer;
+};
+
 const isRealProfilePeer = (peer: ChatPeer, remoteProfiles: Record<string, ExpertProfile>) =>
-  peer.realUser || Boolean(remoteProfiles[peer.id]) || /^\d+$/.test(peer.id);
+  peer.realUser || Boolean(remoteProfiles[peer.id]) || isNumericUserId(peer.id);
 
 const canMessageProfile = (profile: Pick<ExpertProfile, "id" | "isDemo" | "cannedReplies">) =>
   !isDemoProfile(profile);
@@ -1200,6 +1206,7 @@ export default function App() {
   };
 
   const getCannedPeer = (peer: ChatPeer): ChatPeer => {
+    if (isNumericUserId(peer.id)) return asRealPeer(peer);
     if (isRealProfilePeer(peer, remoteProfiles)) return asRealPeer(peer);
     const expert = experts.find((item) => item.id === peer.id);
     if (expert) {
@@ -1719,7 +1726,7 @@ export default function App() {
             }}
             onRemovePlan={removePlanFromMine}
             onToggleFollow={toggleFollowing}
-              onMessageProfile={(peer) => openChatWithPeer(viewedProfile.isDemo ? { ...peer, isDemo: true } : asRealPeer(peer))}
+              onMessageProfile={(peer) => openChatWithPeer(viewedProfile.isDemo && !isNumericUserId(peer.id) ? { ...peer, isDemo: true } : asRealPeer(peer))}
             canMessage={canMessageProfile(viewedProfile)}
             profile={viewedProfile}
             plans={viewedPlans}
@@ -1835,18 +1842,12 @@ export default function App() {
         if (feedPlan) {
           const isDemoPlan = isDemoCommunityPlanId(feedPlan.id);
           const joinedPeers = joinedParticipantPeers[planKey(feedPlan.id)] ?? [];
-          const baseParticipantItems = isDemoPlan
-            ? getDemoCommunityParticipantPeers(planKey(feedPlan.id))
-            : feedPlan.participants.map((avatarUrl, index) => ({
-                id: `${planKey(feedPlan.id)}-participant-${index}`,
-                name: "Участник",
-                avatarUrl,
-              }));
+          const baseParticipantItems = isDemoPlan ? getDemoCommunityParticipantPeers(planKey(feedPlan.id)) : [];
           const participantItems = [...baseParticipantItems, ...joinedPeers]
             .filter((participant) => participant.id !== feedPlan.author.id)
             .filter((participant, index, items) => items.findIndex((item) => item.id === participant.id) === index);
           const participantAvatars = participantItems.map((participant) => participant.avatarUrl).filter((url): url is string => Boolean(url));
-          const participantCount = participantItems.length;
+          const participantCount = joinedCounts[planKey(feedPlan.id)] ?? participantItems.length;
           return (
             <EventDetailScreen
               title={feedPlan.isChallenge ? `Челлендж: ${feedPlan.title}` : feedPlan.title}
