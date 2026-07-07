@@ -30,6 +30,7 @@ export interface ChatPeer {
   cannedReplies?: string[];
   realUser?: boolean;
   isDemo?: boolean;
+  readOnly?: boolean;
 }
 
 export interface ChatMessage {

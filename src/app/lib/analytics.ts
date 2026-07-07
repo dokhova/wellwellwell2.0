@@ -1,6 +1,6 @@
 import posthog from "posthog-js";
 
-export const TEAM_IDS: string[] = [];
+export const TEAM_IDS: string[] = ["353298824", "838916466", "1059165386", "600537101", "91079436", "895195749", "103230833"];
 
 export type PlanViewSource = "deeplink" | "feed" | "profile" | "search" | "calendar";
 
@@ -12,7 +12,7 @@ type AnalyticsEventProps = {
   plan_join: { plan_id: string; source: PlanViewSource };
   plan_link_copied: { plan_id: string; screen: "feed" | "plan" };
   plan_check: { plan_id: string };
-  comment_sent: { plan_id: string };
+  comment_sent: { plan_id: string; mentions_count: number };
   follow: { target_id: string; target_is_demo: boolean };
   message_sent: Record<string, never>;
   plan_created: { plan_id: string };

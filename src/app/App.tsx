@@ -119,13 +119,10 @@ const SUPPORT_PEER: ChatPeer = {
   name: "Well Well Well",
   avatarUrl: appLogo as unknown as string,
   isDemo: true,
-  cannedReplies: [
-    "Спасибо за сообщение. В демо-версии команда ответит здесь позже.",
-    "Мы уже собираем обратную связь по планам и чатам.",
-  ],
+  readOnly: true,
 };
 
-const SUPPORT_MESSAGE = "Привет! Well Well Well помогает собирать привычки и планы тренировок — создавай свои события или присоединяйся к чужим, зови друзей в чат. Если возникнут вопросы — пишите сюда, наша команда ответит";
+const SUPPORT_MESSAGE = "Это сервисный чат WellWellWell. Сюда будут приходить уведомления и новости приложения.";
 const MODERATOR_IDS = ["353298824"];
 const DEMO_PROFILE_IDS = new Set(experts.filter((profile) => profile.isDemo).map((profile) => profile.id));
 const isDemoProfileId = (id?: string | null) => Boolean(id && DEMO_PROFILE_IDS.has(id));
@@ -175,12 +172,18 @@ type ProfileConnectionSets = {
 
 const sanitizeChatThread = (thread: ChatThread): ChatThread => ({
   ...thread,
-  peer: {
-    ...thread.peer,
-    avatarUrl: sanitizeImageUrl(thread.peer.avatarUrl),
-    isDemo: thread.peer.id === SUPPORT_PEER.id ? true : thread.peer.isDemo,
-  },
-  messages: sortChatMessages(thread.messages),
+  peer: thread.peer.id === SUPPORT_PEER.id
+    ? SUPPORT_PEER
+    : {
+        ...thread.peer,
+        avatarUrl: sanitizeImageUrl(thread.peer.avatarUrl),
+      },
+  pinned: thread.peer.id === SUPPORT_PEER.id ? true : thread.pinned,
+  messages: sortChatMessages(thread.messages.map((message) => (
+    thread.peer.id === SUPPORT_PEER.id && message.id === "support-welcome"
+      ? { ...message, text: SUPPORT_MESSAGE }
+      : message
+  ))),
 });
 
 const sortChatMessages = (messages: ChatMessage[]) =>
@@ -1219,6 +1222,7 @@ export default function App() {
     const body = text.trim();
     if (!body) return null;
     const normalizedPeer = getCannedPeer(peer);
+    if (normalizedPeer.readOnly) return null;
     const message: ChatMessage = {
       id: messageId,
       sender,

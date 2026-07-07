@@ -7,6 +7,7 @@ export type CommentRow = {
   author_name: string;
   author_avatar_url: string | null;
   text: string;
+  mentioned_user_ids: string[] | null;
   photo_url: string | null;
   created_at: string;
 };
@@ -17,6 +18,7 @@ export type AddCommentInput = {
   authorName: string;
   authorAvatarUrl: string | null;
   text: string;
+  mentionedUserIds?: string[];
   photoUrl?: string | null;
 };
 
@@ -25,7 +27,7 @@ export const fetchComments = async (planId: string): Promise<CommentRow[]> => {
 
   const { data, error } = await supabase
     .from("comments")
-    .select("id, plan_id, author_id, author_name, author_avatar_url, text, photo_url, created_at")
+    .select("id, plan_id, author_id, author_name, author_avatar_url, text, mentioned_user_ids, photo_url, created_at")
     .eq("plan_id", planId)
     .order("created_at", { ascending: true })
     .returns<CommentRow[]>();
@@ -45,9 +47,10 @@ export const addComment = async (input: AddCommentInput): Promise<CommentRow | n
       author_name: input.authorName,
       author_avatar_url: input.authorAvatarUrl,
       text: input.text,
+      mentioned_user_ids: input.mentionedUserIds ?? [],
       photo_url: input.photoUrl ?? null,
     })
-    .select("id, plan_id, author_id, author_name, author_avatar_url, text, photo_url, created_at")
+    .select("id, plan_id, author_id, author_name, author_avatar_url, text, mentioned_user_ids, photo_url, created_at")
     .single<CommentRow>();
 
   if (error) throw error;

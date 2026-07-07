@@ -230,6 +230,7 @@ export function ChatScreen({
   const isDemoPeer = peer.isDemo === true;
   const demoReplies = isDemoPeer ? peer.cannedReplies ?? [] : [];
   const isRealPeer = !isDemoPeer;
+  const isReadOnly = peer.readOnly === true;
   const threadId = isRealPeer ? makeThreadId(currentUserId, peer.id) : "";
   const sortedMessages = [...messages].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
 
@@ -277,7 +278,7 @@ export function ChatScreen({
 
   const send = (value: string) => {
     const body = value.trim();
-    if (!body || (isRealPeer && sending)) return;
+    if (!body || isReadOnly || (isRealPeer && sending)) return;
     const messageId = crypto.randomUUID();
     const localMessage = onSendMessage(peer, body, "me", isRealPeer ? "sending" : undefined, messageId);
     track("message_sent", {});
@@ -333,7 +334,7 @@ export function ChatScreen({
         </button>
         <button onClick={() => onPeerProfile(peer)} className="min-w-0 flex-1 text-left active:opacity-80">
           <p className="truncate text-[16px] font-semibold text-foreground">{peer.name}</p>
-          <p className="text-[12px] leading-4 text-muted-foreground">{isDemoPeer ? "демо-ответы включены" : "чат готов к реальному собеседнику"}</p>
+          <p className="text-[12px] leading-4 text-muted-foreground">{isReadOnly ? "сервисные уведомления" : isDemoPeer ? "демо-ответы включены" : "чат готов к реальному собеседнику"}</p>
         </button>
       </div>
 
@@ -407,42 +408,44 @@ export function ChatScreen({
         </div>
       </div>
 
-      <div className="flex-shrink-0 border-t border-border bg-card px-4 pb-4 pt-3">
-        <div className="-mx-4 mb-3 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="flex gap-2">
-            {QUICK_MESSAGES.map((message) => (
-              <button
-                key={message}
-                onClick={() => send(message)}
-                disabled={isRealPeer && sending}
-                className="flex-shrink-0 rounded-full bg-muted px-3.5 py-2 text-[13px] font-medium text-foreground active:opacity-85"
-              >
-                {message}
-              </button>
-            ))}
+      {!isReadOnly && (
+        <div className="flex-shrink-0 border-t border-border bg-card px-4 pb-4 pt-3">
+          <div className="-mx-4 mb-3 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex gap-2">
+              {QUICK_MESSAGES.map((message) => (
+                <button
+                  key={message}
+                  onClick={() => send(message)}
+                  disabled={isRealPeer && sending}
+                  className="flex-shrink-0 rounded-full bg-muted px-3.5 py-2 text-[13px] font-medium text-foreground active:opacity-85"
+                >
+                  {message}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 rounded-full bg-input px-3 py-2">
+            <PeerAvatar peer={{ id: "me", name: "Вы", avatarUrl: myAvatarUrl ?? UNSPLASH.userAvatar }} size={32} />
+            <input
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !(isRealPeer && sending)) send(text);
+              }}
+              placeholder="Сообщение"
+              className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-muted-foreground"
+            />
+            <button
+              onClick={() => send(text)}
+              disabled={!text.trim() || (isRealPeer && sending)}
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full disabled:opacity-50"
+              style={{ backgroundColor: GREEN }}
+            >
+              <Send size={15} strokeWidth={2.2} color="#fff" />
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-2 rounded-full bg-input px-3 py-2">
-          <PeerAvatar peer={{ id: "me", name: "Вы", avatarUrl: myAvatarUrl ?? UNSPLASH.userAvatar }} size={32} />
-          <input
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !(isRealPeer && sending)) send(text);
-            }}
-            placeholder="Сообщение"
-            className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-muted-foreground"
-          />
-          <button
-            onClick={() => send(text)}
-            disabled={!text.trim() || (isRealPeer && sending)}
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full disabled:opacity-50"
-            style={{ backgroundColor: GREEN }}
-          >
-            <Send size={15} strokeWidth={2.2} color="#fff" />
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

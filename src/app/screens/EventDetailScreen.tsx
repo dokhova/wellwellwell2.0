@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Calendar, Check, ChevronRight, Copy, Edit3, Eye, MapPin, Plus, Share2, Trash2, Users, Video } from "lucide-react";
 import type { EventDetailProps } from "@/app/types";
 import { DETAIL_AVATARS, normalizePlanTag, PLAN_TAG_GRADIENTS, PLAN_TAG_LABELS } from "@/app/data/plans";
@@ -7,7 +7,11 @@ import { HomeSheet } from "@/app/components/HomeSheet";
 import { addComment, deleteComment, fetchComments, type CommentRow } from "@/app/lib/api/comments";
 import { track } from "@/app/lib/analytics";
 
-type LocalComment = { id: string; authorId: string | null; author: string; avatarUrl: string; time: string; text: string; persisted: boolean };
+type MentionCandidate = { id: string; name: string; avatarUrl: string | null };
+type LocalComment = { id: string; authorId: string | null; author: string; avatarUrl: string; time: string; text: string; mentionedUserIds: string[]; persisted: boolean };
+
+const MENTION_REGEX = /@\[([^\]]+)\]\(([^)]+)\)/g;
+type DraftMention = { id: string; name: string };
 
 const formatCommentTime = (value: string) => {
   const date = new Date(value);
@@ -22,8 +26,74 @@ const mapCommentRow = (row: CommentRow): LocalComment => ({
   avatarUrl: row.author_avatar_url ?? UNSPLASH.userAvatar,
   time: formatCommentTime(row.created_at),
   text: row.text,
+  mentionedUserIds: row.mentioned_user_ids ?? [],
   persisted: true,
 });
+
+const extractMentionedUserIds = (text: string) => {
+  const ids = new Set<string>();
+  for (const match of text.matchAll(MENTION_REGEX)) {
+    const id = match[2]?.trim();
+    if (id) ids.add(id);
+  }
+  return Array.from(ids);
+};
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const serializeDraftMentions = (text: string, mentions: DraftMention[]) => {
+  let serialized = text;
+  const usedIds = new Set<string>();
+
+  mentions.forEach((mention) => {
+    if (usedIds.has(mention.id)) return;
+    const pattern = new RegExp(`@${escapeRegExp(mention.name)}(?=\\s|$|[.,!?;:])`, "g");
+    serialized = serialized.replace(pattern, `@[${mention.name}](${mention.id})`);
+    usedIds.add(mention.id);
+  });
+
+  return serialized;
+};
+
+const getMentionTrigger = (text: string, cursor: number | null) => {
+  if (cursor === null) return null;
+  const beforeCursor = text.slice(0, cursor);
+  const match = beforeCursor.match(/(^|\s)@([^\s@]*)$/);
+  if (!match) return null;
+  const query = match[2] ?? "";
+  return { start: beforeCursor.length - query.length - 1, end: cursor, query };
+};
+
+function CommentText({ text, onProfileOpen }: { text: string; onProfileOpen?: (profileId: string) => void }) {
+  const parts: Array<string | { name: string; id: string; key: string }> = [];
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(MENTION_REGEX)) {
+    const index = match.index ?? 0;
+    if (index > lastIndex) parts.push(text.slice(lastIndex, index));
+    parts.push({ name: match[1] ?? "", id: match[2] ?? "", key: `${index}-${match[2]}` });
+    lastIndex = index + match[0].length;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+
+  return (
+    <p className="mt-0.5 text-[14px] leading-5 text-foreground">
+      {parts.map((part, index) => typeof part === "string" ? (
+        <span key={index}>{part}</span>
+      ) : (
+        <button
+          key={part.key}
+          type="button"
+          onClick={() => onProfileOpen?.(part.id)}
+          className="inline font-medium active:opacity-80"
+          style={{ color: "#00887F" }}
+        >
+          @{part.name}
+        </button>
+      ))}
+    </p>
+  );
+}
 
 function CommentsBlock({
   comment,
@@ -34,6 +104,8 @@ function CommentsBlock({
   planAuthorId,
   onDelete,
   onProfileOpen,
+  mentionCandidates,
+  onMentionSelected,
 }: {
   comment: string;
   setComment: (v: string) => void;
@@ -43,8 +115,33 @@ function CommentsBlock({
   planAuthorId?: string;
   onDelete: (comment: LocalComment) => void;
   onProfileOpen?: (profileId: string) => void;
+  mentionCandidates: MentionCandidate[];
+  onMentionSelected: (mention: DraftMention) => void;
 }) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [mentionTrigger, setMentionTrigger] = useState<{ start: number; end: number; query: string } | null>(null);
   const canSend = comment.trim().length > 0;
+  const filteredMentionCandidates = mentionTrigger
+    ? mentionCandidates.filter((candidate) => candidate.name.toLowerCase().includes(mentionTrigger.query.toLowerCase()))
+    : [];
+
+  const updateMentionTrigger = (value: string, cursor: number | null) => {
+    setMentionTrigger(getMentionTrigger(value, cursor));
+  };
+
+  const insertMention = (candidate: MentionCandidate) => {
+    if (!mentionTrigger) return;
+    const mention = `@${candidate.name}`;
+    const nextComment = `${comment.slice(0, mentionTrigger.start)}${mention} ${comment.slice(mentionTrigger.end)}`;
+    const nextCursor = mentionTrigger.start + mention.length + 1;
+    setComment(nextComment);
+    onMentionSelected({ id: candidate.id, name: candidate.name });
+    setMentionTrigger(null);
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
 
   return (
     <div
@@ -53,12 +150,39 @@ function CommentsBlock({
       <h3 className="mb-3.5 flex items-center gap-2 text-[15px] font-semibold text-foreground">
         Комментарии <span className="text-[15px] font-normal text-muted-foreground">{comments.length}</span>
       </h3>
-      <div className="mb-[18px] flex items-center gap-2.5">
+      <div className="relative mb-[18px] flex items-center gap-2.5">
+        {mentionTrigger && filteredMentionCandidates.length > 0 && (
+          <div className="absolute bottom-full left-10 right-0 z-20 mb-2 max-h-56 overflow-y-auto rounded-xl border border-border bg-card py-1 shadow-lg">
+            {filteredMentionCandidates.map((candidate) => (
+              <button
+                key={candidate.id}
+                type="button"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  insertMention(candidate);
+                }}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left active:opacity-80"
+              >
+                <AuthorAvatar name={candidate.name} avatarUrl={candidate.avatarUrl} size={28} />
+                <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-foreground">{candidate.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <AuthorAvatar name={currentAuthor?.name ?? "Вы"} avatarUrl={currentAuthor?.avatarUrl ?? null} size={32} />
         <div className="flex-1 bg-input rounded-full px-3.5 py-[9px] flex items-center gap-2">
           <input
+            ref={inputRef}
             value={comment}
-            onChange={e => setComment(e.target.value)}
+            onChange={(event) => {
+              setComment(event.target.value);
+              updateMentionTrigger(event.target.value, event.target.selectionStart);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" || event.key === " ") setMentionTrigger(null);
+            }}
+            onClick={(event) => updateMentionTrigger(comment, event.currentTarget.selectionStart)}
+            onBlur={() => window.setTimeout(() => setMentionTrigger(null), 120)}
             placeholder="Напишите комментарий..."
             className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground outline-none"
           />
@@ -95,7 +219,7 @@ function CommentsBlock({
                   <p className="truncate text-[14px] font-medium text-foreground">{item.author}</p>
                   <span className="text-[12px] text-muted-foreground">{item.time}</span>
                 </div>
-                <p className="mt-0.5 text-[14px] leading-5 text-foreground">{item.text}</p>
+                <CommentText text={item.text} onProfileOpen={onProfileOpen} />
               </div>
               {canDelete && (
                 <button onClick={() => onDelete(item)} className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground active:opacity-80" aria-label="Удалить комментарий">
@@ -151,6 +275,7 @@ export function EventDetailScreen({
   const [subscribed, setSubscribed] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [comment, setComment] = useState("");
+  const [draftMentions, setDraftMentions] = useState<DraftMention[]>([]);
   const [comments, setComments] = useState<LocalComment[]>([]);
   const [copied, setCopied] = useState(false);
   const description = paragraphs.join("\n\n");
@@ -158,6 +283,20 @@ export function EventDetailScreen({
   const participants = participantItems?.length
     ? participantItems
     : participantAvatars.map((url, index) => ({ id: `participant-${index}`, name: "Участник", avatarUrl: url }));
+  const mentionCandidates = useMemo(() => {
+    const candidates: MentionCandidate[] = [
+      { id: authorId ?? authorName, name: authorName, avatarUrl: authorAvatarUrl },
+      ...participants.map((participant) => ({
+        id: participant.id,
+        name: participant.name,
+        avatarUrl: participant.avatarUrl,
+      })),
+    ];
+    return candidates.filter((candidate, index, items) =>
+      Boolean(candidate.id && candidate.name)
+      && items.findIndex((item) => item.id === candidate.id) === index
+    );
+  }, [authorAvatarUrl, authorId, authorName, participants]);
   const organizerAction = onProfile ?? (() => setSheet("profile"));
   const needsDescriptionClamp = description.length > 260;
   const formatLabel = format === "online" ? "Онлайн" : "Офлайн";
@@ -252,9 +391,11 @@ export function EventDetailScreen({
   }, [planId, refreshKey]);
 
   const sendComment = () => {
-    const text = comment.trim();
-    if (!text) return;
+    const draftText = comment.trim();
+    if (!draftText) return;
+    const text = serializeDraftMentions(draftText, draftMentions);
     const author = currentAuthor ?? { id: "local", name: "Вы", avatarUrl: UNSPLASH.userAvatar };
+    const mentionedUserIds = extractMentionedUserIds(text);
     const localComment: LocalComment = {
       id: `local-${Date.now()}`,
       authorId: author.id,
@@ -262,6 +403,7 @@ export function EventDetailScreen({
       avatarUrl: author.avatarUrl ?? UNSPLASH.userAvatar,
       time: "сейчас",
       text,
+      mentionedUserIds,
       persisted: false,
     };
     setComments((items) => [
@@ -269,14 +411,16 @@ export function EventDetailScreen({
       localComment,
     ]);
     setComment("");
+    setDraftMentions([]);
     if (planId === undefined) return;
-    track("comment_sent", { plan_id: String(planId) });
+    track("comment_sent", { plan_id: String(planId), mentions_count: mentionedUserIds.length });
     void addComment({
       planId: String(planId),
       authorId: author.id,
       authorName: author.name,
       authorAvatarUrl: author.avatarUrl,
       text,
+      mentionedUserIds,
       photoUrl: null,
     }).then((savedComment) => {
       if (!savedComment) return;
@@ -556,7 +700,7 @@ export function EventDetailScreen({
           </div>
         </div>
 
-        <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} currentAuthor={currentAuthor} planAuthorId={authorId} onDelete={removeComment} onProfileOpen={onProfileOpen} />
+        <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} currentAuthor={currentAuthor} planAuthorId={authorId} onDelete={removeComment} onProfileOpen={onProfileOpen} mentionCandidates={mentionCandidates} onMentionSelected={(mention) => setDraftMentions((items) => [...items.filter((item) => item.id !== mention.id), mention])} />
       </div>
 
       {sheet === "participants" && (
