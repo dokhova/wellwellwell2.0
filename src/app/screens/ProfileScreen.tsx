@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { ArrowLeft, Check, Edit3, MessageCircle, UserPlus } from "lucide-react";
 import type { Article, ChatPeer, HomeFeedPlan, PlanId, Screen } from "@/app/types";
@@ -183,10 +183,11 @@ export function ProfileScreen(props: {
   void props.onNavigate;
   const [isFollowed, setIsFollowed] = useState(props.profile.isFollowedByMe);
   const [isBioExpanded, setIsBioExpanded] = useState(false);
+  const [isBioClamped, setIsBioClamped] = useState(false);
   const [showAllPlans, setShowAllPlans] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
+  const bioRef = useRef<HTMLParagraphElement | null>(null);
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false });
-  const shouldShowBioToggle = props.profile.bio.length > 100;
   const visiblePlans = showAllPlans ? props.plans : props.plans.slice(0, 3);
   const nearestPlans = [...props.plans].sort((a, b) => getNextOccurrence(a.schedule).getTime() - getNextOccurrence(b.schedule).getTime());
   const visibleNearestPlans = showAllPlans ? nearestPlans : nearestPlans.slice(0, 2);
@@ -219,6 +220,39 @@ export function ProfileScreen(props: {
     setSelectedPhotoIndex(emblaApi.selectedScrollSnap());
   }, [emblaApi]);
 
+  const measureBioClamp = useCallback(() => {
+    const element = bioRef.current;
+    if (!element) {
+      setIsBioClamped(false);
+      return;
+    }
+
+    const previousDisplay = element.style.getPropertyValue("display");
+    const previousLineClamp = element.style.getPropertyValue("-webkit-line-clamp");
+    const previousBoxOrient = element.style.getPropertyValue("-webkit-box-orient");
+    const previousOverflow = element.style.getPropertyValue("overflow");
+
+    element.style.setProperty("display", "-webkit-box");
+    element.style.setProperty("-webkit-line-clamp", "2");
+    element.style.setProperty("-webkit-box-orient", "vertical");
+    element.style.setProperty("overflow", "hidden");
+
+    setIsBioClamped(element.scrollHeight > element.clientHeight + 1);
+
+    const restoreProperty = (property: string, value: string) => {
+      if (value) {
+        element.style.setProperty(property, value);
+      } else {
+        element.style.removeProperty(property);
+      }
+    };
+
+    restoreProperty("display", previousDisplay);
+    restoreProperty("-webkit-line-clamp", previousLineClamp);
+    restoreProperty("-webkit-box-orient", previousBoxOrient);
+    restoreProperty("overflow", previousOverflow);
+  }, []);
+
   useEffect(() => {
     if (!emblaApi) return;
     onPhotoSelect();
@@ -229,6 +263,26 @@ export function ProfileScreen(props: {
   useEffect(() => {
     setIsFollowed(props.profile.isFollowedByMe);
   }, [props.profile.id, props.profile.isFollowedByMe]);
+
+  useEffect(() => {
+    setIsBioExpanded(false);
+    const frame = window.requestAnimationFrame(measureBioClamp);
+    return () => window.cancelAnimationFrame(frame);
+  }, [measureBioClamp, props.profile.bio]);
+
+  useEffect(() => {
+    let frame = 0;
+    const onResize = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(measureBioClamp);
+    };
+
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [measureBioClamp]);
 
   return (
     <div className="h-full overflow-y-auto bg-card">
@@ -315,7 +369,19 @@ export function ProfileScreen(props: {
           <h1 className="mt-3 text-[26px] font-bold leading-8 text-foreground">{props.profile.name}</h1>
           <div className="mt-2 flex items-start gap-2">
             <p
-              className="min-w-0 flex-1 text-[15px] leading-5 text-muted-foreground"
+              ref={bioRef}
+              onClick={() => {
+                if (!isBioExpanded && isBioClamped) setIsBioExpanded(true);
+              }}
+              onKeyDown={(event) => {
+                if (!isBioExpanded && isBioClamped && (event.key === "Enter" || event.key === " ")) {
+                  event.preventDefault();
+                  setIsBioExpanded(true);
+                }
+              }}
+              role={!isBioExpanded && isBioClamped ? "button" : undefined}
+              tabIndex={!isBioExpanded && isBioClamped ? 0 : undefined}
+              className={`min-w-0 flex-1 text-[15px] leading-5 text-muted-foreground ${!isBioExpanded && isBioClamped ? "cursor-pointer" : ""}`}
               style={!isBioExpanded ? {
                 display: "-webkit-box",
                 WebkitLineClamp: 2,
@@ -326,7 +392,7 @@ export function ProfileScreen(props: {
               {props.profile.bio}
             </p>
           </div>
-          {shouldShowBioToggle && (
+          {isBioClamped && (
             <button
               onClick={() => setIsBioExpanded((value) => !value)}
               className="mt-1 text-[13px] font-medium"
