@@ -148,6 +148,7 @@ export interface EventDetailProps {
   participantItems?: ChatPeer[];
   onMessageParticipant?: (peer: ChatPeer) => void;
   onProfileOpen?: (profileId: string) => void;
+  profileById?: Record<string, { name: string; avatarUrl: string | null }>;
   currentAuthor?: {
     id: string;
     name: string;

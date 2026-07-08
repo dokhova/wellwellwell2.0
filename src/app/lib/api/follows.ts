@@ -53,3 +53,14 @@ export const fetchFollowers = async (userId: string): Promise<string[]> => {
   if (error) throw error;
   return (data ?? []).map((row) => row.follower_id);
 };
+
+export const deleteUserFollows = async (userId: string) => {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from("follows")
+    .delete()
+    .or(`follower_id.eq.${userId},following_id.eq.${userId}`);
+
+  if (error) throw error;
+};

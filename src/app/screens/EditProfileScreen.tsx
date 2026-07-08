@@ -1,6 +1,7 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { ArrowLeft, Image as ImageIcon, Plus, X } from "lucide-react";
 import { ImageCropSheet } from "@/app/components/ImageCropSheet";
+import { HomeSheet } from "@/app/components/HomeSheet";
 import { DEFAULT_COVER_URLS, resolveCoverUrl, type ExpertProfile } from "@/app/data/profile";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
 import { uploadPhoto } from "@/app/lib/api/storage";
@@ -11,16 +12,19 @@ export function EditProfileScreen({
   profile,
   onBack,
   onSave,
+  onDeleteAccount,
 }: {
   profile: ExpertProfile;
   onBack: () => void;
   onSave: (profile: ExpertProfile) => void;
+  onDeleteAccount: () => void;
 }) {
   const [name, setName] = useState(profile.name);
   const [bio, setBio] = useState(profile.bio);
   const [photoUrl, setPhotoUrl] = useState<string | null>(profile.photoUrl);
   const [coverUrls, setCoverUrls] = useState<string[] | null>(profile.coverUrls);
   const [cropRequest, setCropRequest] = useState<{ target: CropTarget; imageUrl: string } | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const visibleCoverUrls = coverUrls === null ? [...DEFAULT_COVER_URLS] : coverUrls;
   const initials = name
     .split(" ")
@@ -172,6 +176,13 @@ export function EditProfileScreen({
         >
           Сохранить
         </button>
+        <button
+          onClick={() => setDeleteOpen(true)}
+          className="mt-3 h-10 w-full text-center text-[14px] font-semibold"
+          style={{ color: "#DC2626" }}
+        >
+          Удалить аккаунт
+        </button>
       </div>
 
       {cropRequest && (
@@ -181,6 +192,15 @@ export function EditProfileScreen({
           onCancel={closeCrop}
           onComplete={handleCropComplete}
         />
+      )}
+      {deleteOpen && (
+        <HomeSheet title="Удалить аккаунт" onClose={() => setDeleteOpen(false)}>
+          <p className="mb-4 text-[14px] leading-5 text-gray-500">Все твои данные будут удалены без возможности восстановления: профиль, планы, комментарии, сообщения и подписки.</p>
+          <div className="flex gap-2">
+            <button onClick={() => setDeleteOpen(false)} className="h-11 flex-1 rounded-xl bg-gray-100 text-[14px] font-semibold text-gray-900">Отмена</button>
+            <button onClick={onDeleteAccount} className="h-11 flex-1 rounded-xl text-[14px] font-semibold text-white" style={{ backgroundColor: "#DC2626" }}>Удалить</button>
+          </div>
+        </HomeSheet>
       )}
     </div>
   );

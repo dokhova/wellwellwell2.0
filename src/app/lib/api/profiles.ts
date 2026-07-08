@@ -157,3 +157,10 @@ export const fetchProfilesByIds = async (ids: string[]): Promise<ExpertProfile[]
   if (error) throw error;
   return (data ?? []).map(mapRowToProfile);
 };
+
+export const deleteProfile = async (id: string) => {
+  if (!supabase) return;
+
+  const { error } = await supabase.from("profiles").delete().eq("id", id);
+  if (error) throw error;
+};

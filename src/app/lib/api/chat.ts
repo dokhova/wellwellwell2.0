@@ -103,6 +103,17 @@ export const markThreadMessagesRead = async (threadId: string, currentUserId: st
   if (error) throw error;
 };
 
+export const deleteUserMessages = async (userId: string) => {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from("messages")
+    .delete()
+    .or(`sender_id.eq.${userId},thread_id.like.${userId}_%,thread_id.like.%_${userId}`);
+
+  if (error) throw error;
+};
+
 export const subscribeToThread = (
   threadId: string,
   onMessage: (message: MessageRow) => void,

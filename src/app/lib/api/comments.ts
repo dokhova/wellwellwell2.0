@@ -63,3 +63,10 @@ export const deleteComment = async (id: string) => {
   const { error } = await supabase.from("comments").delete().eq("id", id);
   if (error) throw error;
 };
+
+export const deleteCommentsByAuthor = async (authorId: string) => {
+  if (!supabase) return;
+
+  const { error } = await supabase.from("comments").delete().eq("author_id", authorId);
+  if (error) throw error;
+};

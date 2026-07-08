@@ -1,4 +1,4 @@
-import { ArrowLeft, Calendar, CheckCircle2, Home, MessageCircle, Plus, User } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2, MessageCircle, Newspaper, Plus, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Article, ChatMessage, ChatPeer, ChatThread, HomeFeedPlan, ParticipantPlanRef, PlanId, Screen } from "@/app/types";
 import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
@@ -6,13 +6,13 @@ import { formatNearestDate, getNextOccurrence } from "@/app/data/calendar";
 import { experts, expertProfile, profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
 import { demoCommunityPlanIds, demoCommunityPlans, getDemoCommunityParticipantPeers } from "@/app/data/demoCommunity";
-import { acceptProfileTerms, fetchProfile, fetchProfilesByIds, upsertProfile } from "@/app/lib/api/profiles";
-import { fetchFollowers, fetchFollowing, follow, unfollow } from "@/app/lib/api/follows";
+import { acceptProfileTerms, deleteProfile, fetchProfile, fetchProfilesByIds, upsertProfile } from "@/app/lib/api/profiles";
+import { deleteUserFollows, fetchFollowers, fetchFollowing, follow, unfollow } from "@/app/lib/api/follows";
 import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
-import { fetchUserThreadMessages, makeThreadId, sendMessage, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
-import { countJoined, createPlanRemote, deletePlanParticipant, deletePlanRemote, fetchParticipants, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, updatePlanRemote, upsertPlanParticipant } from "@/app/lib/api/plans";
-import { addReport } from "@/app/lib/api/reports";
-import { buildPlanStartAppUrl, getTelegramStartParam, getTelegramUser, initTelegram, parsePlanStartParam } from "@/app/lib/telegram";
+import { deleteUserMessages, fetchUserThreadMessages, makeThreadId, sendMessage, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
+import { countJoined, createPlanRemote, deletePlanParticipant, deletePlanParticipantsForPlans, deletePlanRemote, deletePlansByAuthor, deleteUserPlanParticipants, fetchParticipants, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, updatePlanRemote, upsertPlanParticipant } from "@/app/lib/api/plans";
+import { deleteCommentsByAuthor } from "@/app/lib/api/comments";
+import { buildPlanStartAppUrl, getTelegramAuthDate, getTelegramStartParam, getTelegramUser, initTelegram, parsePlanStartParam } from "@/app/lib/telegram";
 import { checkBackendHealth } from "@/app/lib/health";
 import { identifyUser, track, type PlanViewSource } from "@/app/lib/analytics";
 import { HomeScreen } from "@/app/screens/HomeScreen";
@@ -130,8 +130,6 @@ const isNumericUserId = (id?: string | null) => Boolean(id && /^\d+$/.test(id));
 const isDemoProfileId = (id?: string | null) => Boolean(id && DEMO_PROFILE_IDS.has(id));
 const isDemoProfile = (profile: Pick<ExpertProfile, "isDemo">) => profile.isDemo === true;
 const isDemoPeer = (peer: Pick<ChatPeer, "isDemo">) => peer.isDemo === true;
-const removeDemoConnections = (items: ExpertConnection[]) => items.filter((item) => !isDemoProfileId(item.id));
-
 const normalizeProfile = (profile: ExpertProfile): ExpertProfile => {
   const rawPhotoUrls = profile.photoUrls?.length ? profile.photoUrls : profile.photoUrl ? [profile.photoUrl] : [];
   const photoUrls = rawPhotoUrls.map(sanitizeImageUrl).filter((url): url is string => Boolean(url));
@@ -247,6 +245,13 @@ type PlanDetailSession = {
   source: PlanViewSource;
   openedAt: number;
 };
+type NavSnapshot =
+  | { screen: "home" | "plans" | "chats" | "create" | "search" | "detail" | "article" | "addPlan" | "editProfile" }
+  | { screen: "profile"; viewingOwnProfile: boolean; viewingExpertId: string }
+  | { screen: "profileConnections"; type: ConnectionType; ownerId: string; canEditFollowing: boolean }
+  | { screen: "planEvent"; activePlanId: PlanId; origin: Screen; source: PlanViewSource }
+  | { screen: "chat"; peer: ChatPeer | null };
+const NAV_STACK_LIMIT = 20;
 
 const shuffleIds = (ids: string[]) => {
   const next = [...ids];
@@ -408,8 +413,10 @@ function AddPlanScreen({
 export default function App() {
   const telegramUser = useMemo(() => getTelegramUser(), []);
   const initialStartParam = useMemo(() => getTelegramStartParam(), []);
+  const telegramAuthDate = useMemo(() => getTelegramAuthDate(), []);
   const initialStart = useMemo(() => parsePlanStartParam(initialStartParam), [initialStartParam]);
-  const startParamConsumedKey = initialStartParam ? `startParamConsumed:${initialStartParam}` : "";
+  const startParamConsumedKey = initialStartParam && telegramAuthDate ? `startParamConsumed:${initialStartParam}:${telegramAuthDate}` : "";
+  const sessionStartParamConsumedKey = initialStartParam ? `startParamConsumed:${initialStartParam}` : "";
   const storagePrefix = `wellwellwell:${telegramUser.id}`;
   const profileStorageKey = `${storagePrefix}:profile`;
   const myPlansStorageKey = `${storagePrefix}:myPlans`;
@@ -419,6 +426,7 @@ export default function App() {
   const followingStorageKey = `${storagePrefix}:following`;
   const chatThreadIdsStorageKey = `${storagePrefix}:chatThreadIds`;
   const termsAcceptedStorageKey = `${storagePrefix}:termsAccepted`;
+  const lastTabStorageKey = `${storagePrefix}:lastTab`;
   const chatThreadStorageKey = (peerId: string) => `${storagePrefix}:chat:${encodeURIComponent(peerId)}`;
 
   const [removedLegacyDemoLocalDataPurged] = useState(() => {
@@ -446,6 +454,8 @@ export default function App() {
   const [planEventOrigin, setPlanEventOrigin] = useState<Screen>("plans");
   const [planEventSource, setPlanEventSource] = useState<PlanViewSource>("calendar");
   const [previousScreen, setPreviousScreen] = useState<Screen>("plans");
+  const [navStack, setNavStack] = useState<NavSnapshot[]>([]);
+  const [profileSourceTab, setProfileSourceTab] = useState<Screen>(() => readJson<Screen>(lastTabStorageKey, "home"));
   const [profileConnectionsType, setProfileConnectionsType] = useState<ConnectionType>("followers");
   const [profileConnectionsCanEditFollowing, setProfileConnectionsCanEditFollowing] = useState(false);
   const [profileConnectionsOwnerId, setProfileConnectionsOwnerId] = useState("");
@@ -477,7 +487,7 @@ export default function App() {
   const [joinedParticipantPeers, setJoinedParticipantPeers] = useState<Record<string, ChatPeer[]>>({});
   const [deletedPlanIds, setDeletedPlanIds] = useState<PlanId[]>(() => readJson(deletedPlansStorageKey, []));
   const [myFollowing, setMyFollowing] = useState<ExpertConnection[]>(() =>
-    removeDemoConnections(readJson<ExpertConnection[]>(followingStorageKey, []).map(sanitizeConnection))
+    readJson<ExpertConnection[]>(followingStorageKey, []).map(sanitizeConnection)
   );
   const [dbFollowing, setDbFollowing] = useState<ExpertConnection[]>([]);
   const [dbFollowers, setDbFollowers] = useState<ExpertConnection[]>([]);
@@ -512,6 +522,62 @@ export default function App() {
     name: editableProfile.name,
     avatarUrl: editableProfile.photoUrl,
   };
+  const currentRootTab: Screen = screen === "profile" && viewingOwnProfile
+    ? "profile"
+    : screen === "profile" || screen === "profileConnections"
+      ? profileSourceTab
+      : screen === "planEvent"
+        ? planEventOrigin
+        : screen === "chat"
+          ? "chats"
+          : screen === "plans" || screen === "home" || screen === "chats"
+            ? screen
+            : profileSourceTab;
+  const captureNavSnapshot = (): NavSnapshot => {
+    if (screen === "profile") return { screen, viewingOwnProfile, viewingExpertId };
+    if (screen === "profileConnections") {
+      return {
+        screen,
+        type: profileConnectionsType,
+        ownerId: profileConnectionsOwnerId,
+        canEditFollowing: profileConnectionsCanEditFollowing,
+      };
+    }
+    if (screen === "planEvent") return { screen, activePlanId, origin: planEventOrigin, source: planEventSource };
+    if (screen === "chat") return { screen, peer: activeChatPeer };
+    return { screen };
+  };
+  const pushNavSnapshot = () => {
+    const snapshot = captureNavSnapshot();
+    setNavStack((items) => [...items, snapshot].slice(-NAV_STACK_LIMIT));
+  };
+  const restoreNavSnapshot = (snapshot: NavSnapshot) => {
+    if (snapshot.screen === "profile") {
+      setViewingOwnProfile(snapshot.viewingOwnProfile);
+      setViewingExpertId(snapshot.viewingExpertId);
+    } else if (snapshot.screen === "profileConnections") {
+      setProfileConnectionsType(snapshot.type);
+      setProfileConnectionsOwnerId(snapshot.ownerId);
+      setProfileConnectionsCanEditFollowing(snapshot.canEditFollowing);
+    } else if (snapshot.screen === "planEvent") {
+      setActivePlanId(snapshot.activePlanId);
+      setPlanEventOrigin(snapshot.origin);
+      setPlanEventSource(snapshot.source);
+    } else if (snapshot.screen === "chat") {
+      setActiveChatPeer(snapshot.peer);
+    }
+    setPreviousScreen(snapshot.screen === "chat" ? "chats" : snapshot.screen);
+    setScreen(snapshot.screen);
+  };
+  const goBackInStack = (fallback: Screen = previousScreen) => {
+    const snapshot = navStack[navStack.length - 1];
+    if (!snapshot) {
+      setScreen(fallback);
+      return;
+    }
+    setNavStack((items) => items.slice(0, -1));
+    restoreNavSnapshot(snapshot);
+  };
   const deletedPlanIdSet = new Set(deletedPlanIds.map(planKey));
   const moderatorHiddenPlanIdSet = new Set(moderatorHiddenPlanIds.map(planKey));
   const isJoinedPlan = (id: PlanId) => myParticipantIds.some((item) => planKey(item.id) === planKey(id));
@@ -536,10 +602,22 @@ export default function App() {
       .filter((peer) => peer.id !== plan.author.id)
       .map((peer) => peer.avatarUrl)
       .filter((url): url is string => Boolean(url));
+    if (isDemoProfileId(plan.author.id)) {
+      const avatars = Array.from(new Set([
+        ...(plan.author.avatarUrl ? [plan.author.avatarUrl] : []),
+        ...plan.participants,
+        ...joinedAvatarEntries,
+      ]));
+      const count = Math.max(avatars.length, joinedCounts[id] ?? 0);
+      return {
+        avatars,
+        label: `${count} чел.`,
+        count,
+      };
+    }
     const avatars = Array.from(new Set([
       ...(plan.author.avatarUrl ? [plan.author.avatarUrl] : []),
       ...joinedAvatarEntries,
-      ...plan.participants,
     ]));
     const joinedCount = joinedCounts[id] ?? 0;
     const count = 1 + joinedCount;
@@ -765,6 +843,23 @@ export default function App() {
   useEffect(() => initTelegram(), []);
 
   useEffect(() => {
+    if (!startParamConsumedKey) return;
+    try {
+      Object.keys(window.localStorage)
+        .filter((key) => key.startsWith("startParamConsumed:") && key !== startParamConsumedKey)
+        .forEach((key) => window.localStorage.removeItem(key));
+    } catch (error) {
+      console.error("localStorage start_param cleanup failed", error);
+    }
+  }, [startParamConsumedKey]);
+
+  useEffect(() => {
+    if (screen !== "home" && screen !== "plans" && screen !== "chats" && !(screen === "profile" && viewingOwnProfile)) return;
+    const tab = screen === "profile" ? "profile" : screen;
+    writeJson(lastTabStorageKey, tab);
+  }, [lastTabStorageKey, screen, viewingOwnProfile]);
+
+  useEffect(() => {
     const name = [telegramUser.first_name, telegramUser.last_name].filter(Boolean).join(" ").trim();
     identifyUser({
       telegramId: telegramUser.id,
@@ -957,22 +1052,36 @@ export default function App() {
   useEffect(() => {
     if (startParamHandled) return;
     if (!termsAccepted) return;
-    if (startParamConsumedKey) {
+    const consumedStorage = startParamConsumedKey ? window.localStorage : window.sessionStorage;
+    const consumedKey = startParamConsumedKey || sessionStartParamConsumedKey;
+    const openLastTab = () => {
+      const savedTab = readJson<Screen>(lastTabStorageKey, "home");
+      if (savedTab === "profile") {
+        setViewingOwnProfile(true);
+        setScreen("profile");
+        return;
+      }
+      if (savedTab === "plans" || savedTab === "chats" || savedTab === "home") {
+        setScreen(savedTab);
+      }
+    };
+    if (consumedKey) {
       try {
-        if (window.sessionStorage.getItem(startParamConsumedKey) === "1") {
+        if (consumedStorage.getItem(consumedKey) === "1") {
+          openLastTab();
           setStartParamHandled(true);
           return;
         }
       } catch (error) {
-        console.error("sessionStorage start_param read failed", error);
+        console.error("start_param consumed read failed", error);
       }
     }
     const markStartParamConsumed = () => {
-      if (!startParamConsumedKey) return;
+      if (!consumedKey) return;
       try {
-        window.sessionStorage.setItem(startParamConsumedKey, "1");
+        consumedStorage.setItem(consumedKey, "1");
       } catch (error) {
-        console.error("sessionStorage start_param write failed", error);
+        console.error("start_param consumed write failed", error);
       }
     };
     if (!initialStart) {
@@ -1038,7 +1147,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [allPlanDetails, initialStart, startParamConsumedKey, startParamHandled, termsAccepted]);
+  }, [allPlanDetails, initialStart, lastTabStorageKey, sessionStartParamConsumedKey, startParamConsumedKey, startParamHandled, termsAccepted]);
 
   useEffect(() => {
     if (screen !== "profile" || viewingOwnProfile || isDemoProfileId(viewingExpertId)) return;
@@ -1190,11 +1299,48 @@ export default function App() {
   }, [allPlans]);
 
   useEffect(() => {
-    const cleanedFollowing = removeDemoConnections(myFollowing.map(sanitizeConnection));
+    let cancelled = false;
+    const pruneLocalPlanCache = async () => {
+      try {
+        const ownRemotePlans = await fetchPlansByAuthor(currentUserId);
+        if (cancelled) return;
+        const existingOwnPlanIds = new Set(ownRemotePlans.filter((plan) => plan.hidden !== true).map((plan) => planKey(plan.id)));
+        const localRealCreatedIds = createdPlans
+          .filter((plan) => !isDemoCommunityPlanId(plan.id) && plan.author.id === currentUserId)
+          .map((plan) => planKey(plan.id));
+        const participantRealIds = myParticipantIds
+          .map((item) => planKey(item.id))
+          .filter((id) => !isDemoCommunityPlanId(id));
+        const idsToCheck = Array.from(new Set([...localRealCreatedIds, ...participantRealIds]))
+          .filter((id) => !existingOwnPlanIds.has(id));
+        const checkedPlans = await Promise.all(idsToCheck.map(async (id) => [id, await fetchPlan(id)] as const));
+        if (cancelled) return;
+        const existingPlanIds = new Set(existingOwnPlanIds);
+        checkedPlans.forEach(([id, plan]) => {
+          if (plan && plan.hidden !== true) existingPlanIds.add(id);
+        });
+        setCreatedPlans((plans) => {
+          const next = plans.filter((plan) => isDemoCommunityPlanId(plan.id) || plan.author.id !== currentUserId || existingPlanIds.has(planKey(plan.id)));
+          return next.length === plans.length ? plans : next;
+        });
+        setMyParticipantIds((items) => {
+          const next = items.filter((item) => isDemoCommunityPlanId(item.id) || existingPlanIds.has(planKey(item.id)));
+          return next.length === items.length ? items : next;
+        });
+      } catch (error) {
+        console.error("Supabase local plan cache prune failed", error);
+      }
+    };
+
+    void pruneLocalPlanCache();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, refreshTick]);
+
+  useEffect(() => {
+    const cleanedFollowing = myFollowing.map(sanitizeConnection);
     writeJson(followingStorageKey, cleanedFollowing);
-    if (cleanedFollowing.length !== myFollowing.length) {
-      setMyFollowing(cleanedFollowing);
-    }
   }, [followingStorageKey, myFollowing]);
 
   useEffect(() => {
@@ -1203,6 +1349,12 @@ export default function App() {
   }, [chatThreadIdsStorageKey, chatThreads]);
 
   const navigate = (s: Screen, from?: Screen) => {
+    if (s === "home" || s === "plans" || s === "chats" || (s === "profile" && !from)) {
+      setNavStack([]);
+      setProfileSourceTab(s === "profile" ? "profile" : s);
+    } else {
+      pushNavSnapshot();
+    }
     if (s === "detail" && from) setDetailOrigin(from);
     if (s === "create") setCreateOrigin(from ?? screen);
     if (s === "search") setSearchOrigin(from ?? screen);
@@ -1229,6 +1381,7 @@ export default function App() {
   };
 
   const openArticle = (a: Article, from: Screen) => {
+    pushNavSnapshot();
     setActiveArticle(a);
     setArticleOrigin(from);
     setScreen("article");
@@ -1236,6 +1389,7 @@ export default function App() {
 
   const openPlanEvent = (id: PlanId, from: Screen = "plans") => {
     const source = planSourceFromScreen(from);
+    pushNavSnapshot();
     setActivePlanId(id);
     setPlanEventOrigin(from);
     setPlanEventSource(source);
@@ -1266,6 +1420,8 @@ export default function App() {
         console.error("Supabase profile fetch before open failed", error);
       });
     }
+    pushNavSnapshot();
+    if (screen !== "profile" && screen !== "profileConnections") setProfileSourceTab(currentRootTab);
     setViewingExpertId(expertId);
     setViewingOwnProfile(false);
     setPreviousScreen(screen);
@@ -1349,6 +1505,7 @@ export default function App() {
     if (peer.id === currentUserId) return;
     const nextPeer = getCannedPeer(peer);
     if (nextPeer.id === currentUserId) return;
+    pushNavSnapshot();
     setActiveChatPeer(nextPeer);
     setChatThreads((threads) => threads.map((thread) => thread.peer.id === nextPeer.id ? { ...thread, unreadCount: 0 } : thread));
     setPreviousScreen(screen);
@@ -1417,6 +1574,8 @@ export default function App() {
   }, []);
 
   const openProfileConnections = (type: ConnectionType, ownerIsCurrentUser = false, ownerId = currentUserId) => {
+    pushNavSnapshot();
+    if (!ownerIsCurrentUser) setProfileSourceTab(currentRootTab);
     setProfileConnectionsType(type);
     setProfileConnectionsCanEditFollowing(ownerIsCurrentUser);
     setProfileConnectionsOwnerId(ownerId);
@@ -1580,20 +1739,10 @@ export default function App() {
     });
   };
 
-  const reportPlan = (plan: HomeFeedPlan) => {
-    const idKey = planKey(plan.id);
-    setAppToast("Жалоба отправлена");
-    window.setTimeout(() => setAppToast(""), 2200);
-    track("report_submitted", { plan_id: idKey });
-    void addReport({ planId: idKey, reporterId: currentUserId }).catch((error) => {
-      console.error("Supabase report insert failed", error);
-    });
-  };
-
-  const resetLocalAccount = () => {
+  const clearAppStorageAndReload = () => {
     try {
       Object.keys(window.localStorage)
-        .filter((key) => key.startsWith("wellwellwell:"))
+        .filter((key) => key.startsWith("wellwellwell:") || key.startsWith("startParamConsumed:"))
         .forEach((key) => window.localStorage.removeItem(key));
       Object.keys(window.sessionStorage)
         .filter((key) => key.startsWith("startParamConsumed:") || key.startsWith("wellwellwell:"))
@@ -1602,6 +1751,29 @@ export default function App() {
       console.error("Local account reset failed", error);
     }
     window.location.reload();
+  };
+
+  const resetLocalAccount = () => {
+    clearAppStorageAndReload();
+  };
+
+  const deleteAccount = async () => {
+    try {
+      const authoredPlans = await fetchPlansByAuthor(currentUserId);
+      const authoredPlanIds = authoredPlans.map((plan) => planKey(plan.id));
+      await deleteUserPlanParticipants(currentUserId);
+      await deletePlanParticipantsForPlans(authoredPlanIds);
+      await deleteCommentsByAuthor(currentUserId);
+      await deleteUserMessages(currentUserId);
+      await deleteUserFollows(currentUserId);
+      await deletePlansByAuthor(currentUserId);
+      await deleteProfile(currentUserId);
+      clearAppStorageAndReload();
+    } catch (error) {
+      console.error("Supabase account delete failed", error);
+      setAppToast("Не удалось удалить аккаунт, попробуй позже");
+      window.setTimeout(() => setAppToast(""), 2600);
+    }
   };
 
   const toggleCheckedItem = (key: string) => {
@@ -1763,7 +1935,6 @@ export default function App() {
             canMessageAuthor={(authorId) => authorId !== currentUserId && !isDemoProfileId(authorId)}
             canHidePlan={canHidePlanFromHome}
             onHidePlan={hidePlanFromHome}
-            onReportPlan={reportPlan}
             initialScrollTop={homeScrollTopRef.current}
             onScrollTopChange={(scrollTop) => {
               homeScrollTopRef.current = scrollTop;
@@ -1807,7 +1978,7 @@ export default function App() {
             messages={thread?.messages ?? []}
             currentUserId={currentUserId}
             myAvatarUrl={editableProfile.photoUrl}
-            onBack={() => setScreen(previousScreen === "chat" ? "chats" : previousScreen)}
+            onBack={() => goBackInStack(previousScreen === "chat" ? "chats" : previousScreen)}
             onSendMessage={sendChatMessage}
             onReceiveRemoteMessage={receiveRemoteChatMessage}
             onConfirmRemoteMessage={confirmRemoteChatMessage}
@@ -1826,7 +1997,7 @@ export default function App() {
       case "search":
         return (
           <SearchScreen
-            onBack={() => setScreen("home")}
+            onBack={() => goBackInStack("home")}
             plans={searchOrigin === "plans" ? myPlans : publicPlans}
             onPlanOpen={(id) => openPlanEvent(id, "search")}
             currentUserId={currentUserId}
@@ -1880,7 +2051,7 @@ export default function App() {
             onPlanOpen={id => { openPlanEvent(id, "profile"); }}
             onConnectionsOpen={(type) => openProfileConnections(type, isCurrentUserProfile, viewedProfile.id)}
             onEdit={() => setScreen("editProfile")}
-            onBack={() => setScreen(previousScreen)}
+            onBack={() => goBackInStack(previousScreen)}
             onAddPlan={() => {
               setPreviousScreen("profile");
               setScreen("addPlan");
@@ -1900,6 +2071,7 @@ export default function App() {
           <EditProfileScreen
             profile={editableProfile}
             onBack={() => setScreen("profile")}
+            onDeleteAccount={deleteAccount}
             onSave={(profile) => {
               const normalizedProfile = normalizeProfile(profile);
               setEditableProfile(normalizedProfile);
@@ -1915,7 +2087,7 @@ export default function App() {
           <AddPlanScreen
             plans={publicPlans}
             selectedPlanIds={myParticipantIds.map((item) => item.id)}
-            onBack={() => setScreen(previousScreen)}
+            onBack={() => goBackInStack(previousScreen)}
             onAddPlan={addPlanToMine}
             onCreate={() => {
               setCreateOrigin("plans");
@@ -1932,7 +2104,7 @@ export default function App() {
         return (
           <ProfileConnectionsScreen
             type={profileConnectionsType}
-            onBack={() => setScreen(previousScreen)}
+            onBack={() => goBackInStack(previousScreen)}
             onProfileOpen={openConnectionProfile}
             canEditFollowing={profileConnectionsCanEditFollowing}
             followerItems={connectionSets.followers}
@@ -2019,6 +2191,12 @@ export default function App() {
               ?? experts.find((expert) => expert.id === feedPlan.author.id && expert.isDemo === true)
               ?? buildUnknownProfile(feedPlan.author.id)
             : null;
+          const detailProfileById = {
+            ...Object.fromEntries(experts.map((profile) => [profile.id, { name: profile.name, avatarUrl: profile.photoUrl }])),
+            ...Object.fromEntries(Object.values(remoteProfiles).map((profile) => [profile.id, { name: profile.name, avatarUrl: profile.photoUrl }])),
+            [currentUserId]: { name: currentAuthor.name, avatarUrl: currentAuthor.avatarUrl },
+            ...(feedPlan.author.id ? { [feedPlan.author.id]: { name: authorProfile?.name ?? feedPlan.author.name, avatarUrl: authorProfile?.photoUrl ?? feedPlan.author.avatarUrl } } : {}),
+          };
           const isAuthorFollowedByMe = authorProfile
             ? isDemoProfile(authorProfile)
               ? myFollowing.some((item) => item.id === authorProfile.id)
@@ -2050,7 +2228,7 @@ export default function App() {
               }}
               format={feedPlan.format}
               duration={feedPlan.duration}
-              onBack={() => setScreen(planEventOrigin)}
+              onBack={() => goBackInStack(planEventOrigin)}
               planId={feedPlan.id}
               initiallyJoined={feedPlan.author.id === currentUserId || myParticipantIds.some((item) => item.id === feedPlan.id)}
               onJoin={(id) => addCatalogPlanToRoutine(id, planSourceFromScreen(planEventOrigin))}
@@ -2077,6 +2255,7 @@ export default function App() {
                 setScreen(planEventOrigin);
               }}
               refreshKey={refreshTick}
+              profileById={detailProfileById}
             />
           );
         }
@@ -2115,15 +2294,26 @@ export default function App() {
           style={{ paddingBottom: "max(env(safe-area-inset-bottom), 8px)" }}
         >
           {([
-            { id: "home" as Screen, label: "Лента", Icon: Home },
+            { id: "home" as Screen, label: "Лента", Icon: Newspaper },
             { id: "plans" as Screen, label: "Мои планы", Icon: Calendar },
             { id: "create" as Screen, label: "Создать", Icon: Plus },
             { id: "chats" as Screen, label: "Чаты", Icon: MessageCircle },
             { id: "profile" as Screen, label: "Профиль", Icon: User },
           ] as { id: Screen; label: string; Icon: React.FC<{ size: number; strokeWidth: number; color: string }> }[]).map(({ id, label, Icon }) => {
-            const isActive = screen === id || (id === "plans" && (screen === "detail" || screen === "planEvent")) || (id === "home" && screen === "search");
+            const isActive = (id === "profile" ? screen === "profile" && viewingOwnProfile : screen === id)
+              || (id !== "profile" && (screen === "profile" || screen === "profileConnections") && profileSourceTab === id)
+              || (id === "plans" && (screen === "detail" || screen === "planEvent") && planEventOrigin === "plans")
+              || (id === "home" && (screen === "search" || (screen === "planEvent" && planEventOrigin === "home")));
             return (
-              <button key={id} onClick={() => navigate(id, id === "create" ? screen : undefined)} className="relative flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 py-1">
+              <button
+                key={id}
+                onClick={() => {
+                  setNavStack([]);
+                  setProfileSourceTab(id === "profile" ? "profile" : id);
+                  navigate(id, id === "create" ? screen : undefined);
+                }}
+                className="relative flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 py-1"
+              >
                 <span className="relative">
                   <Icon size={22} strokeWidth={isActive ? 2.2 : 1.7} color={isActive ? GREEN : "#9CA3AF"} />
                   {id === "chats" && unreadChatsCount > 0 && (

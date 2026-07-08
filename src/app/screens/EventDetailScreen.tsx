@@ -5,6 +5,7 @@ import { normalizePlanTag, PLAN_TAG_GRADIENTS, PLAN_TAG_LABELS } from "@/app/dat
 import { ALL_DAYS, GREEN, PART_OF_DAY_RANGES, UNSPLASH, WEEKDAY_VALUES } from "@/app/data/constants";
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { addComment, deleteComment, fetchComments, type CommentRow } from "@/app/lib/api/comments";
+import { fetchProfilesByIds } from "@/app/lib/api/profiles";
 import { track } from "@/app/lib/analytics";
 
 type MentionCandidate = { id: string; name: string; avatarUrl: string | null };
@@ -106,6 +107,7 @@ function CommentsBlock({
   onProfileOpen,
   mentionCandidates,
   onMentionSelected,
+  profileById,
 }: {
   comment: string;
   setComment: (v: string) => void;
@@ -117,6 +119,7 @@ function CommentsBlock({
   onProfileOpen?: (profileId: string) => void;
   mentionCandidates: MentionCandidate[];
   onMentionSelected: (mention: DraftMention) => void;
+  profileById: Record<string, { name: string; avatarUrl: string | null }>;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [mentionTrigger, setMentionTrigger] = useState<{ start: number; end: number; query: string } | null>(null);
@@ -203,6 +206,9 @@ function CommentsBlock({
         <div className="space-y-4">
           {comments.map((item) => {
             const canDelete = currentAuthor && (item.authorId === currentAuthor.id || planAuthorId === currentAuthor.id);
+            const resolvedAuthor = item.authorId ? profileById[item.authorId] : null;
+            const authorName = resolvedAuthor?.name ?? item.author;
+            const authorAvatarUrl = resolvedAuthor?.avatarUrl ?? item.avatarUrl;
             return (
             <div key={item.id} className="flex gap-2.5">
               <button
@@ -212,11 +218,11 @@ function CommentsBlock({
                 className="h-8 w-8 flex-shrink-0 rounded-full active:opacity-80"
                 aria-label="Открыть профиль"
               >
-                <img loading="lazy" decoding="async" src={item.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
+                <img loading="lazy" decoding="async" src={authorAvatarUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
               </button>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
-                  <p className="truncate text-[14px] font-medium text-foreground">{item.author}</p>
+                  <p className="truncate text-[14px] font-medium text-foreground">{authorName}</p>
                   <span className="text-[12px] text-muted-foreground">{item.time}</span>
                 </div>
                 <CommentText text={item.text} onProfileOpen={onProfileOpen} />
@@ -264,7 +270,7 @@ export function EventDetailScreen({
   readTime, badgeDate, paragraphs, meta, format = "offline", duration, tag, schedule, shareUrl,
   participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, planId, onJoin, onLeave, onProfile,
   authorId, onMessageAuthor, isAuthorFollowedByMe = false, onToggleAuthorFollow, participantItems, onMessageParticipant,
-  currentAuthor, canDelete = false, onDelete, canEdit = false, onEdit, canHide = false, onHide, refreshKey, onProfileOpen,
+  currentAuthor, canDelete = false, onDelete, canEdit = false, onEdit, canHide = false, onHide, refreshKey, onProfileOpen, profileById = {},
 }: EventDetailProps) {
   void authorVerified;
   void readTime;
@@ -278,6 +284,7 @@ export function EventDetailScreen({
   const [comment, setComment] = useState("");
   const [draftMentions, setDraftMentions] = useState<DraftMention[]>([]);
   const [comments, setComments] = useState<LocalComment[]>([]);
+  const [commentAuthorProfiles, setCommentAuthorProfiles] = useState<Record<string, { name: string; avatarUrl: string | null }>>({});
   const [copied, setCopied] = useState(false);
   const description = paragraphs.join("\n\n");
   const participantAvatars = planParticipantAvatars ?? [];
@@ -414,6 +421,25 @@ export function EventDetailScreen({
       cancelled = true;
     };
   }, [planId, refreshKey]);
+
+  useEffect(() => {
+    const authorIds = Array.from(new Set(comments.map((item) => item.authorId).filter((id): id is string => Boolean(id))));
+    const missingIds = authorIds.filter((id) => !profileById[id] && !commentAuthorProfiles[id]);
+    if (missingIds.length === 0) return;
+    let cancelled = false;
+    void fetchProfilesByIds(missingIds).then((profiles) => {
+      if (cancelled || profiles.length === 0) return;
+      setCommentAuthorProfiles((items) => ({
+        ...items,
+        ...Object.fromEntries(profiles.map((profile) => [profile.id, { name: profile.name, avatarUrl: profile.photoUrl }])),
+      }));
+    }).catch((error) => {
+      console.error("Supabase comment author profiles fetch failed", error);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [commentAuthorProfiles, comments, profileById]);
 
   const sendComment = () => {
     const draftText = comment.trim();
@@ -729,7 +755,7 @@ export function EventDetailScreen({
           </div>
         </div>
 
-        <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} currentAuthor={currentAuthor} planAuthorId={authorId} onDelete={removeComment} onProfileOpen={onProfileOpen} mentionCandidates={mentionCandidates} onMentionSelected={(mention) => setDraftMentions((items) => [...items.filter((item) => item.id !== mention.id), mention])} />
+        <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} currentAuthor={currentAuthor} planAuthorId={authorId} onDelete={removeComment} onProfileOpen={onProfileOpen} mentionCandidates={mentionCandidates} onMentionSelected={(mention) => setDraftMentions((items) => [...items.filter((item) => item.id !== mention.id), mention])} profileById={{ ...commentAuthorProfiles, ...profileById }} />
       </div>
 
       {sheet === "participants" && (

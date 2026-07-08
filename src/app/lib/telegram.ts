@@ -9,6 +9,7 @@ declare global {
         setBackgroundColor?: (color: string) => void;
         initDataUnsafe: {
           start_param?: string;
+          auth_date?: number | string;
           user?: {
             id: number;
             first_name: string;
@@ -32,6 +33,10 @@ export const buildPlanStartAppUrl = (planId: string, campaign?: string) => {
 };
 
 export const getTelegramStartParam = () => window.Telegram?.WebApp?.initDataUnsafe?.start_param ?? "";
+export const getTelegramAuthDate = () => {
+  const authDate = window.Telegram?.WebApp?.initDataUnsafe?.auth_date;
+  return authDate === undefined || authDate === null ? "" : String(authDate);
+};
 
 export const parsePlanStartParam = (startParam: string) => {
   const plansMatch = startParam.match(/^plans(?:__(.+))?$/);

@@ -166,6 +166,28 @@ export const deletePlanParticipant = async (planId: string, userId: string) => {
   if (error) throw error;
 };
 
+export const deleteUserPlanParticipants = async (userId: string) => {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from("plan_participants")
+    .delete()
+    .eq("user_id", userId);
+
+  if (error) throw error;
+};
+
+export const deletePlanParticipantsForPlans = async (planIds: string[]) => {
+  if (!supabase || planIds.length === 0) return;
+
+  const { error } = await supabase
+    .from("plan_participants")
+    .delete()
+    .in("plan_id", planIds);
+
+  if (error) throw error;
+};
+
 export const deletePlanRemote = async (planId: string) => {
   if (!supabase) return;
 
@@ -180,6 +202,17 @@ export const deletePlanRemote = async (planId: string) => {
     .from("plans")
     .delete()
     .eq("id", planId);
+
+  if (error) throw error;
+};
+
+export const deletePlansByAuthor = async (authorId: string) => {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from("plans")
+    .delete()
+    .eq("author_id", authorId);
 
   if (error) throw error;
 };
