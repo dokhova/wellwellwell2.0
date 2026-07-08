@@ -1,6 +1,6 @@
 import posthog from "posthog-js";
 
-export const TEAM_IDS: string[] = ["353298824", "838916466", "1059165386", "600537101", "91079436", "895195749", "103230833"];
+export const TEAM_IDS: string[] = ["0", "353298824", "838916466", "1059165386", "600537101", "91079436", "895195749", "103230833"];
 
 export type PlanViewSource = "deeplink" | "feed" | "profile" | "search" | "calendar";
 
@@ -53,7 +53,8 @@ export const identifyUser = ({
   username?: string;
 }) => {
   if (!analyticsEnabled) return;
-  const id = String(telegramId);
+  const id = String(telegramId).trim();
+  if (!id || id === "0") return;
   posthog.identify(id, {
     name,
     username,
