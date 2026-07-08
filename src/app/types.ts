@@ -143,6 +143,8 @@ export interface EventDetailProps {
   onProfile?: () => void;
   authorId?: string;
   onMessageAuthor?: (peer: ChatPeer) => void;
+  isAuthorFollowedByMe?: boolean;
+  onToggleAuthorFollow?: (nextFollowed: boolean) => void;
   participantItems?: ChatPeer[];
   onMessageParticipant?: (peer: ChatPeer) => void;
   onProfileOpen?: (profileId: string) => void;

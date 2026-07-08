@@ -11,6 +11,8 @@ import { fetchRecentProfiles, searchProfiles } from "@/app/lib/api/profiles";
 type CreateStep = "welcome" | "name" | "description" | "image" | "schedule" | "finalOptions" | "success";
 type PlanDraft = { title: string; description: string; coverImage: string | null; schedule: Schedule };
 type Person = { id: string; name: string; avatarUrl: string | null };
+const TITLE_LIMIT = 80;
+const DESCRIPTION_LIMIT = 1000;
 
 export type CreatedPlanResult = {
   plan: PlanDraft;
@@ -83,8 +85,8 @@ export function CreateScreen({
   const [step, setStep] = useState<CreateStep>(isEditing ? "name" : "welcome");
   const [history, setHistory] = useState<CreateStep[]>([]);
   const [draft, setDraft] = useState<PlanDraft>(() => editingPlan ? {
-    title: editingPlan.title,
-    description: editingPlan.description,
+    title: editingPlan.title.slice(0, TITLE_LIMIT),
+    description: editingPlan.description.slice(0, DESCRIPTION_LIMIT),
     coverImage: editingPlan.coverUrl ?? null,
     schedule: editingPlan.schedule,
   } : defaultPlan());
@@ -163,6 +165,20 @@ export function CreateScreen({
 
   const updatePlan = (next: Partial<PlanDraft>) => setDraft((item) => ({ ...item, ...next }));
   const updateSchedule = (next: Partial<Schedule>) => updatePlan({ schedule: { ...currentSchedule, ...next } });
+  const updateTitle = (value: string) => {
+    updatePlan({ title: value.slice(0, TITLE_LIMIT) });
+    setTitleError("");
+  };
+  const updateDescription = (value: string) => updatePlan({ description: value.slice(0, DESCRIPTION_LIMIT) });
+
+  const getRepeatEnd = (schedule: Schedule) => {
+    if (schedule.repeat?.type !== "days" || !schedule.start) return typeof schedule.end === "string" ? schedule.end : undefined;
+    const startDate = new Date(schedule.start);
+    if (Number.isNaN(startDate.getTime())) return typeof schedule.end === "string" ? schedule.end : undefined;
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + Math.max(1, schedule.repeat.days) - 1);
+    return endDate.toISOString();
+  };
 
   const validateSchedule = (schedule: Schedule) => {
     const mode = schedule.timeMode ?? schedule.mode ?? "partOfDay";
@@ -177,7 +193,14 @@ export function CreateScreen({
   const getTimeDate = (schedule: Schedule) => {
     if ((schedule.mode === "exact" || schedule.timeMode === "exact") && schedule.start) {
       const date = new Date(schedule.start);
-      return Number.isNaN(date.getTime()) ? "Точное время" : date.toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      if (Number.isNaN(date.getTime())) return "Точное время";
+      const startLabel = date.toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      const repeatEnd = getRepeatEnd(schedule);
+      const endDate = repeatEnd ? new Date(repeatEnd) : null;
+      const endLabel = endDate && !Number.isNaN(endDate.getTime())
+        ? endDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })
+        : "";
+      return schedule.repeat?.type === "days" && endLabel ? `${startLabel} — до ${endLabel}` : startLabel;
     }
     return schedule.partOfDay ? PART_OF_DAY_RANGES[schedule.partOfDay].label : "Расписание";
   };
@@ -271,6 +294,8 @@ export function CreateScreen({
   };
 
   const repeatLabel = repeat.type === "days" ? `${repeat.days} день` : repeat.type === "weekly" ? "Каждую неделю" : repeat.type === "untilWeek" ? `До недели ${repeat.week}` : "Бессрочно";
+  const titleLeft = TITLE_LIMIT - draft.title.length;
+  const descriptionLeft = DESCRIPTION_LIMIT - draft.description.length;
   const progressSteps = 6;
   const progressIndex = ["welcome", "name", "description", "image", "schedule", "finalOptions", "success"].indexOf(step);
 
@@ -398,9 +423,9 @@ export function CreateScreen({
       case "welcome":
         return <div className="flex min-h-full flex-col justify-center"><div className="mb-5 flex h-16 w-16 items-center justify-center rounded-3xl" style={{ backgroundColor: GREEN_LIGHT }}><Sparkles size={30} color={GREEN} /></div><h2 className="text-[32px] font-bold leading-[36px] text-foreground">Соберём твой план</h2><p className="mt-3 text-[16px] leading-6 text-muted-foreground">Пара шагов, немного расписания, и план уже в твоём списке.</p></div>;
       case "name":
-        return <div className="pt-6 transition-all duration-200"><h2 className="mb-5 text-[28px] font-bold leading-[34px]">Название плана</h2><label><span className="mb-2 block text-[13px] text-muted-foreground">Название</span><input value={draft.title} onChange={(e) => { updatePlan({ title: e.target.value }); setTitleError(""); }} placeholder="Например, вечерняя пробежка" className="h-14 w-full rounded-xl bg-card px-4 text-[16px] outline-none" autoFocus /></label>{titleError && <p className="mt-2 text-[12px] font-medium text-destructive">{titleError}</p>}</div>;
+        return <div className="pt-6 transition-all duration-200"><h2 className="mb-5 text-[28px] font-bold leading-[34px]">Название плана</h2><label><span className="mb-2 block text-[13px] text-muted-foreground">Название</span><input value={draft.title} maxLength={TITLE_LIMIT} onChange={(e) => updateTitle(e.target.value)} placeholder="Например, вечерняя пробежка" className="h-14 w-full rounded-xl bg-card px-4 text-[16px] outline-none" autoFocus /></label>{titleLeft < TITLE_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{titleLeft}</p>}{titleError && <p className="mt-2 text-[12px] font-medium text-destructive">{titleError}</p>}</div>;
       case "description":
-        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Описание</h2><textarea value={draft.description} onChange={(e) => updatePlan({ description: e.target.value })} placeholder="Что будет в плане и зачем он нужен" rows={5} className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none" /></div>;
+        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Описание</h2><textarea value={draft.description} maxLength={DESCRIPTION_LIMIT} onChange={(e) => updateDescription(e.target.value)} placeholder="Что будет в плане и зачем он нужен" rows={5} className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none" />{descriptionLeft < DESCRIPTION_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{descriptionLeft}</p>}</div>;
       case "image":
         return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Обложка</h2><label className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center active:opacity-90">{draft.coverImage ? <img loading="lazy" decoding="async" src={draft.coverImage} alt="" className="mb-4 h-28 w-28 rounded-xl object-cover" /> : <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary"><ImageIcon size={28} color={GREEN} /></div>}<p className="text-[16px] font-semibold">Добавь обложку</p><span className="mt-4 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Загрузить</span><input type="file" accept="image/*" className="hidden" onChange={async (event) => { const file = event.target.files?.[0]; if (file) { const publicUrl = await uploadPhoto(file); if (publicUrl) updatePlan({ coverImage: publicUrl }); } event.target.value = ""; }} /></label></div>;
       case "schedule":
@@ -433,8 +458,8 @@ export function CreateScreen({
       <div className="flex-1 overflow-y-auto px-4 pb-4 transition-all duration-200">{renderStep()}</div>
       {footer && <div className="flex-shrink-0 border-t border-border bg-card px-4 pb-4 pt-3">{footer}</div>}
       {participantsOpen && (
-        <HomeSheet title="Участники" onClose={() => setParticipantsOpen(false)}>
-          <div className="mb-3 flex h-11 items-center gap-2 rounded-xl bg-gray-100 px-3">
+        <HomeSheet title="Участники" onClose={() => setParticipantsOpen(false)} panelClassName="max-h-[85vh] flex flex-col" bodyClassName="flex min-h-0 flex-col">
+          <div className="mb-3 flex h-11 flex-shrink-0 items-center gap-2 rounded-xl bg-gray-100 px-3">
             <Search size={17} strokeWidth={1.9} className="text-gray-500" />
             <input
               value={participantQuery}
@@ -443,7 +468,7 @@ export function CreateScreen({
               className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400"
             />
           </div>
-          <div className="space-y-1">
+          <div className="max-h-[60vh] min-h-0 space-y-1 overflow-y-auto pb-2">
             {participantsLoading && <p className="px-3 py-4 text-center text-[13px] text-muted-foreground">Загружаем участников...</p>}
             {!participantsLoading && filteredPeople.length === 0 && <p className="px-3 py-4 text-center text-[13px] text-muted-foreground">Пользователи не найдены</p>}
             {filteredPeople.map((person) => {
@@ -464,6 +489,11 @@ export function CreateScreen({
                 </button>
               );
             })}
+          </div>
+          <div className="flex-shrink-0 border-t border-border bg-white pt-3">
+            <button onClick={() => setParticipantsOpen(false)} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
+              Готово
+            </button>
           </div>
         </HomeSheet>
       )}

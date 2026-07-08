@@ -178,6 +178,7 @@ export function HomeScreen({
   canMessageAuthor,
   canHidePlan,
   onHidePlan,
+  onReportPlan,
   initialScrollTop = 0,
   onScrollTopChange,
   plans,
@@ -189,6 +190,7 @@ export function HomeScreen({
   canMessageAuthor?: (authorId?: string) => boolean;
   canHidePlan?: (plan: HomeFeedPlan) => boolean;
   onHidePlan?: (plan: HomeFeedPlan) => void;
+  onReportPlan?: (plan: HomeFeedPlan) => void;
   initialScrollTop?: number;
   onScrollTopChange?: (scrollTop: number) => void;
   plans: HomeFeedPlan[];
@@ -342,7 +344,7 @@ export function HomeScreen({
             {canHidePlan?.(activePlan) && (
               <button onClick={() => { setSheet(null); onHidePlan?.(activePlan); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Скрыть из ленты</button>
             )}
-            <button onClick={() => setSheet(null)} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Пожаловаться</button>
+            <button onClick={() => { setSheet(null); onReportPlan?.(activePlan); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Пожаловаться</button>
           </div>
         </HomeSheet>
       )}

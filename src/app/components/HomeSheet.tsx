@@ -4,15 +4,19 @@ export function HomeSheet({
   title,
   children,
   onClose,
+  panelClassName = "",
+  bodyClassName = "",
 }: {
   title: string;
   children: React.ReactNode;
   onClose: () => void;
+  panelClassName?: string;
+  bodyClassName?: string;
 }) {
   return (
     <div className="absolute inset-0 z-30 flex items-end bg-black/30" onClick={onClose}>
       <div
-        className="w-full rounded-t-3xl bg-white px-4 pt-4 pb-6 shadow-xl"
+        className={`w-full rounded-t-3xl bg-white px-4 pt-4 pb-6 shadow-xl ${panelClassName}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-gray-300" />
@@ -22,7 +26,7 @@ export function HomeSheet({
             <X size={16} strokeWidth={2} color="#6B7280" />
           </button>
         </div>
-        {children}
+        <div className={bodyClassName}>{children}</div>
       </div>
     </div>
   );

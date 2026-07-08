@@ -263,16 +263,17 @@ export function EventDetailScreen({
   title, coverSrc, backgroundGradient, authorName, authorAvatarUrl, authorVerified,
   readTime, badgeDate, paragraphs, meta, format = "offline", duration, tag, schedule, shareUrl,
   participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, planId, onJoin, onLeave, onProfile,
-  authorId, onMessageAuthor, participantItems, onMessageParticipant,
+  authorId, onMessageAuthor, isAuthorFollowedByMe = false, onToggleAuthorFollow, participantItems, onMessageParticipant,
   currentAuthor, canDelete = false, onDelete, canEdit = false, onEdit, canHide = false, onHide, refreshKey, onProfileOpen,
 }: EventDetailProps) {
   void authorVerified;
   void readTime;
   void badgeDate;
+  void participantsLabel;
   const [joined, setJoined] = useState(Boolean(initiallyJoined));
   const [toast, setToast] = useState("");
   const [sheet, setSheet] = useState<"participants" | "profile" | "share" | null>(null);
-  const [subscribed, setSubscribed] = useState(false);
+  const [subscribed, setSubscribed] = useState(isAuthorFollowedByMe);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [comment, setComment] = useState("");
   const [draftMentions, setDraftMentions] = useState<DraftMention[]>([]);
@@ -304,8 +305,9 @@ export function EventDetailScreen({
   const needsDescriptionClamp = description.length > 260;
   const formatLabel = format === "online" ? "Онлайн" : "Офлайн";
   const tagLabel = tag ? PLAN_TAG_LABELS[normalizePlanTag(tag)] : "План";
-  const participantCountLabel = participantsLabel ?? `${meta.participants} участников`;
+  const participantCountLabel = `${participants.length} чел.`;
   const overflowLabel = meta.plusN.startsWith("+") ? meta.plusN : "";
+  const isOwnPlan = Boolean(currentAuthor?.id && authorId === currentAuthor.id);
 
   const weekdayLabel = (days: number[]) =>
     days
@@ -319,6 +321,15 @@ export function EventDetailScreen({
     return Number.isNaN(date.getTime())
       ? meta.date
       : date.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+  };
+
+  const repeatEndDateLabel = () => {
+    if (schedule?.repeat?.type !== "days" || !schedule.start) return "";
+    const startDate = new Date(schedule.start);
+    if (Number.isNaN(startDate.getTime())) return "";
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + Math.max(1, schedule.repeat.days) - 1);
+    return endDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
   };
 
   const exactTimeLabel = (start?: string, end?: string) => {
@@ -342,7 +353,7 @@ export function EventDetailScreen({
         : meta.date;
   const scheduleSecondary =
     schedule?.mode === "exact" || schedule?.timeMode === "exact"
-      ? exactTimeLabel(schedule.start, typeof schedule.end === "string" ? schedule.end : undefined)
+      ? [exactTimeLabel(schedule.start, typeof schedule.end === "string" ? schedule.end : undefined), repeatEndDateLabel() ? `до ${repeatEndDateLabel()}` : ""].filter(Boolean).join(" · ")
       : "";
 
   const showJoinToast = () => {
@@ -362,11 +373,22 @@ export function EventDetailScreen({
   };
 
   const toggleJoin = () => {
+    if (isOwnPlan) return;
     if (joined) {
       cancelJoin();
     } else {
       joinPlan();
     }
+  };
+
+  useEffect(() => {
+    setSubscribed(isAuthorFollowedByMe);
+  }, [isAuthorFollowedByMe]);
+
+  const toggleAuthorFollow = () => {
+    const nextFollowed = !subscribed;
+    setSubscribed(nextFollowed);
+    onToggleAuthorFollow?.(nextFollowed);
   };
 
   useEffect(() => {
@@ -580,14 +602,16 @@ export function EventDetailScreen({
             </div>
           </div>
 
-          <button
-            onClick={toggleJoin}
-            className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl border text-[15px] active:opacity-90"
-            style={joined ? { backgroundColor: "var(--surface)", borderColor: "var(--border)", color: "var(--foreground)", fontWeight: 500 } : { backgroundColor: GREEN, borderColor: GREEN, color: "#fff", fontWeight: 600 }}
-          >
-            {joined ? <Check size={18} strokeWidth={2.4} color={GREEN} /> : <Plus size={18} strokeWidth={2.3} color="#fff" />}
-            {joined ? "Вы участвуете" : "Присоединиться"}
-          </button>
+          {!isOwnPlan && (
+            <button
+              onClick={toggleJoin}
+              className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl border text-[15px] active:opacity-90"
+              style={joined ? { backgroundColor: "var(--surface)", borderColor: "var(--border)", color: "var(--foreground)", fontWeight: 500 } : { backgroundColor: GREEN, borderColor: GREEN, color: "#fff", fontWeight: 600 }}
+            >
+              {joined ? <Check size={18} strokeWidth={2.4} color={GREEN} /> : <Plus size={18} strokeWidth={2.3} color="#fff" />}
+              {joined ? "Вы участвуете" : "Присоединиться"}
+            </button>
+          )}
 
           <div className="mt-4 border-t border-border pt-4">
             <div className="mb-4 flex items-center justify-between gap-3">
@@ -596,7 +620,7 @@ export function EventDetailScreen({
                 <span className="truncate text-[15px] font-medium text-foreground">{authorName}</span>
               </button>
               <div className="flex flex-shrink-0 items-center gap-2">
-                {onMessageAuthor && (
+                {onMessageAuthor && !isOwnPlan && (
                   <button
                     onClick={() => onMessageAuthor({ id: authorId ?? authorName, name: authorName, avatarUrl: authorAvatarUrl })}
                     className="rounded-full border px-3 py-1.5 text-[12px] font-semibold"
@@ -605,13 +629,15 @@ export function EventDetailScreen({
                     Написать
                   </button>
                 )}
-                <button
-                  onClick={() => setSubscribed((value) => !value)}
-                  className="rounded-full border px-3 py-1.5 text-[12px] font-semibold"
-                  style={subscribed ? { borderColor: "var(--border)", color: "var(--foreground)" } : { borderColor: GREEN, backgroundColor: GREEN, color: "#fff" }}
-                >
-                  {subscribed ? "Подписан" : "Подписаться"}
-                </button>
+                {!isOwnPlan && (
+                  <button
+                    onClick={toggleAuthorFollow}
+                    className="rounded-full border px-3 py-1.5 text-[12px] font-semibold"
+                    style={subscribed ? { borderColor: "var(--border)", color: "var(--foreground)" } : { borderColor: GREEN, backgroundColor: GREEN, color: "#fff" }}
+                  >
+                    {subscribed ? "Подписан" : "Подписаться"}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -670,7 +696,7 @@ export function EventDetailScreen({
               >
                 <div className="flex items-center gap-3">
                   <Users size={20} strokeWidth={1.8} className="flex-shrink-0 text-muted-foreground" />
-                  <span className="text-[14px] text-foreground">{meta.participants} участников</span>
+                  <span className="text-[14px] text-foreground">{participants.length} участников</span>
                 </div>
                 <div className="flex items-center">
                   <div className="flex -space-x-2">

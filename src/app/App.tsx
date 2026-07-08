@@ -11,6 +11,7 @@ import { fetchFollowers, fetchFollowing, follow, unfollow } from "@/app/lib/api/
 import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { fetchUserThreadMessages, makeThreadId, sendMessage, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
 import { countJoined, createPlanRemote, deletePlanParticipant, deletePlanRemote, fetchParticipants, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, updatePlanRemote, upsertPlanParticipant } from "@/app/lib/api/plans";
+import { addReport } from "@/app/lib/api/reports";
 import { buildPlanStartAppUrl, getTelegramStartParam, getTelegramUser, initTelegram, parsePlanStartParam } from "@/app/lib/telegram";
 import { checkBackendHealth } from "@/app/lib/health";
 import { identifyUser, track, type PlanViewSource } from "@/app/lib/analytics";
@@ -227,7 +228,7 @@ const mapMessageRowToChatMessage = (message: MessageRow, currentUserId: string):
 
 const getParticipantsCount = (plan: HomeFeedPlan) => {
   const parsed = Number.parseInt(plan.participantsLabel, 10);
-  return Number.isNaN(parsed) ? plan.participants.length : parsed;
+  return Math.max(plan.participants.length, Number.isNaN(parsed) ? 0 : parsed);
 };
 
 const planKey = (id: PlanId) => String(id);
@@ -313,6 +314,27 @@ const buildTelegramProfile = (telegramUser: ReturnType<typeof getTelegramUser>):
   };
 };
 
+const buildUnknownProfile = (id: string): ExpertProfile => {
+  const profile = normalizeProfile({
+    ...expertProfile,
+    id,
+    telegramId: Number(id) || 0,
+    name: `Пользователь ${id}`,
+    bio: "",
+    photoUrl: null,
+    photoUrls: [],
+    coverUrls: null,
+    plansCount: 0,
+    followersCount: 0,
+    followingCount: 0,
+    isMe: false,
+    isFollowedByMe: false,
+  });
+  delete profile.cannedReplies;
+  delete profile.tags;
+  return profile;
+};
+
 function AddPlanScreen({
   plans,
   selectedPlanIds,
@@ -387,6 +409,7 @@ export default function App() {
   const telegramUser = useMemo(() => getTelegramUser(), []);
   const initialStartParam = useMemo(() => getTelegramStartParam(), []);
   const initialStart = useMemo(() => parsePlanStartParam(initialStartParam), [initialStartParam]);
+  const startParamConsumedKey = initialStartParam ? `startParamConsumed:${initialStartParam}` : "";
   const storagePrefix = `wellwellwell:${telegramUser.id}`;
   const profileStorageKey = `${storagePrefix}:profile`;
   const myPlansStorageKey = `${storagePrefix}:myPlans`;
@@ -526,6 +549,14 @@ export default function App() {
       count,
     };
   };
+  const createdPlansWithCounts = createdPlans.map((plan) => {
+    const participantPresentation = getPlanParticipantPresentation(plan);
+    return {
+      ...plan,
+      participants: participantPresentation.avatars,
+      participantsLabel: participantPresentation.label,
+    };
+  });
   const demoPlansWithParticipants = demoCommunityPlans.map((plan) => {
     const participantPresentation = getPlanParticipantPresentation(plan);
     return {
@@ -542,13 +573,13 @@ export default function App() {
       participantsLabel: participantPresentation.label,
     };
   });
-  const allPlans = [...demoPlansWithParticipants, ...createdPlans, ...remotePlansWithCounts, ...homeFeedPlans]
+  const allPlans = [...demoPlansWithParticipants, ...createdPlansWithCounts, ...remotePlansWithCounts, ...homeFeedPlans]
     .filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index)
     .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && plan.hidden !== true && !moderatorHiddenPlanIdSet.has(planKey(plan.id)));
   const allPlanDetails = [
     ...demoPlansWithParticipants,
-    ...createdPlans.flatMap((plan) => plan.items?.length ? plan.items : []),
-    ...createdPlans,
+    ...createdPlansWithCounts.flatMap((plan) => plan.items?.length ? plan.items : []),
+    ...createdPlansWithCounts,
     ...remotePlansWithCounts,
     ...homeFeedPlans,
   ].filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index)
@@ -565,7 +596,7 @@ export default function App() {
   const catalogPublicPlans = homeFeedPlans
     .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && (plan.visibility ?? "all") === "all")
     .sort((a, b) => getNextOccurrence(a.schedule).getTime() - getNextOccurrence(b.schedule).getTime());
-  const justCreatedPublicPlans = [...createdPlans, ...remotePlansWithCounts]
+  const justCreatedPublicPlans = [...createdPlansWithCounts, ...remotePlansWithCounts]
     .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && (plan.visibility ?? "all") === "all")
     .filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index);
   const publicPlans = useMemo(() => {
@@ -926,6 +957,24 @@ export default function App() {
   useEffect(() => {
     if (startParamHandled) return;
     if (!termsAccepted) return;
+    if (startParamConsumedKey) {
+      try {
+        if (window.sessionStorage.getItem(startParamConsumedKey) === "1") {
+          setStartParamHandled(true);
+          return;
+        }
+      } catch (error) {
+        console.error("sessionStorage start_param read failed", error);
+      }
+    }
+    const markStartParamConsumed = () => {
+      if (!startParamConsumedKey) return;
+      try {
+        window.sessionStorage.setItem(startParamConsumedKey, "1");
+      } catch (error) {
+        console.error("sessionStorage start_param write failed", error);
+      }
+    };
     if (!initialStart) {
       setStartParamHandled(true);
       return;
@@ -933,6 +982,7 @@ export default function App() {
     if (initialStart.kind === "plans") {
       setPreviousScreen("home");
       setScreen("plans");
+      markStartParamConsumed();
       setStartParamHandled(true);
       return;
     }
@@ -948,6 +998,7 @@ export default function App() {
         setPreviousScreen("home");
         setScreen("planEvent");
         track("plan_view", { plan_id: planKey(localPlan.id), source: "deeplink" });
+        markStartParamConsumed();
         setStartParamHandled(true);
         return;
       }
@@ -958,6 +1009,7 @@ export default function App() {
         if (!remotePlan || remotePlan.hidden) {
           setAppToast("План не найден или удалён");
           window.setTimeout(() => setAppToast(""), 2400);
+          markStartParamConsumed();
           setStartParamHandled(true);
           return;
         }
@@ -969,11 +1021,13 @@ export default function App() {
         setPreviousScreen("home");
         setScreen("planEvent");
         track("plan_view", { plan_id: planKey(sanitizedPlan.id), source: "deeplink" });
+        markStartParamConsumed();
       } catch (error) {
         console.error("Supabase startapp plan fetch failed", error);
         if (!cancelled) {
           setAppToast("План не найден или удалён");
           window.setTimeout(() => setAppToast(""), 2400);
+          markStartParamConsumed();
         }
       } finally {
         if (!cancelled) setStartParamHandled(true);
@@ -984,7 +1038,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [allPlanDetails, initialStart, startParamHandled, termsAccepted]);
+  }, [allPlanDetails, initialStart, startParamConsumedKey, startParamHandled, termsAccepted]);
 
   useEffect(() => {
     if (screen !== "profile" || viewingOwnProfile || isDemoProfileId(viewingExpertId)) return;
@@ -1205,6 +1259,13 @@ export default function App() {
   };
 
   const openExpertProfile = (expertId: string) => {
+    if (!isDemoProfileId(expertId)) {
+      void fetchProfile(expertId).then((profile) => {
+        if (profile) setRemoteProfiles((items) => ({ ...items, [profile.id]: normalizeProfile(profile) }));
+      }).catch((error) => {
+        console.error("Supabase profile fetch before open failed", error);
+      });
+    }
     setViewingExpertId(expertId);
     setViewingOwnProfile(false);
     setPreviousScreen(screen);
@@ -1285,7 +1346,9 @@ export default function App() {
   };
 
   const openChatWithPeer = (peer: ChatPeer) => {
+    if (peer.id === currentUserId) return;
     const nextPeer = getCannedPeer(peer);
+    if (nextPeer.id === currentUserId) return;
     setActiveChatPeer(nextPeer);
     setChatThreads((threads) => threads.map((thread) => thread.peer.id === nextPeer.id ? { ...thread, unreadCount: 0 } : thread));
     setPreviousScreen(screen);
@@ -1517,6 +1580,30 @@ export default function App() {
     });
   };
 
+  const reportPlan = (plan: HomeFeedPlan) => {
+    const idKey = planKey(plan.id);
+    setAppToast("Жалоба отправлена");
+    window.setTimeout(() => setAppToast(""), 2200);
+    track("report_submitted", { plan_id: idKey });
+    void addReport({ planId: idKey, reporterId: currentUserId }).catch((error) => {
+      console.error("Supabase report insert failed", error);
+    });
+  };
+
+  const resetLocalAccount = () => {
+    try {
+      Object.keys(window.localStorage)
+        .filter((key) => key.startsWith("wellwellwell:"))
+        .forEach((key) => window.localStorage.removeItem(key));
+      Object.keys(window.sessionStorage)
+        .filter((key) => key.startsWith("startParamConsumed:") || key.startsWith("wellwellwell:"))
+        .forEach((key) => window.sessionStorage.removeItem(key));
+    } catch (error) {
+      console.error("Local account reset failed", error);
+    }
+    window.location.reload();
+  };
+
   const toggleCheckedItem = (key: string) => {
     setCheckedItemKeys((keys) => {
       const checked = keys.includes(key);
@@ -1673,9 +1760,10 @@ export default function App() {
             onPlanOpen={(id) => openPlanEvent(id, "home")}
             onAuthorOpen={openExpertProfile}
             onMessagePeer={openChatWithPeer}
-            canMessageAuthor={(authorId) => !isDemoProfileId(authorId)}
+            canMessageAuthor={(authorId) => authorId !== currentUserId && !isDemoProfileId(authorId)}
             canHidePlan={canHidePlanFromHome}
             onHidePlan={hidePlanFromHome}
+            onReportPlan={reportPlan}
             initialScrollTop={homeScrollTopRef.current}
             onScrollTopChange={(scrollTop) => {
               homeScrollTopRef.current = scrollTop;
@@ -1750,7 +1838,7 @@ export default function App() {
       case "profile":
         const baseViewedProfile = viewingOwnProfile
           ? editableProfile
-          : remoteProfiles[viewingExpertId] ?? experts.find((expert) => expert.id === viewingExpertId) ?? expertProfile;
+          : remoteProfiles[viewingExpertId] ?? experts.find((expert) => expert.id === viewingExpertId && expert.isDemo === true) ?? buildUnknownProfile(viewingExpertId);
         const loadedViewedConnectionSets = connectionSetsByUser[baseViewedProfile.id];
         const viewedConnectionSets = loadedViewedConnectionSets ?? {
           followers: localDemoFollowersFor(baseViewedProfile.id),
@@ -1800,6 +1888,7 @@ export default function App() {
             onRemovePlan={removePlanFromMine}
             onToggleFollow={toggleFollowing}
               onMessageProfile={(peer) => openChatWithPeer(viewedProfile.isDemo && !isNumericUserId(peer.id) ? { ...peer, isDemo: true } : asRealPeer(peer))}
+            onResetAccount={resetLocalAccount}
             canMessage={canMessageProfile(viewedProfile)}
             profile={viewedProfile}
             plans={viewedPlans}
@@ -1925,6 +2014,16 @@ export default function App() {
             .filter((participant, index, items) => items.findIndex((item) => item.id === participant.id) === index);
           const participantAvatars = participantItems.map((participant) => participant.avatarUrl).filter((url): url is string => Boolean(url));
           const participantCount = participantItems.length;
+          const authorProfile = feedPlan.author.id
+            ? remoteProfiles[feedPlan.author.id]
+              ?? experts.find((expert) => expert.id === feedPlan.author.id && expert.isDemo === true)
+              ?? buildUnknownProfile(feedPlan.author.id)
+            : null;
+          const isAuthorFollowedByMe = authorProfile
+            ? isDemoProfile(authorProfile)
+              ? myFollowing.some((item) => item.id === authorProfile.id)
+              : (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === authorProfile.id)
+            : false;
           return (
             <EventDetailScreen
               title={feedPlan.isChallenge ? `Челлендж: ${feedPlan.title}` : feedPlan.title}
@@ -1958,7 +2057,13 @@ export default function App() {
               onLeave={(id) => removePlanFromMine(id, "single", planEventSource)}
               onProfile={() => feedPlan.author.id ? openExpertProfile(feedPlan.author.id) : setScreen("profile")}
               onProfileOpen={openExpertProfile}
-              onMessageAuthor={isDemoProfileId(feedPlan.author.id) ? undefined : (peer) => openChatWithPeer({ ...peer, id: feedPlan.author.id ?? peer.id })}
+              onMessageAuthor={feedPlan.author.id === currentUserId || isDemoProfileId(feedPlan.author.id) ? undefined : (peer) => openChatWithPeer({ ...peer, id: feedPlan.author.id ?? peer.id })}
+              isAuthorFollowedByMe={isAuthorFollowedByMe}
+              onToggleAuthorFollow={authorProfile && feedPlan.author.id !== currentUserId ? (nextFollowed) => toggleFollowing({
+                ...authorProfile,
+                name: authorProfile.name || feedPlan.author.name,
+                photoUrl: authorProfile.photoUrl ?? feedPlan.author.avatarUrl,
+              }, nextFollowed) : undefined}
               participantItems={participantItems}
               onMessageParticipant={isDemoPlan ? undefined : openChatWithPeer}
               currentAuthor={currentAuthor}

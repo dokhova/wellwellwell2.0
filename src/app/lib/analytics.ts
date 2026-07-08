@@ -16,6 +16,7 @@ type AnalyticsEventProps = {
   plan_check: { plan_id: string };
   comment_sent: { plan_id: string; mentions_count: number };
   follow: { target_id: string; target_is_demo: boolean };
+  report_submitted: { plan_id: string };
   message_sent: Record<string, never>;
   plan_created: { plan_id: string };
 };
