@@ -9,7 +9,9 @@ type AnalyticsEventProps = {
   terms_shown: Record<string, never>;
   terms_accepted: Record<string, never>;
   plan_view: { plan_id: string; source: PlanViewSource };
+  plan_detail_closed: { plan_id: string; source: PlanViewSource; joined: boolean; duration_sec: number };
   plan_join: { plan_id: string; source: PlanViewSource };
+  plan_leave: { plan_id: string; source: PlanViewSource };
   plan_link_copied: { plan_id: string; screen: "feed" | "plan" };
   plan_check: { plan_id: string };
   comment_sent: { plan_id: string; mentions_count: number };

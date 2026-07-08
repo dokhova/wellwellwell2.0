@@ -241,6 +241,11 @@ const planSourceFromScreen = (source: Screen): PlanViewSource => {
   return "feed";
 };
 const planIdFromProgressKey = (key: string) => key.slice(key.indexOf(":") + 1);
+type PlanDetailSession = {
+  planId: string;
+  source: PlanViewSource;
+  openedAt: number;
+};
 
 const shuffleIds = (ids: string[]) => {
   const next = [...ids];
@@ -416,6 +421,7 @@ export default function App() {
   const [editingPlanId, setEditingPlanId] = useState<PlanId | null>(null);
   const [activeChatPeer, setActiveChatPeer] = useState<ChatPeer | null>(null);
   const [planEventOrigin, setPlanEventOrigin] = useState<Screen>("plans");
+  const [planEventSource, setPlanEventSource] = useState<PlanViewSource>("calendar");
   const [previousScreen, setPreviousScreen] = useState<Screen>("plans");
   const [profileConnectionsType, setProfileConnectionsType] = useState<ConnectionType>("followers");
   const [profileConnectionsCanEditFollowing, setProfileConnectionsCanEditFollowing] = useState(false);
@@ -472,6 +478,10 @@ export default function App() {
     ];
   });
   const homeScrollTopRef = useRef(0);
+  const planDetailSessionRef = useRef<PlanDetailSession | null>(null);
+  const allPlanDetailsRef = useRef<HomeFeedPlan[]>([]);
+  const myParticipantIdsRef = useRef<ParticipantPlanRef[]>([]);
+  const currentUserIdRef = useRef("");
   const currentUserId = editableProfile.id;
   const isModerator = MODERATOR_IDS.includes(currentUserId);
   const currentAuthor = {
@@ -544,6 +554,9 @@ export default function App() {
   ].filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index)
     .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && plan.hidden !== true && !moderatorHiddenPlanIdSet.has(planKey(plan.id)));
   const participantKey = (ref: ParticipantPlanRef) => `${ref.kind}:${ref.id}`;
+  allPlanDetailsRef.current = allPlanDetails;
+  myParticipantIdsRef.current = myParticipantIds;
+  currentUserIdRef.current = currentUserId;
   const myParticipantKeys = new Set(myParticipantIds.map(participantKey));
   const myPlans = allPlans.filter((plan) =>
     myParticipantKeys.has(participantKey({ kind: plan.kind ?? "plan", id: plan.id }))
@@ -826,6 +839,38 @@ export default function App() {
     });
   }, [activePlanId, loadPlanParticipants, refreshTick, screen]);
 
+  const closePlanDetailSession = useCallback(() => {
+    const session = planDetailSessionRef.current;
+    if (!session) return;
+    const plan = allPlanDetailsRef.current.find((item) => planKey(item.id) === session.planId);
+    const joined = plan?.author.id === currentUserIdRef.current
+      || myParticipantIdsRef.current.some((item) => planKey(item.id) === session.planId);
+    track("plan_detail_closed", {
+      plan_id: session.planId,
+      source: session.source,
+      joined,
+      duration_sec: Math.round((Date.now() - session.openedAt) / 1000),
+    });
+    planDetailSessionRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (screen !== "planEvent") {
+      closePlanDetailSession();
+      return;
+    }
+
+    const planId = planKey(activePlanId);
+    const currentSession = planDetailSessionRef.current;
+    if (currentSession?.planId === planId && currentSession.source === planEventSource) return;
+    closePlanDetailSession();
+    planDetailSessionRef.current = {
+      planId,
+      source: planEventSource,
+      openedAt: Date.now(),
+    };
+  }, [activePlanId, closePlanDetailSession, planEventSource, screen]);
+
   useEffect(() => {
     if (screen !== "planEvent") return;
     return subscribeToPlanParticipants(planKey(activePlanId), () => {
@@ -899,6 +944,7 @@ export default function App() {
       if (localPlan) {
         setActivePlanId(localPlan.id);
         setPlanEventOrigin("home");
+        setPlanEventSource("deeplink");
         setPreviousScreen("home");
         setScreen("planEvent");
         track("plan_view", { plan_id: planKey(localPlan.id), source: "deeplink" });
@@ -919,6 +965,7 @@ export default function App() {
         setRemotePublicPlans((plans) => plans.some((plan) => planKey(plan.id) === planKey(sanitizedPlan.id)) ? plans : [sanitizedPlan, ...plans]);
         setActivePlanId(sanitizedPlan.id);
         setPlanEventOrigin("home");
+        setPlanEventSource("deeplink");
         setPreviousScreen("home");
         setScreen("planEvent");
         track("plan_view", { plan_id: planKey(sanitizedPlan.id), source: "deeplink" });
@@ -1134,11 +1181,13 @@ export default function App() {
   };
 
   const openPlanEvent = (id: PlanId, from: Screen = "plans") => {
+    const source = planSourceFromScreen(from);
     setActivePlanId(id);
     setPlanEventOrigin(from);
+    setPlanEventSource(source);
     setPreviousScreen(screen);
     setScreen("planEvent");
-    track("plan_view", { plan_id: planKey(id), source: planSourceFromScreen(from) });
+    track("plan_view", { plan_id: planKey(id), source });
     if (isDemoCommunityPlanId(id)) return;
     void fetchPlan(planKey(id)).then((remotePlan) => {
       if (!remotePlan || remotePlan.hidden) return;
@@ -1343,7 +1392,7 @@ export default function App() {
     setScreen(previousScreen === "profile" ? "profile" : "plans");
   };
 
-  const removePlanFromMine = (id: PlanId, scope: "single" | "program" = "single") => {
+  const removePlanFromMine = (id: PlanId, scope: "single" | "program" = "single", source: PlanViewSource = planSourceFromScreen(screen)) => {
     const plan = allPlans.find((item) => planKey(item.id) === planKey(id));
     const idsToRemove = scope === "program" && plan?.items?.length
       ? new Set([planKey(id), ...plan.items.map((item) => planKey(item.id))])
@@ -1354,6 +1403,7 @@ export default function App() {
       const removedRef = { kind: "plan", id: planId } satisfies ParticipantPlanRef;
       const removedKey = participantKey(removedRef);
       const wasJoined = myParticipantIds.some((item) => participantKey(item) === removedKey);
+      if (wasJoined) track("plan_leave", { plan_id: planId, source });
       const currentPeer = { id: currentUserId, name: currentAuthor.name, avatarUrl: currentAuthor.avatarUrl, realUser: true } satisfies ChatPeer;
       const isAuthorLeavingOwnPlan = plan?.author.id === currentUserId;
       setJoinedParticipantPeers((items) => ({ ...items, [planId]: (items[planId] ?? []).filter((peer) => peer.id !== currentUserId) }));
@@ -1905,7 +1955,7 @@ export default function App() {
               planId={feedPlan.id}
               initiallyJoined={feedPlan.author.id === currentUserId || myParticipantIds.some((item) => item.id === feedPlan.id)}
               onJoin={(id) => addCatalogPlanToRoutine(id, planSourceFromScreen(planEventOrigin))}
-              onLeave={removePlanFromMine}
+              onLeave={(id) => removePlanFromMine(id, "single", planEventSource)}
               onProfile={() => feedPlan.author.id ? openExpertProfile(feedPlan.author.id) : setScreen("profile")}
               onProfileOpen={openExpertProfile}
               onMessageAuthor={isDemoProfileId(feedPlan.author.id) ? undefined : (peer) => openChatWithPeer({ ...peer, id: feedPlan.author.id ?? peer.id })}
