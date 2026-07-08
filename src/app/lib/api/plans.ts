@@ -127,14 +127,18 @@ export const fetchParticipants = async (planId: string): Promise<PlanParticipant
   return data ?? [];
 };
 
-export const countJoined = async (planId: string): Promise<number> => {
+export const countJoined = async (planId: string, excludeUserId?: string): Promise<number> => {
   if (!supabase) return 0;
 
-  const { count, error } = await supabase
+  let query = supabase
     .from("plan_participants")
     .select("plan_id", { count: "exact", head: true })
     .eq("plan_id", planId)
     .eq("status", "joined");
+
+  if (excludeUserId) query = query.neq("user_id", excludeUserId);
+
+  const { count, error } = await query;
 
   if (error) throw error;
   return count ?? 0;

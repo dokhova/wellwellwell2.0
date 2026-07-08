@@ -485,13 +485,31 @@ export default function App() {
   const getPlanParticipantPresentation = (plan: HomeFeedPlan) => {
     const id = planKey(plan.id);
     const joinedPeers = joinedParticipantPeers[id] ?? [];
+    if (isDemoCommunityPlanId(plan.id)) {
+      const joinedAvatarEntries = joinedPeers
+        .filter((peer) => peer.id !== plan.author.id)
+        .map((peer) => peer.avatarUrl)
+        .filter((url): url is string => Boolean(url));
+      const avatars = Array.from(new Set([...plan.participants, ...joinedAvatarEntries]));
+      const joinedCount = joinedCounts[id] ?? 0;
+      const count = Math.max(avatars.length, joinedCount);
+      return {
+        avatars,
+        label: `${count} чел.`,
+        count,
+      };
+    }
     const joinedAvatarEntries = joinedPeers
       .filter((peer) => peer.id !== plan.author.id)
       .map((peer) => peer.avatarUrl)
       .filter((url): url is string => Boolean(url));
-    const avatars = Array.from(new Set([...plan.participants, ...joinedAvatarEntries]));
+    const avatars = Array.from(new Set([
+      ...(plan.author.avatarUrl ? [plan.author.avatarUrl] : []),
+      ...joinedAvatarEntries,
+      ...plan.participants,
+    ]));
     const joinedCount = joinedCounts[id] ?? 0;
-    const count = Math.max(avatars.length, joinedCount);
+    const count = 1 + joinedCount;
     return {
       avatars,
       label: `${count} чел.`,
@@ -749,7 +767,7 @@ export default function App() {
         if (cancelled) return;
         const publicRemotePlans = plans.map(sanitizePlan);
         setRemotePublicPlans(publicRemotePlans);
-        const countEntries = await Promise.all(publicRemotePlans.map(async (plan) => [planKey(plan.id), await countJoined(planKey(plan.id))] as const));
+        const countEntries = await Promise.all(publicRemotePlans.map(async (plan) => [planKey(plan.id), await countJoined(planKey(plan.id), plan.author.id)] as const));
         if (!cancelled) {
           setJoinedCounts((items) => ({
             ...items,
@@ -929,7 +947,7 @@ export default function App() {
         const plans = (await fetchPlansByAuthor(viewingExpertId)).map(sanitizePlan);
         if (cancelled) return;
         setProfileRemotePlans((items) => ({ ...items, [viewingExpertId]: plans }));
-        const countEntries = await Promise.all(plans.map(async (plan) => [planKey(plan.id), await countJoined(planKey(plan.id))] as const));
+        const countEntries = await Promise.all(plans.map(async (plan) => [planKey(plan.id), await countJoined(planKey(plan.id), plan.author.id)] as const));
         if (!cancelled) {
           setJoinedCounts((items) => ({
             ...items,
@@ -1301,18 +1319,19 @@ export default function App() {
     const idKey = planKey(id);
     const currentPeer = { id: currentUserId, name: currentAuthor.name, avatarUrl: currentAuthor.avatarUrl, realUser: true } satisfies ChatPeer;
     const wasJoined = myParticipantIds.some((item) => participantKey(item) === key);
+    const isAuthorJoiningOwnPlan = plan?.author.id === currentUserId;
     if (!wasJoined) track("plan_join", { plan_id: idKey, source });
     setMyParticipantIds((ids) => ids.some((item) => participantKey(item) === key) ? ids : [ref, ...ids]);
     setJoinedParticipantPeers((items) => ({
       ...items,
       [idKey]: items[idKey]?.some((peer) => peer.id === currentUserId) ? items[idKey] : [...(items[idKey] ?? []), currentPeer],
     }));
-    if (!wasJoined) setJoinedCounts((items) => ({ ...items, [idKey]: (items[idKey] ?? 0) + 1 }));
+    if (!wasJoined && !isAuthorJoiningOwnPlan) setJoinedCounts((items) => ({ ...items, [idKey]: (items[idKey] ?? 0) + 1 }));
     void upsertPlanParticipant(idKey, currentUserId, "joined").catch((error) => {
       console.error("Supabase plan join failed", error);
       setMyParticipantIds((ids) => ids.filter((item) => participantKey(item) !== key));
       setJoinedParticipantPeers((items) => ({ ...items, [idKey]: (items[idKey] ?? []).filter((peer) => peer.id !== currentUserId) }));
-      if (!wasJoined) setJoinedCounts((items) => ({ ...items, [idKey]: Math.max(0, (items[idKey] ?? 1) - 1) }));
+      if (!wasJoined && !isAuthorJoiningOwnPlan) setJoinedCounts((items) => ({ ...items, [idKey]: Math.max(0, (items[idKey] ?? 1) - 1) }));
     });
   };
 
@@ -1336,8 +1355,9 @@ export default function App() {
       const removedKey = participantKey(removedRef);
       const wasJoined = myParticipantIds.some((item) => participantKey(item) === removedKey);
       const currentPeer = { id: currentUserId, name: currentAuthor.name, avatarUrl: currentAuthor.avatarUrl, realUser: true } satisfies ChatPeer;
+      const isAuthorLeavingOwnPlan = plan?.author.id === currentUserId;
       setJoinedParticipantPeers((items) => ({ ...items, [planId]: (items[planId] ?? []).filter((peer) => peer.id !== currentUserId) }));
-      setJoinedCounts((items) => ({ ...items, [planId]: Math.max(0, (items[planId] ?? 1) - 1) }));
+      if (!isAuthorLeavingOwnPlan) setJoinedCounts((items) => ({ ...items, [planId]: Math.max(0, (items[planId] ?? 1) - 1) }));
       void deletePlanParticipant(planId, currentUserId).catch((error) => {
         console.error("Supabase plan leave failed", error);
         if (wasJoined) setMyParticipantIds((ids) => ids.some((item) => participantKey(item) === removedKey) ? ids : [removedRef, ...ids]);
@@ -1345,7 +1365,7 @@ export default function App() {
           ...items,
           [planId]: items[planId]?.some((peer) => peer.id === currentUserId) ? items[planId] : [...(items[planId] ?? []), currentPeer],
         }));
-        setJoinedCounts((items) => ({ ...items, [planId]: (items[planId] ?? 0) + 1 }));
+        if (!isAuthorLeavingOwnPlan) setJoinedCounts((items) => ({ ...items, [planId]: (items[planId] ?? 0) + 1 }));
       });
     });
   };
@@ -1468,6 +1488,9 @@ export default function App() {
         if (!remotePlan) return;
         setCreatedPlans((items) => items.map((item) => planKey(item.id) === planKey(plan.id) ? remotePlan : item));
         setHighlightedPlanId(remotePlan.id);
+        void upsertPlanParticipant(planKey(remotePlan.id), currentUserId, "joined").catch((error) => {
+          console.error("Supabase plan author participant failed", error);
+        });
         result.participants.forEach((participantId) => {
           if (isDemoProfileId(participantId)) return;
           const threadId = makeThreadId(currentUserId, participantId);
@@ -1706,7 +1729,7 @@ export default function App() {
         const isCurrentUserProfile = viewedProfile.id === currentUserId;
         const viewedRemotePlans = (profileRemotePlans[viewedProfile.id] ?? []).map((plan) => {
           const joinedCount = joinedCounts[planKey(plan.id)];
-          return joinedCount === undefined ? plan : { ...plan, participantsLabel: `${joinedCount} чел.` };
+          return joinedCount === undefined ? plan : { ...plan, participantsLabel: `${1 + joinedCount} чел.` };
         });
         const viewedPlans = isCurrentUserProfile
           ? myPlans
@@ -1842,12 +1865,16 @@ export default function App() {
         if (feedPlan) {
           const isDemoPlan = isDemoCommunityPlanId(feedPlan.id);
           const joinedPeers = joinedParticipantPeers[planKey(feedPlan.id)] ?? [];
+          const authorParticipant = { id: feedPlan.author.id ?? feedPlan.author.name, name: feedPlan.author.name, avatarUrl: feedPlan.author.avatarUrl };
           const baseParticipantItems = isDemoPlan ? getDemoCommunityParticipantPeers(planKey(feedPlan.id)) : [];
-          const participantItems = [...baseParticipantItems, ...joinedPeers]
-            .filter((participant) => participant.id !== feedPlan.author.id)
+          const participantItems = [
+            ...(isDemoPlan ? [] : [authorParticipant]),
+            ...joinedPeers.filter((participant) => participant.id !== feedPlan.author.id),
+            ...baseParticipantItems,
+          ]
             .filter((participant, index, items) => items.findIndex((item) => item.id === participant.id) === index);
           const participantAvatars = participantItems.map((participant) => participant.avatarUrl).filter((url): url is string => Boolean(url));
-          const participantCount = joinedCounts[planKey(feedPlan.id)] ?? participantItems.length;
+          const participantCount = participantItems.length;
           return (
             <EventDetailScreen
               title={feedPlan.isChallenge ? `Челлендж: ${feedPlan.title}` : feedPlan.title}
@@ -1857,7 +1884,7 @@ export default function App() {
               schedule={feedPlan.schedule}
               shareUrl={getPlanDeepLink(feedPlan)}
               participantAvatars={participantAvatars}
-              participantsLabel={participantCount === 0 ? "0 чел." : `${participantCount} чел.`}
+              participantsLabel={`${participantCount} чел.`}
               authorName={feedPlan.author.name}
               authorAvatarUrl={feedPlan.author.avatarUrl}
               authorId={feedPlan.author.id}
@@ -1876,7 +1903,7 @@ export default function App() {
               duration={feedPlan.duration}
               onBack={() => setScreen(planEventOrigin)}
               planId={feedPlan.id}
-              initiallyJoined={myParticipantIds.some((item) => item.id === feedPlan.id)}
+              initiallyJoined={feedPlan.author.id === currentUserId || myParticipantIds.some((item) => item.id === feedPlan.id)}
               onJoin={(id) => addCatalogPlanToRoutine(id, planSourceFromScreen(planEventOrigin))}
               onLeave={removePlanFromMine}
               onProfile={() => feedPlan.author.id ? openExpertProfile(feedPlan.author.id) : setScreen("profile")}

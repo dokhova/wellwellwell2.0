@@ -221,6 +221,7 @@ export function CreateScreen({
     }
 
     const id = Date.now();
+    const authorParticipants = currentAuthor.avatarUrl ? [currentAuthor.avatarUrl] : [];
     const newPlan: HomeFeedPlan = {
       id,
       kind: "plan",
@@ -234,8 +235,8 @@ export function CreateScreen({
       coverUrl: draft.coverImage ?? undefined,
       gradient: PLAN_TAG_GRADIENTS.other,
       schedule: draft.schedule,
-      participants: [],
-      participantsLabel: "0 чел.",
+      participants: authorParticipants,
+      participantsLabel: "1 чел.",
       timeDate: getTimeDate(draft.schedule),
       address: locationMode === "offline" && locationAddress.trim() ? locationAddress.trim() : undefined,
       author: currentAuthor,

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Calendar, Check, ChevronRight, Copy, Edit3, Eye, MapPin, Plus, Share2, Trash2, Users, Video } from "lucide-react";
 import type { EventDetailProps } from "@/app/types";
-import { DETAIL_AVATARS, normalizePlanTag, PLAN_TAG_GRADIENTS, PLAN_TAG_LABELS } from "@/app/data/plans";
+import { normalizePlanTag, PLAN_TAG_GRADIENTS, PLAN_TAG_LABELS } from "@/app/data/plans";
 import { ALL_DAYS, GREEN, PART_OF_DAY_RANGES, UNSPLASH, WEEKDAY_VALUES } from "@/app/data/constants";
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { addComment, deleteComment, fetchComments, type CommentRow } from "@/app/lib/api/comments";
@@ -279,7 +279,7 @@ export function EventDetailScreen({
   const [comments, setComments] = useState<LocalComment[]>([]);
   const [copied, setCopied] = useState(false);
   const description = paragraphs.join("\n\n");
-  const participantAvatars = planParticipantAvatars?.length ? planParticipantAvatars : DETAIL_AVATARS;
+  const participantAvatars = planParticipantAvatars ?? [];
   const participants = participantItems?.length
     ? participantItems
     : participantAvatars.map((url, index) => ({ id: `participant-${index}`, name: "Участник", avatarUrl: url }));
