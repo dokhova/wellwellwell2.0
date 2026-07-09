@@ -2225,7 +2225,7 @@ export default function App() {
                 photoUrl: authorProfile.photoUrl ?? feedPlan.author.avatarUrl,
               }, nextFollowed) : undefined}
               participantItems={participantItems}
-              onMessageParticipant={isDemoPlan ? undefined : openChatWithPeer}
+              onMessageParticipant={isDemoCommunityPlanId(feedPlan.id) ? undefined : openChatWithPeer}
               currentAuthor={currentAuthor}
               canDelete={feedPlan.author.id === currentUserId}
               onDelete={() => deletePlan(feedPlan.id)}
