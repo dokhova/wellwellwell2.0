@@ -24,6 +24,8 @@ export function EditProfileScreen({
   const [photoUrl, setPhotoUrl] = useState<string | null>(profile.photoUrl);
   const [coverUrls, setCoverUrls] = useState<string[] | null>(profile.coverUrls);
   const [cropRequest, setCropRequest] = useState<{ target: CropTarget; imageUrl: string } | null>(null);
+  const [uploadTarget, setUploadTarget] = useState<CropTarget | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const visibleCoverUrls = coverUrls === null ? [...DEFAULT_COVER_URLS] : coverUrls;
   const initials = name
@@ -53,15 +55,21 @@ export function EditProfileScreen({
 
   const handleCropComplete = async (file: File) => {
     if (!cropRequest) return;
-    const uploadedUrl = await uploadPhoto(file);
-    if (uploadedUrl) {
-      if (cropRequest.target === "avatar") {
+    const target = cropRequest.target;
+    closeCrop();
+    setUploadTarget(target);
+    setUploadProgress(0);
+    try {
+      const uploadedUrl = await uploadPhoto(file, { onProgress: setUploadProgress });
+      if (uploadedUrl && target === "avatar") {
         setPhotoUrl(uploadedUrl);
-      } else {
+      } else if (uploadedUrl) {
         setCoverUrls((current) => [...(current ?? []), uploadedUrl].slice(0, 5));
       }
+    } finally {
+      setUploadProgress(null);
+      setUploadTarget(null);
     }
-    closeCrop();
   };
 
   const handleSave = () => {
@@ -93,7 +101,7 @@ export function EditProfileScreen({
         <div className="mb-6 rounded-xl bg-card px-4 py-4">
           <span className="mb-3 block text-[13px] leading-4 text-muted-foreground">Аватар</span>
           <div className="flex items-center gap-4">
-            <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-full bg-secondary">
+            <div className="relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-full bg-secondary">
               {photoUrl ? (
                 <img loading="lazy" decoding="async" src={photoUrl} alt={name} className="h-full w-full object-cover" />
               ) : (
@@ -101,11 +109,16 @@ export function EditProfileScreen({
                   <span className="text-[28px] font-bold" style={{ color: GREEN }}>{initials}</span>
                 </div>
               )}
+              {uploadTarget === "avatar" && uploadProgress !== null && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60">
+                  <span className="text-[17px] font-semibold text-white">{uploadProgress}%</span>
+                </div>
+              )}
             </div>
-            <label className="flex h-11 items-center gap-2 rounded-xl border px-4 text-[14px] font-semibold text-foreground active:opacity-85">
+            <label className={`flex h-11 items-center gap-2 rounded-xl border px-4 text-[14px] font-semibold text-foreground ${uploadProgress === null ? "active:opacity-85" : "cursor-not-allowed opacity-50"}`}>
               <ImageIcon size={17} strokeWidth={2} />
               Сменить фото
-              <input type="file" accept="image/*" className="hidden" onChange={handleImagePick("avatar")} />
+              <input type="file" accept="image/*" disabled={uploadProgress !== null} className="hidden" onChange={handleImagePick("avatar")} />
             </label>
           </div>
         </div>
@@ -116,6 +129,13 @@ export function EditProfileScreen({
             <span className="text-[12px] leading-4 text-muted-foreground">{visibleCoverUrls.length}/5</span>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-1">
+            {uploadTarget === "cover" && uploadProgress !== null && (
+              <div className="relative h-[92px] w-[164px] flex-shrink-0 overflow-hidden rounded-xl bg-gray-200">
+                <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/60">
+                  <span className="text-[17px] font-semibold text-white">{uploadProgress}%</span>
+                </div>
+              </div>
+            )}
             {visibleCoverUrls.map((coverUrl, index) => {
               const isDefaultCover = coverUrl.startsWith("default:");
               return (
@@ -137,10 +157,10 @@ export function EditProfileScreen({
               );
             })}
             {visibleCoverUrls.length < 5 && (
-              <label className="flex h-[92px] w-[116px] flex-shrink-0 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted text-[13px] font-semibold text-foreground active:opacity-85">
+              <label className={`flex h-[92px] w-[116px] flex-shrink-0 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted text-[13px] font-semibold text-foreground ${uploadProgress === null ? "active:opacity-85" : "cursor-not-allowed opacity-50"}`}>
                 <Plus size={20} strokeWidth={2.2} />
                 Добавить
-                <input type="file" accept="image/*" className="hidden" onChange={handleImagePick("cover")} />
+                <input type="file" accept="image/*" disabled={uploadProgress !== null} className="hidden" onChange={handleImagePick("cover")} />
               </label>
             )}
           </div>
@@ -179,7 +199,8 @@ export function EditProfileScreen({
       <div className="flex-shrink-0 border-t border-border bg-card px-4 pb-4 pt-3">
         <button
           onClick={handleSave}
-          className="h-12 w-full rounded-xl text-[15px] font-semibold text-white"
+          disabled={uploadProgress !== null}
+          className="h-12 w-full rounded-xl text-[15px] font-semibold text-white disabled:opacity-50"
           style={{ backgroundColor: GREEN }}
         >
           Сохранить

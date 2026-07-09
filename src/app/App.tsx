@@ -226,7 +226,7 @@ const mapMessageRowToChatMessage = (message: MessageRow, currentUserId: string):
 
 const getParticipantsCount = (plan: HomeFeedPlan) => {
   const parsed = Number.parseInt(plan.participantsLabel, 10);
-  return Math.max(plan.participants.length, Number.isNaN(parsed) ? 0 : parsed);
+  return Number.isNaN(parsed) ? 0 : parsed;
 };
 
 const planKey = (id: PlanId) => String(id);
@@ -582,46 +582,26 @@ export default function App() {
   const deletedPlanIdSet = new Set(deletedPlanIds.map(planKey));
   const moderatorHiddenPlanIdSet = new Set(moderatorHiddenPlanIds.map(planKey));
   const isJoinedPlan = (id: PlanId) => myParticipantIds.some((item) => planKey(item.id) === planKey(id));
-  const getPlanParticipantPresentation = (plan: HomeFeedPlan) => {
+  const getPlanParticipantItems = (plan: HomeFeedPlan): ChatPeer[] => {
     const id = planKey(plan.id);
     const joinedPeers = joinedParticipantPeers[id] ?? [];
-    if (isDemoCommunityPlanId(plan.id)) {
-      const joinedAvatarEntries = joinedPeers
-        .filter((peer) => peer.id !== plan.author.id)
-        .map((peer) => peer.avatarUrl)
-        .filter((url): url is string => Boolean(url));
-      const avatars = Array.from(new Set([...plan.participants, ...joinedAvatarEntries]));
-      const joinedCount = joinedCounts[id] ?? 0;
-      const count = Math.max(avatars.length, joinedCount);
-      return {
-        avatars,
-        label: `${count} чел.`,
-        count,
-      };
-    }
-    const joinedAvatarEntries = joinedPeers
-      .filter((peer) => peer.id !== plan.author.id)
-      .map((peer) => peer.avatarUrl)
-      .filter((url): url is string => Boolean(url));
-    if (isDemoProfileId(plan.author.id)) {
-      const avatars = Array.from(new Set([
-        ...(plan.author.avatarUrl ? [plan.author.avatarUrl] : []),
-        ...plan.participants,
-        ...joinedAvatarEntries,
-      ]));
-      const count = Math.max(avatars.length, joinedCounts[id] ?? 0);
-      return {
-        avatars,
-        label: `${count} чел.`,
-        count,
-      };
-    }
-    const avatars = Array.from(new Set([
-      ...(plan.author.avatarUrl ? [plan.author.avatarUrl] : []),
-      ...joinedAvatarEntries,
-    ]));
-    const joinedCount = joinedCounts[id] ?? 0;
-    const count = 1 + joinedCount;
+    const authorParticipant: ChatPeer = {
+      id: plan.author.id ?? plan.author.name,
+      name: plan.author.name,
+      avatarUrl: plan.author.avatarUrl,
+    };
+    const demoPeers = isDemoCommunityPlanId(plan.id) ? getDemoCommunityParticipantPeers(id) : [];
+    return [
+      authorParticipant,
+      ...joinedPeers.filter((peer) => peer.id !== authorParticipant.id),
+      ...demoPeers.filter((peer) => peer.id !== authorParticipant.id),
+    ].filter((peer, index, peers) => peers.findIndex((item) => item.id === peer.id) === index);
+  };
+  const getPlanParticipantPresentation = (plan: HomeFeedPlan) => {
+    const id = planKey(plan.id);
+    const items = getPlanParticipantItems(plan);
+    const avatars = items.map((peer) => peer.avatarUrl).filter((url): url is string => Boolean(url));
+    const count = Math.max(items.length, 1 + (joinedCounts[id] ?? 0));
     return {
       avatars,
       label: `${count} чел.`,
@@ -2185,18 +2165,9 @@ export default function App() {
       case "planEvent": {
         const feedPlan = allPlanDetails.find(plan => plan.id === activePlanId);
         if (feedPlan) {
-          const isDemoPlan = isDemoCommunityPlanId(feedPlan.id);
-          const joinedPeers = joinedParticipantPeers[planKey(feedPlan.id)] ?? [];
-          const authorParticipant = { id: feedPlan.author.id ?? feedPlan.author.name, name: feedPlan.author.name, avatarUrl: feedPlan.author.avatarUrl };
-          const baseParticipantItems = isDemoPlan ? getDemoCommunityParticipantPeers(planKey(feedPlan.id)) : [];
-          const participantItems = [
-            ...(isDemoPlan ? [] : [authorParticipant]),
-            ...joinedPeers.filter((participant) => participant.id !== feedPlan.author.id),
-            ...baseParticipantItems,
-          ]
-            .filter((participant, index, items) => items.findIndex((item) => item.id === participant.id) === index);
+          const participantItems = getPlanParticipantItems(feedPlan);
           const participantAvatars = participantItems.map((participant) => participant.avatarUrl).filter((url): url is string => Boolean(url));
-          const participantCount = participantItems.length;
+          const participantCount = getPlanParticipantPresentation(feedPlan).count;
           const authorProfile = feedPlan.author.id
             ? remoteProfiles[feedPlan.author.id]
               ?? experts.find((expert) => expert.id === feedPlan.author.id && expert.isDemo === true)

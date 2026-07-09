@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Calendar, Check, ChevronRight, Copy, Edit3, Eye, MapPin, Plus, Share2, Trash2, Users, Video } from "lucide-react";
+import { ArrowLeft, Calendar, Check, ChevronRight, Copy, Edit3, Eye, Image as ImageIcon, MapPin, Plus, Share2, Trash2, Users, Video, X } from "lucide-react";
 import type { EventDetailProps } from "@/app/types";
 import { normalizePlanTag, PLAN_TAG_GRADIENTS, PLAN_TAG_LABELS } from "@/app/data/plans";
 import { ALL_DAYS, GREEN, PART_OF_DAY_RANGES, UNSPLASH, WEEKDAY_VALUES } from "@/app/data/constants";
@@ -7,9 +7,10 @@ import { HomeSheet } from "@/app/components/HomeSheet";
 import { addComment, deleteComment, fetchComments, type CommentRow } from "@/app/lib/api/comments";
 import { fetchProfilesByIds } from "@/app/lib/api/profiles";
 import { track } from "@/app/lib/analytics";
+import { uploadPhoto } from "@/app/lib/api/storage";
 
 type MentionCandidate = { id: string; name: string; avatarUrl: string | null };
-type LocalComment = { id: string; authorId: string | null; author: string; avatarUrl: string; time: string; text: string; mentionedUserIds: string[]; persisted: boolean };
+type LocalComment = { id: string; authorId: string | null; author: string; avatarUrl: string; time: string; text: string; photoUrl: string | null; mentionedUserIds: string[]; persisted: boolean };
 
 const MENTION_REGEX = /@\[([^\]]+)\]\(([^)]+)\)/g;
 type DraftMention = { id: string; name: string };
@@ -27,6 +28,7 @@ const mapCommentRow = (row: CommentRow): LocalComment => ({
   avatarUrl: row.author_avatar_url ?? UNSPLASH.userAvatar,
   time: formatCommentTime(row.created_at),
   text: row.text,
+  photoUrl: row.photo_url,
   mentionedUserIds: row.mentioned_user_ids ?? [],
   persisted: true,
 });
@@ -108,6 +110,11 @@ function CommentsBlock({
   mentionCandidates,
   onMentionSelected,
   profileById,
+  photoPreviewUrl,
+  photoUploadProgress,
+  photoUrl,
+  onPhotoSelected,
+  onPhotoRemoved,
 }: {
   comment: string;
   setComment: (v: string) => void;
@@ -120,10 +127,15 @@ function CommentsBlock({
   mentionCandidates: MentionCandidate[];
   onMentionSelected: (mention: DraftMention) => void;
   profileById: Record<string, { name: string; avatarUrl: string | null }>;
+  photoPreviewUrl: string | null;
+  photoUploadProgress: number | null;
+  photoUrl: string | null;
+  onPhotoSelected: (file: File) => void;
+  onPhotoRemoved: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [mentionTrigger, setMentionTrigger] = useState<{ start: number; end: number; query: string } | null>(null);
-  const canSend = comment.trim().length > 0;
+  const canSend = photoUploadProgress === null && (comment.trim().length > 0 || Boolean(photoUrl));
   const filteredMentionCandidates = mentionTrigger
     ? mentionCandidates.filter((candidate) => candidate.name.toLowerCase().includes(mentionTrigger.query.toLowerCase()))
     : [];
@@ -153,7 +165,20 @@ function CommentsBlock({
       <h3 className="mb-3.5 flex items-center gap-2 text-[15px] font-semibold text-foreground">
         Комментарии <span className="text-[15px] font-normal text-muted-foreground">{comments.length}</span>
       </h3>
-      <div className="relative mb-[18px] flex items-center gap-2.5">
+      <div className="relative mb-[18px]">
+        {photoPreviewUrl && (
+          <div className="relative mb-2 ml-[42px] h-16 w-16 overflow-hidden rounded-xl">
+            <img src={photoPreviewUrl} alt="" className="h-full w-full object-cover" />
+            {photoUploadProgress !== null && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/60">
+                <span className="text-[13px] font-semibold text-white">{photoUploadProgress}%</span>
+              </div>
+            )}
+            <button type="button" onClick={onPhotoRemoved} className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/65 text-white" aria-label="Удалить фото">
+              <X size={12} />
+            </button>
+          </div>
+        )}
         {mentionTrigger && filteredMentionCandidates.length > 0 && (
           <div className="absolute bottom-full left-10 right-0 z-20 mb-2 max-h-56 overflow-y-auto rounded-xl border border-border bg-card py-1 shadow-lg">
             {filteredMentionCandidates.map((candidate) => (
@@ -172,8 +197,13 @@ function CommentsBlock({
             ))}
           </div>
         )}
-        <AuthorAvatar name={currentAuthor?.name ?? "Вы"} avatarUrl={currentAuthor?.avatarUrl ?? null} size={32} />
-        <div className="flex-1 bg-input rounded-full px-3.5 py-[9px] flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          <AuthorAvatar name={currentAuthor?.name ?? "Вы"} avatarUrl={currentAuthor?.avatarUrl ?? null} size={32} />
+          <div className="flex-1 bg-input rounded-full px-3.5 py-[9px] flex items-center gap-2">
+          <label className="flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center">
+            <ImageIcon size={17} color="var(--muted-foreground)" />
+            <input type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) onPhotoSelected(file); }} />
+          </label>
           <input
             ref={inputRef}
             value={comment}
@@ -200,6 +230,7 @@ function CommentsBlock({
           >
             <ChevronRight size={16} strokeWidth={2.3} color={canSend ? "#fff" : "var(--muted-foreground)"} />
           </button>
+          </div>
         </div>
       </div>
       {comments.length > 0 ? (
@@ -226,6 +257,7 @@ function CommentsBlock({
                   <span className="text-[12px] text-muted-foreground">{item.time}</span>
                 </div>
                 <CommentText text={item.text} onProfileOpen={onProfileOpen} />
+                {item.photoUrl && <img loading="lazy" decoding="async" src={item.photoUrl} alt="" className="mt-1.5 max-h-48 rounded-xl object-cover" />}
               </div>
               {canDelete && (
                 <button onClick={() => onDelete(item)} className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground active:opacity-80" aria-label="Удалить комментарий">
@@ -275,13 +307,16 @@ export function EventDetailScreen({
   void authorVerified;
   void readTime;
   void badgeDate;
-  void participantsLabel;
   const [joined, setJoined] = useState(Boolean(initiallyJoined));
   const [toast, setToast] = useState("");
   const [sheet, setSheet] = useState<"participants" | "profile" | "share" | null>(null);
   const [subscribed, setSubscribed] = useState(isAuthorFollowedByMe);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [comment, setComment] = useState("");
+  const [commentPhotoUrl, setCommentPhotoUrl] = useState<string | null>(null);
+  const [commentPhotoPreviewUrl, setCommentPhotoPreviewUrl] = useState<string | null>(null);
+  const [commentPhotoUploadProgress, setCommentPhotoUploadProgress] = useState<number | null>(null);
+  const commentPhotoUploadToken = useRef(0);
   const [draftMentions, setDraftMentions] = useState<DraftMention[]>([]);
   const [comments, setComments] = useState<LocalComment[]>([]);
   const [commentAuthorProfiles, setCommentAuthorProfiles] = useState<Record<string, { name: string; avatarUrl: string | null }>>({});
@@ -312,9 +347,42 @@ export function EventDetailScreen({
   const needsDescriptionClamp = description.length > 260;
   const formatLabel = format === "online" ? "Онлайн" : "Офлайн";
   const tagLabel = tag ? PLAN_TAG_LABELS[normalizePlanTag(tag)] : "План";
-  const participantCountLabel = `${participants.length} чел.`;
+  const participantCountLabel = participantsLabel ?? `${participants.length} чел.`;
   const overflowLabel = meta.plusN.startsWith("+") ? meta.plusN : "";
   const isOwnPlan = Boolean(currentAuthor?.id && authorId === currentAuthor.id);
+
+  useEffect(() => () => {
+    if (commentPhotoPreviewUrl) URL.revokeObjectURL(commentPhotoPreviewUrl);
+  }, [commentPhotoPreviewUrl]);
+
+  const removeCommentPhoto = () => {
+    commentPhotoUploadToken.current += 1;
+    setCommentPhotoPreviewUrl(null);
+    setCommentPhotoUrl(null);
+    setCommentPhotoUploadProgress(null);
+  };
+
+  const selectCommentPhoto = async (file: File) => {
+    const token = commentPhotoUploadToken.current + 1;
+    commentPhotoUploadToken.current = token;
+    setCommentPhotoPreviewUrl(URL.createObjectURL(file));
+    setCommentPhotoUrl(null);
+    setCommentPhotoUploadProgress(0);
+    const publicUrl = await uploadPhoto(file, {
+      onProgress: (percent) => {
+        if (commentPhotoUploadToken.current === token) setCommentPhotoUploadProgress(percent);
+      },
+    });
+    if (commentPhotoUploadToken.current !== token) return;
+    if (!publicUrl) {
+      setCommentPhotoPreviewUrl(null);
+      setCommentPhotoUrl(null);
+      setCommentPhotoUploadProgress(null);
+      return;
+    }
+    setCommentPhotoUrl(publicUrl);
+    setCommentPhotoUploadProgress(null);
+  };
 
   const weekdayLabel = (days: number[]) =>
     days
@@ -443,8 +511,9 @@ export function EventDetailScreen({
 
   const sendComment = () => {
     const draftText = comment.trim();
-    if (!draftText) return;
+    if (!draftText && !commentPhotoUrl) return;
     const text = serializeDraftMentions(draftText, draftMentions);
+    const photoUrl = commentPhotoUrl;
     const author = currentAuthor ?? { id: "local", name: "Вы", avatarUrl: UNSPLASH.userAvatar };
     const mentionedUserIds = extractMentionedUserIds(text);
     const localComment: LocalComment = {
@@ -454,6 +523,7 @@ export function EventDetailScreen({
       avatarUrl: author.avatarUrl ?? UNSPLASH.userAvatar,
       time: "сейчас",
       text,
+      photoUrl,
       mentionedUserIds,
       persisted: false,
     };
@@ -463,8 +533,9 @@ export function EventDetailScreen({
     ]);
     setComment("");
     setDraftMentions([]);
+    removeCommentPhoto();
     if (planId === undefined) return;
-    track("comment_sent", { plan_id: String(planId), mentions_count: mentionedUserIds.length });
+    track("comment_sent", { plan_id: String(planId), mentions_count: mentionedUserIds.length, has_photo: Boolean(photoUrl) });
     void addComment({
       planId: String(planId),
       authorId: author.id,
@@ -472,7 +543,7 @@ export function EventDetailScreen({
       authorAvatarUrl: author.avatarUrl,
       text,
       mentionedUserIds,
-      photoUrl: null,
+      photoUrl,
     }).then((savedComment) => {
       if (!savedComment) return;
       setComments((items) => items.map((item) => item.id === localComment.id ? mapCommentRow(savedComment) : item));
@@ -755,7 +826,7 @@ export function EventDetailScreen({
           </div>
         </div>
 
-        <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} currentAuthor={currentAuthor} planAuthorId={authorId} onDelete={removeComment} onProfileOpen={onProfileOpen} mentionCandidates={mentionCandidates} onMentionSelected={(mention) => setDraftMentions((items) => [...items.filter((item) => item.id !== mention.id), mention])} profileById={{ ...commentAuthorProfiles, ...profileById }} />
+        <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} currentAuthor={currentAuthor} planAuthorId={authorId} onDelete={removeComment} onProfileOpen={onProfileOpen} mentionCandidates={mentionCandidates} onMentionSelected={(mention) => setDraftMentions((items) => [...items.filter((item) => item.id !== mention.id), mention])} profileById={{ ...commentAuthorProfiles, ...profileById }} photoPreviewUrl={commentPhotoPreviewUrl} photoUploadProgress={commentPhotoUploadProgress} photoUrl={commentPhotoUrl} onPhotoSelected={(file) => { void selectCommentPhoto(file); }} onPhotoRemoved={removeCommentPhoto} />
       </div>
 
       {sheet === "participants" && (

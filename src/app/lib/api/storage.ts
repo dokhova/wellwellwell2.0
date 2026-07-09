@@ -58,24 +58,48 @@ const compressPhoto = async (file: File): Promise<File> => {
   }
 };
 
-export const uploadPhoto = async (file: File): Promise<string | null> => {
-  if (!supabase) {
+export const uploadPhoto = async (
+  file: File,
+  options?: { onProgress?: (percent: number) => void },
+): Promise<string | null> => {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+  if (!supabase || !supabaseUrl || !supabaseAnonKey) {
     console.error("Supabase photo upload failed: Supabase client is not configured.");
     return null;
   }
 
+  options?.onProgress?.(0);
   const uploadFile = await compressPhoto(file);
   const extension = getExtension(uploadFile);
   const fileName = `${Date.now()}-${crypto.randomUUID()}.${extension}`;
 
   try {
-    const { error } = await supabase.storage.from("photos").upload(fileName, uploadFile, {
-      cacheControl: "31536000",
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${supabaseUrl}/storage/v1/object/photos/${fileName}`);
+      xhr.setRequestHeader("Authorization", `Bearer ${supabaseAnonKey}`);
+      xhr.setRequestHeader("apikey", supabaseAnonKey);
+      xhr.setRequestHeader("x-upsert", "false");
+      xhr.setRequestHeader("cache-control", "31536000");
+      xhr.setRequestHeader("content-type", uploadFile.type);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0) {
+          options?.onProgress?.(Math.round((event.loaded / event.total) * 100));
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          options?.onProgress?.(100);
+          resolve();
+          return;
+        }
+        reject(new Error(xhr.responseText || `Storage upload failed with status ${xhr.status}`));
+      };
+      xhr.onerror = () => reject(new Error("Storage upload network error"));
+      xhr.onabort = () => reject(new Error("Storage upload aborted"));
+      xhr.send(uploadFile);
     });
-    if (error) {
-      console.error("Supabase photo upload failed:", error.message, error);
-      return null;
-    }
 
     const { data } = supabase.storage.from("photos").getPublicUrl(fileName);
     if (!data.publicUrl.startsWith("https://")) {

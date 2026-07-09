@@ -100,6 +100,7 @@ export function CreateScreen({
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const [participantQuery, setParticipantQuery] = useState("");
   const [participantsLoading, setParticipantsLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [locationMode, setLocationMode] = useState<"online" | "offline">(editingPlan?.format ?? "online");
   const [locationAddress, setLocationAddress] = useState(editingPlan?.address ?? "");
 
@@ -145,6 +146,7 @@ export function CreateScreen({
   }, [currentAuthor.id, participantQuery, participantsOpen]);
 
   const goTo = (next: CreateStep) => {
+    if (uploadProgress !== null) return;
     setHistory((items) => [...items, step]);
     setStep(next);
     setTitleError("");
@@ -152,6 +154,7 @@ export function CreateScreen({
   };
 
   const goBack = () => {
+    if (uploadProgress !== null) return;
     if (history.length === 0) {
       onNavigate(backTo);
       return;
@@ -427,7 +430,7 @@ export function CreateScreen({
       case "description":
         return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Описание</h2><textarea value={draft.description} maxLength={DESCRIPTION_LIMIT} onChange={(e) => updateDescription(e.target.value)} placeholder="Что будет в плане и зачем он нужен" rows={5} className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none" />{descriptionLeft < DESCRIPTION_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{descriptionLeft}</p>}</div>;
       case "image":
-        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Обложка</h2><label className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center active:opacity-90">{draft.coverImage ? <img loading="lazy" decoding="async" src={draft.coverImage} alt="" className="mb-4 h-28 w-28 rounded-xl object-cover" /> : <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary"><ImageIcon size={28} color={GREEN} /></div>}<p className="text-[16px] font-semibold">Добавь обложку</p><span className="mt-4 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Загрузить</span><input type="file" accept="image/*" className="hidden" onChange={async (event) => { const file = event.target.files?.[0]; if (file) { const publicUrl = await uploadPhoto(file); if (publicUrl) updatePlan({ coverImage: publicUrl }); } event.target.value = ""; }} /></label></div>;
+        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Обложка</h2><label className={`relative flex min-h-[220px] flex-col items-center justify-center overflow-hidden rounded-2xl bg-card px-6 text-center ${uploadProgress === null ? "active:opacity-90" : "cursor-not-allowed"}`}>{draft.coverImage ? <img loading="lazy" decoding="async" src={draft.coverImage} alt="" className="mb-4 h-28 w-28 rounded-xl object-cover" /> : <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary"><ImageIcon size={28} color={GREEN} /></div>}<p className="text-[16px] font-semibold">Добавь обложку</p><span className="mt-4 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Загрузить</span><input type="file" accept="image/*" disabled={uploadProgress !== null} className="hidden" onChange={async (event) => { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; setUploadProgress(0); try { const publicUrl = await uploadPhoto(file, { onProgress: setUploadProgress }); if (publicUrl) updatePlan({ coverImage: publicUrl }); } finally { setUploadProgress(null); } }} />{uploadProgress !== null && <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60"><span className="text-[22px] font-semibold text-white">{uploadProgress}%</span></div>}</label></div>;
       case "schedule":
         return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Дата и время</h2>{renderSchedule()}</div>;
       case "finalOptions":
@@ -440,7 +443,7 @@ export function CreateScreen({
   const renderFooter = () => {
     if (step === "success") return null;
     if (step === "welcome") return <button onClick={() => goTo("name")} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Создать</button>;
-    if (step === "description" || step === "image") return <div className="flex gap-3"><button onClick={() => goTo(step === "description" ? "image" : "schedule")} className="h-12 flex-1 rounded-xl bg-card text-[15px] font-semibold">Пропустить</button><button onClick={() => goTo(step === "description" ? "image" : "schedule")} className="h-12 flex-1 rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Далее</button></div>;
+    if (step === "description" || step === "image") return <div className="flex gap-3"><button disabled={uploadProgress !== null} onClick={() => goTo(step === "description" ? "image" : "schedule")} className="h-12 flex-1 rounded-xl bg-card text-[15px] font-semibold disabled:opacity-50">Пропустить</button><button disabled={uploadProgress !== null} onClick={() => goTo(step === "description" ? "image" : "schedule")} className="h-12 flex-1 rounded-xl text-[15px] font-semibold text-white disabled:opacity-50" style={{ backgroundColor: GREEN }}>Далее</button></div>;
     const action = step === "name" ? continueFromName : step === "schedule" ? continueFromSchedule : handleCreate;
     return <button onClick={action} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>{step === "finalOptions" ? (isEditing ? "Сохранить" : "Создать") : "Далее"}</button>;
   };

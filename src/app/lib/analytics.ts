@@ -14,7 +14,7 @@ type AnalyticsEventProps = {
   plan_leave: { plan_id: string; source: PlanViewSource };
   plan_link_copied: { plan_id: string; screen: "feed" | "plan" };
   plan_check: { plan_id: string };
-  comment_sent: { plan_id: string; mentions_count: number };
+  comment_sent: { plan_id: string; mentions_count: number; has_photo: boolean };
   follow: { target_id: string; target_is_demo: boolean };
   message_sent: Record<string, never>;
   plan_created: { plan_id: string };
