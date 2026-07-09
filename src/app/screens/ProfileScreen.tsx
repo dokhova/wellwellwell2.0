@@ -6,7 +6,6 @@ import { formatNearestDate, getNextOccurrence, weekDateMonths } from "@/app/data
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
 import { DEFAULT_COVER_URLS, profileFollowers, profileFollowing, resolveCoverUrl, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { PlanListCard } from "@/app/screens/PlansScreen";
-import { HomeSheet } from "@/app/components/HomeSheet";
 
 export type ConnectionType = "followers" | "following";
 
@@ -175,7 +174,6 @@ export function ProfileScreen(props: {
   onRemovePlan: (id: PlanId) => void;
   onToggleFollow?: (profile: ExpertProfile, nextFollowed: boolean) => void;
   onMessageProfile?: (peer: ChatPeer) => void;
-  onResetAccount?: () => void;
   canMessage?: boolean;
   profile: ExpertProfile;
   plans: HomeFeedPlan[];
@@ -187,7 +185,6 @@ export function ProfileScreen(props: {
   const [isBioExpanded, setIsBioExpanded] = useState(false);
   const [isBioClamped, setIsBioClamped] = useState(false);
   const [showAllPlans, setShowAllPlans] = useState(false);
-  const [resetOpen, setResetOpen] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
   const bioRef = useRef<HTMLParagraphElement | null>(null);
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false });
@@ -470,12 +467,6 @@ export function ProfileScreen(props: {
                   <p className="text-[14px] leading-5 text-muted-foreground">Пока нет ближайших планов</p>
                 </div>
               )}
-              <button
-                onClick={() => setResetOpen(true)}
-                className="mt-8 w-full py-3 text-center text-[14px] font-medium text-muted-foreground active:opacity-80"
-              >
-                Сбросить аккаунт
-              </button>
             </div>
           ) : (
             <div className="mt-7">
@@ -514,15 +505,6 @@ export function ProfileScreen(props: {
           )}
         </section>
       </div>
-      {resetOpen && (
-        <HomeSheet title="Сбросить аккаунт" onClose={() => setResetOpen(false)}>
-          <p className="mb-4 text-[14px] leading-5 text-gray-500">Сбросить локальные данные приложения? Планы и профиль в базе не удаляются.</p>
-          <div className="flex gap-2">
-            <button onClick={() => setResetOpen(false)} className="h-11 flex-1 rounded-xl bg-gray-100 text-[14px] font-semibold text-gray-900">Отмена</button>
-            <button onClick={props.onResetAccount} className="h-11 flex-1 rounded-xl text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Сбросить</button>
-          </div>
-        </HomeSheet>
-      )}
     </div>
   );
 }

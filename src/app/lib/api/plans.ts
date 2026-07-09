@@ -127,21 +127,33 @@ export const fetchParticipants = async (planId: string): Promise<PlanParticipant
   return data ?? [];
 };
 
-export const countJoined = async (planId: string, excludeUserId?: string): Promise<number> => {
-  if (!supabase) return 0;
+export const fetchJoinedCounts = async (
+  plans: { id: string; authorId?: string }[],
+): Promise<Record<string, number>> => {
+  const planById = new Map(plans.map((plan) => [plan.id, plan]));
+  const counts = Object.fromEntries(Array.from(planById.keys(), (id) => [id, 0]));
+  if (!supabase || planById.size === 0) return counts;
 
-  let query = supabase
+  const { data, error } = await supabase
     .from("plan_participants")
-    .select("plan_id", { count: "exact", head: true })
-    .eq("plan_id", planId)
-    .eq("status", "joined");
-
-  if (excludeUserId) query = query.neq("user_id", excludeUserId);
-
-  const { count, error } = await query;
+    .select("plan_id, user_id")
+    .in("plan_id", Array.from(planById.keys()))
+    .eq("status", "joined")
+    .returns<Array<Pick<PlanParticipantRow, "plan_id" | "user_id">>>();
 
   if (error) throw error;
-  return count ?? 0;
+
+  const uniqueParticipants = new Map<string, Set<string>>();
+  (data ?? []).forEach((row) => {
+    if (row.user_id === planById.get(row.plan_id)?.authorId) return;
+    const userIds = uniqueParticipants.get(row.plan_id) ?? new Set<string>();
+    userIds.add(row.user_id);
+    uniqueParticipants.set(row.plan_id, userIds);
+  });
+  uniqueParticipants.forEach((userIds, planId) => {
+    counts[planId] = userIds.size;
+  });
+  return counts;
 };
 
 export const upsertPlanParticipant = async (planId: string, userId: string, status: PlanParticipantRow["status"]) => {

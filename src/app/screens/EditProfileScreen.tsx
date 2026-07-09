@@ -146,25 +146,33 @@ export function EditProfileScreen({
           </div>
         </div>
 
-        <div className="space-y-4">
-          <label className="block">
-            <span className="mb-2 block text-[13px] leading-4 text-muted-foreground">Имя</span>
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className="h-12 w-full rounded-xl bg-card px-4 text-[15px] text-foreground outline-none"
-            />
-          </label>
+        <div>
+          <div className="space-y-4">
+            <label className="block">
+              <span className="mb-2 block text-[13px] leading-4 text-muted-foreground">Имя</span>
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                className="h-12 w-full rounded-xl bg-card px-4 text-[15px] text-foreground outline-none"
+              />
+            </label>
 
-          <label className="block">
-            <span className="mb-2 block text-[13px] leading-4 text-muted-foreground">Био</span>
-            <textarea
-              value={bio}
-              onChange={(event) => setBio(event.target.value)}
-              rows={5}
-              className="min-h-[120px] w-full resize-none rounded-xl bg-card px-4 py-3.5 text-[15px] leading-5 text-foreground outline-none"
-            />
-          </label>
+            <label className="block">
+              <span className="mb-2 block text-[13px] leading-4 text-muted-foreground">Био</span>
+              <textarea
+                value={bio}
+                onChange={(event) => setBio(event.target.value)}
+                rows={5}
+                className="min-h-[120px] w-full resize-none rounded-xl bg-card px-4 py-3.5 text-[15px] leading-5 text-foreground outline-none"
+              />
+            </label>
+          </div>
+          <button
+            onClick={() => setDeleteOpen(true)}
+            className="mt-10 w-full text-center text-[13px] font-normal text-muted-foreground"
+          >
+            Удалить аккаунт
+          </button>
         </div>
       </div>
 
@@ -175,13 +183,6 @@ export function EditProfileScreen({
           style={{ backgroundColor: GREEN }}
         >
           Сохранить
-        </button>
-        <button
-          onClick={() => setDeleteOpen(true)}
-          className="mt-3 h-10 w-full text-center text-[14px] font-semibold"
-          style={{ color: "#DC2626" }}
-        >
-          Удалить аккаунт
         </button>
       </div>
 

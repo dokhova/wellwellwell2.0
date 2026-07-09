@@ -10,7 +10,7 @@ import { acceptProfileTerms, deleteProfile, fetchProfile, fetchProfilesByIds, up
 import { deleteUserFollows, fetchFollowers, fetchFollowing, follow, unfollow } from "@/app/lib/api/follows";
 import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { deleteUserMessages, fetchUserThreadMessages, makeThreadId, sendMessage, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
-import { countJoined, createPlanRemote, deletePlanParticipant, deletePlanParticipantsForPlans, deletePlanRemote, deletePlansByAuthor, deleteUserPlanParticipants, fetchParticipants, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, updatePlanRemote, upsertPlanParticipant } from "@/app/lib/api/plans";
+import { createPlanRemote, deletePlanParticipant, deletePlanParticipantsForPlans, deletePlanRemote, deletePlansByAuthor, deleteUserPlanParticipants, fetchJoinedCounts, fetchParticipants, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, updatePlanRemote, upsertPlanParticipant } from "@/app/lib/api/plans";
 import { deleteCommentsByAuthor } from "@/app/lib/api/comments";
 import { buildPlanStartAppUrl, getTelegramAuthDate, getTelegramStartParam, getTelegramUser, initTelegram, parsePlanStartParam } from "@/app/lib/telegram";
 import { checkBackendHealth } from "@/app/lib/health";
@@ -483,6 +483,7 @@ export default function App() {
   const [createdPlans, setCreatedPlans] = useState<HomeFeedPlan[]>(() => readJson<HomeFeedPlan[]>(createdPlansStorageKey, []).map(sanitizePlan));
   const [remotePublicPlans, setRemotePublicPlans] = useState<HomeFeedPlan[]>([]);
   const [profileRemotePlans, setProfileRemotePlans] = useState<Record<string, HomeFeedPlan[]>>({});
+  // joinedCounts[planId] = unique joined user_ids from plan_participants, excluding the plan author.
   const [joinedCounts, setJoinedCounts] = useState<Record<string, number>>({});
   const [joinedParticipantPeers, setJoinedParticipantPeers] = useState<Record<string, ChatPeer[]>>({});
   const [deletedPlanIds, setDeletedPlanIds] = useState<PlanId[]>(() => readJson(deletedPlansStorageKey, []));
@@ -906,11 +907,17 @@ export default function App() {
         if (cancelled) return;
         const publicRemotePlans = plans.map(sanitizePlan);
         setRemotePublicPlans(publicRemotePlans);
-        const countEntries = await Promise.all(publicRemotePlans.map(async (plan) => [planKey(plan.id), await countJoined(planKey(plan.id), plan.author.id)] as const));
+        const realFeedPlans = [...publicRemotePlans, ...createdPlans, ...homeFeedPlans]
+          .filter((plan) => !isDemoCommunityPlanId(plan.id) && !isDemoProfileId(plan.author.id))
+          .filter((plan, index, items) => items.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index);
+        const counts = await fetchJoinedCounts(realFeedPlans.map((plan) => ({
+          id: planKey(plan.id),
+          authorId: plan.author.id,
+        })));
         if (!cancelled) {
           setJoinedCounts((items) => ({
             ...items,
-            ...Object.fromEntries(countEntries),
+            ...counts,
           }));
         }
       } catch (error) {
@@ -935,7 +942,13 @@ export default function App() {
         if (cancelled) return;
         setJoinedCounts((items) => ({
           ...items,
-          ...Object.fromEntries(entries.map(([id, rows]) => [id, rows.filter((row) => row.status === "joined").length])),
+          ...Object.fromEntries(entries.map(([id, rows]) => {
+            const authorId = demoCommunityPlans.find((plan) => planKey(plan.id) === id)?.author.id;
+            const joinedIds = new Set(rows
+              .filter((row) => row.status === "joined" && row.user_id !== authorId)
+              .map((row) => row.user_id));
+            return [id, joinedIds.size];
+          })),
         }));
         const joinedRefs = entries
           .filter(([, rows]) => rows.some((row) => row.user_id === currentUserId && row.status === "joined"))
@@ -1157,11 +1170,14 @@ export default function App() {
         const plans = (await fetchPlansByAuthor(viewingExpertId)).map(sanitizePlan);
         if (cancelled) return;
         setProfileRemotePlans((items) => ({ ...items, [viewingExpertId]: plans }));
-        const countEntries = await Promise.all(plans.map(async (plan) => [planKey(plan.id), await countJoined(planKey(plan.id), plan.author.id)] as const));
+        const counts = await fetchJoinedCounts(plans.map((plan) => ({
+          id: planKey(plan.id),
+          authorId: plan.author.id,
+        })));
         if (!cancelled) {
           setJoinedCounts((items) => ({
             ...items,
-            ...Object.fromEntries(countEntries),
+            ...counts,
           }));
         }
       } catch (error) {
@@ -1753,10 +1769,6 @@ export default function App() {
     window.location.reload();
   };
 
-  const resetLocalAccount = () => {
-    clearAppStorageAndReload();
-  };
-
   const deleteAccount = async () => {
     try {
       const authoredPlans = await fetchPlansByAuthor(currentUserId);
@@ -2059,7 +2071,6 @@ export default function App() {
             onRemovePlan={removePlanFromMine}
             onToggleFollow={toggleFollowing}
               onMessageProfile={(peer) => openChatWithPeer(viewedProfile.isDemo && !isNumericUserId(peer.id) ? { ...peer, isDemo: true } : asRealPeer(peer))}
-            onResetAccount={resetLocalAccount}
             canMessage={canMessageProfile(viewedProfile)}
             profile={viewedProfile}
             plans={viewedPlans}
