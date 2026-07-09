@@ -1,7 +1,7 @@
 const PHOTO_URL =
   "https://jqtputqzlfxmmisamlje.supabase.co/storage/v1/object/public/photos/Untitled%20folder/welcome.jpg";
 
-const WEB_APP_URL = "https://web.telegram.org/k/#@wellwellwell_app_bot";
+const WEB_APP_URL = "https://wellwellwell2.vercel.app/";
 
 const CAPTION = `Well Well Well — среда для регулярных совместных активностей.
 
