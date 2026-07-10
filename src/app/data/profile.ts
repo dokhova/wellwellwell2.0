@@ -256,11 +256,10 @@ export const experts: ExpertProfile[] = [
       tags: [...person.tags],
     };
   }),
-  ...demoClubs.clubs.map((club) => {
+  ...demoClubs.clubs.filter((club) => club.disabled !== true).map((club) => {
     const avatarUrl = demoClubAssets.avatars[club.avatar];
     const firstPlan = club.plans[0];
     const coverUrl = firstPlan ? demoClubAssets.covers[firstPlan.cover] : avatarUrl;
-    const followerIds = new Set(club.plans.flatMap((plan) => plan.participantIds));
     return {
       id: club.id,
       telegramId: 0,
@@ -269,7 +268,7 @@ export const experts: ExpertProfile[] = [
       photoUrl: avatarUrl,
       photoUrls: [avatarUrl],
       coverUrls: [coverUrl],
-      followersCount: followerIds.size,
+      followersCount: 0,
       followingCount: 0,
       plansCount: club.plans.length,
       isFollowedByMe: false,

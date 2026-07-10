@@ -18,7 +18,6 @@ import clubRun14 from "@/imports/club-run-14.jpeg";
 import clubRun15 from "@/imports/club-run-15.jpeg";
 import clubShuAvatar from "@/imports/club-shu-avatar.jpg";
 import clubVitalikAvatar from "@/imports/club-vitalik-running-avatar.jpg";
-import { demoCommunity, demoCommunityAssets } from "@/app/data/demoCommunity";
 import type { ChatPeer, HomeFeedPlan, PlanTag, Schedule } from "@/app/types";
 
 const MOSCOW_OFFSET = "+03:00";
@@ -33,7 +32,6 @@ type DemoClubPlan = {
   location: string;
   schedule: Schedule;
   timeDate: string;
-  participantIds: string[];
   externalJoinUrl?: string;
 };
 
@@ -43,6 +41,7 @@ type DemoClub = {
   avatar: keyof typeof demoClubAssets.avatars;
   bio: string;
   isDemo: true;
+  disabled?: true;
   tags: string[];
   plans: DemoClubPlan[];
 };
@@ -94,27 +93,6 @@ const weeklyExactSchedule = (weekday: number, date: string, time: string): Sched
   repeat: { type: "weekly" },
 });
 
-const participants = (index: number) => {
-  const groups = [
-    ["demo-01", "demo-04", "demo-08"],
-    ["demo-02", "demo-05", "demo-09", "demo-12"],
-    ["demo-03", "demo-06", "demo-10"],
-    ["demo-04", "demo-07", "demo-11", "demo-01"],
-    ["demo-05", "demo-08", "demo-12"],
-    ["demo-06", "demo-09", "demo-02", "demo-10"],
-    ["demo-07", "demo-10", "demo-03"],
-    ["demo-08", "demo-11", "demo-04", "demo-01"],
-    ["demo-09", "demo-12", "demo-05"],
-    ["demo-10", "demo-01", "demo-06", "demo-11"],
-    ["demo-11", "demo-02", "demo-07"],
-    ["demo-12", "demo-03", "demo-08", "demo-05"],
-    ["demo-01", "demo-05", "demo-09"],
-    ["demo-02", "demo-06", "demo-10", "demo-12"],
-    ["demo-03", "demo-07", "demo-11"],
-  ];
-  return groups[index - 1] ?? groups[0];
-};
-
 const shuLongDescription = "Утренняя субботняя пробежка по улицам и набережным города — выбирайте свою дистанцию и темп в зависимости от уровня подготовки. Бежим двумя группами: 21 км в темпе 6:00 и 8 км в темпе 7:00.";
 const shuCityDescription = "Совместная пробежка со Skuratov Running club по улицам города, скверам и паркам. Бежим группой 10 км в темпе 6:00-6:30 и 5 км в темпе 7:00.";
 const shuStoreAddress = "магазин SHU (Чистопрудный бульвар, 16)";
@@ -129,15 +107,16 @@ export const demoClubs = {
       name: "SHU RUN",
       avatar: "club-shu-avatar.jpg",
       isDemo: true,
+      disabled: true,
       tags: ["Бег"],
       bio: "SHU RUN™ — бренд современной технологичной одежды для бега, запущенный в 2023 году как новая линейка бренда SHU. Мы создаем функциональные куртки, тайтсы, шорты, лонгсливы, жилеты и аксессуары, которые разработаны для различных типов тренировок. В год бренд выпускает две коллекции — весенне-летнюю и осенне-зимнюю. Кроме того SHU RUN™ — это беговое сообщество с клубами в Санкт-Петербурге, Москве и Екатеринбурге.",
       plans: [
-        { id: "demo-club-plan-01", title: "Длительная пробежка от магазина", description: shuLongDescription, cover: "club-run-01.jpeg", location: shuStoreAddress, schedule: exactSchedule("2026-07-11", "09:00"), timeDate: "11 июля, 09:00", participantIds: participants(1), externalJoinUrl: SHU_JOIN_URL },
-        { id: "demo-club-plan-02", title: "Городская пробежка от кофейни", description: shuCityDescription, cover: "club-run-02.jpeg", location: shuCoffeeAddress, schedule: exactSchedule("2026-07-15", "19:20"), timeDate: "15 июля, 19:20", participantIds: participants(2), externalJoinUrl: SHU_JOIN_URL },
-        { id: "demo-club-plan-03", title: "Длительная пробежка от магазина", description: shuLongDescription, cover: "club-run-03.jpeg", location: shuStoreAddress, schedule: exactSchedule("2026-07-18", "09:00"), timeDate: "18 июля, 09:00", participantIds: participants(3), externalJoinUrl: SHU_JOIN_URL },
-        { id: "demo-club-plan-04", title: "Городская пробежка от кофейни", description: shuCityDescription, cover: "club-run-04.jpeg", location: shuCoffeeAddress, schedule: exactSchedule("2026-07-22", "19:20"), timeDate: "22 июля, 19:20", participantIds: participants(4), externalJoinUrl: SHU_JOIN_URL },
-        { id: "demo-club-plan-05", title: "Длительная пробежка от магазина", description: shuLongDescription, cover: "club-run-05.jpeg", location: shuStoreAddress, schedule: exactSchedule("2026-07-25", "09:00"), timeDate: "25 июля, 09:00", participantIds: participants(5), externalJoinUrl: SHU_JOIN_URL },
-        { id: "demo-club-plan-06", title: "Городская пробежка от кофейни", description: shuCityDescription, cover: "club-run-06.jpeg", location: shuCoffeeAddress, schedule: exactSchedule("2026-07-29", "19:20"), timeDate: "29 июля, 19:20", participantIds: participants(6), externalJoinUrl: SHU_JOIN_URL },
+        { id: "demo-club-plan-01", title: "Длительная пробежка от магазина", description: shuLongDescription, cover: "club-run-01.jpeg", location: shuStoreAddress, schedule: exactSchedule("2026-07-11", "09:00"), timeDate: "11 июля, 09:00", externalJoinUrl: SHU_JOIN_URL },
+        { id: "demo-club-plan-02", title: "Городская пробежка от кофейни", description: shuCityDescription, cover: "club-run-02.jpeg", location: shuCoffeeAddress, schedule: exactSchedule("2026-07-15", "19:20"), timeDate: "15 июля, 19:20", externalJoinUrl: SHU_JOIN_URL },
+        { id: "demo-club-plan-03", title: "Длительная пробежка от магазина", description: shuLongDescription, cover: "club-run-03.jpeg", location: shuStoreAddress, schedule: exactSchedule("2026-07-18", "09:00"), timeDate: "18 июля, 09:00", externalJoinUrl: SHU_JOIN_URL },
+        { id: "demo-club-plan-04", title: "Городская пробежка от кофейни", description: shuCityDescription, cover: "club-run-04.jpeg", location: shuCoffeeAddress, schedule: exactSchedule("2026-07-22", "19:20"), timeDate: "22 июля, 19:20", externalJoinUrl: SHU_JOIN_URL },
+        { id: "demo-club-plan-05", title: "Длительная пробежка от магазина", description: shuLongDescription, cover: "club-run-05.jpeg", location: shuStoreAddress, schedule: exactSchedule("2026-07-25", "09:00"), timeDate: "25 июля, 09:00", externalJoinUrl: SHU_JOIN_URL },
+        { id: "demo-club-plan-06", title: "Городская пробежка от кофейни", description: shuCityDescription, cover: "club-run-06.jpeg", location: shuCoffeeAddress, schedule: exactSchedule("2026-07-29", "19:20"), timeDate: "29 июля, 19:20", externalJoinUrl: SHU_JOIN_URL },
       ],
     },
     {
@@ -148,7 +127,7 @@ export const demoClubs = {
       tags: ["Бег"],
       bio: "Вечерние пробежки по городу, где изучаем архитектуру и свет. Проект бюро светового дизайна RAUM",
       plans: [
-        { id: "demo-club-plan-07", title: "LIGHT-RUNNING: TRAINING", description: "За руководством пробежки и контролем техники проследит постоянный пейсер проекта — тренер по бегу и триатлет Антон Ионов @ionovanton. Программа 60-минутной тренировки: 20 минут — бег до Лужников; 20 минут — специальные беговые упражнения, направленные на улучшение техники бега (СБУ); 20 минут — бег обратно. Расстояние — 5 км, темп — умеренный.", cover: "club-run-07.jpeg", location: "Rébellion The Palace of Youth, Комсомольский просп., 24, стр. 1", schedule: exactSchedule("2026-07-11", "11:50"), timeDate: "11 июля, 11:50", participantIds: participants(7) },
+        { id: "demo-club-plan-07", title: "LIGHT-RUNNING: TRAINING", description: "За руководством пробежки и контролем техники проследит постоянный пейсер проекта — тренер по бегу и триатлет Антон Ионов @ionovanton. Программа 60-минутной тренировки: 20 минут — бег до Лужников; 20 минут — специальные беговые упражнения, направленные на улучшение техники бега (СБУ); 20 минут — бег обратно. Расстояние — 5 км, темп — умеренный.", cover: "club-run-07.jpeg", location: "Rébellion The Palace of Youth, Комсомольский просп., 24, стр. 1", schedule: exactSchedule("2026-07-11", "11:50"), timeDate: "11 июля, 11:50" },
       ],
     },
     {
@@ -156,10 +135,11 @@ export const demoClubs = {
       name: "Peak Runing Club",
       avatar: "club-peak-running-avatar.jpg",
       isDemo: true,
+      disabled: true,
       tags: ["Бег"],
       bio: "Беговой клуб на базе концептуального магазина Peak Moscow. Стараемся создать приятную атмосферу для бегунов с разным уровнем подготовки и сообщество, в котором люди хорошо проводят время. Пробежки проходят каждое воскресенье. Дистанция и темп регулярно меняются, их определяют заранее и анонсируют по четвергам в телеграм-канале магазина.",
       plans: [
-        { id: "demo-club-plan-08", title: "Peak running", description: "Дистанция: 5 км / 8 км / 15 км. Темп: 6:30 / 6:00 / 5:30", cover: "club-run-08.jpeg", location: "PEAK, Петровский бульвар, 8/1", schedule: weeklyExactSchedule(7, "2026-07-12", "09:00"), timeDate: "Воскресенье, 09:00", participantIds: participants(8), externalJoinUrl: PEAK_JOIN_URL },
+        { id: "demo-club-plan-08", title: "Peak running", description: "Дистанция: 5 км / 8 км / 15 км. Темп: 6:30 / 6:00 / 5:30", cover: "club-run-08.jpeg", location: "PEAK, Петровский бульвар, 8/1", schedule: weeklyExactSchedule(7, "2026-07-12", "09:00"), timeDate: "Воскресенье, 09:00", externalJoinUrl: PEAK_JOIN_URL },
       ],
     },
     {
@@ -170,7 +150,7 @@ export const demoClubs = {
       tags: ["Бег"],
       bio: "Образовалось небольшое сообщество интересующееся бегом людей. Смысл этого всего в том, что здесь любой из участников может организовать забег в любое время, месте, с комфортным темпом и расстоянием. Основные пробежки проходят по субботам, анонсы к ним появляются в ~четверг. Старт в основном от кофейни «Борис Сонный». Здесь нет «главных». Посмотрим, что из этого вырастет, а пока инджой!",
       plans: [
-        { id: "demo-club-plan-09", title: "11 июля — бег!", description: "После бега любая суббота лучше. 1 группа: 8-10 км, в темпе 6’30. 2 группа: 5-6 км, в темпе 7’00. Наши субботние пробежки всегда бесплатны, открыты и бережны для всех, кто готов побегать с нами в одном темпе.", cover: "club-run-09.jpeg", location: "Борис Сонный, Селезнёвская ул., 32, Москва", schedule: weeklyExactSchedule(6, "2026-07-11", "10:00"), timeDate: "Суббота, 10:00", participantIds: participants(9) },
+        { id: "demo-club-plan-09", title: "11 июля — бег!", description: "После бега любая суббота лучше. 1 группа: 8-10 км, в темпе 6’30. 2 группа: 5-6 км, в темпе 7’00. Наши субботние пробежки всегда бесплатны, открыты и бережны для всех, кто готов побегать с нами в одном темпе.", cover: "club-run-09.jpeg", location: "Борис Сонный, Селезнёвская ул., 32, Москва", schedule: weeklyExactSchedule(6, "2026-07-11", "10:00"), timeDate: "Суббота, 10:00" },
       ],
     },
     {
@@ -181,18 +161,16 @@ export const demoClubs = {
       tags: ["Бег"],
       bio: "Мы объединились, чтобы вместе проводить тренировки, учиться бегать быстро и правильно, а также ставить перед собой новые цели.",
       plans: [
-        { id: "demo-club-plan-10", title: "Общая физическая подготовка", description: dynamoDescription, cover: "club-run-10.jpeg", location: dynamoAddress, schedule: exactSchedule("2026-07-11", "10:30"), timeDate: "11 июля, 10:30", participantIds: participants(10) },
-        { id: "demo-club-plan-11", title: "Интервальный бег", description: dynamoDescription, cover: "club-run-11.jpeg", location: dynamoAddress, schedule: exactSchedule("2026-07-15", "19:30"), timeDate: "15 июля, 19:30", participantIds: participants(11) },
-        { id: "demo-club-plan-12", title: "Лонгран", description: dynamoDescription, cover: "club-run-12.jpeg", location: dynamoAddress, schedule: exactSchedule("2026-07-19", "10:30"), timeDate: "19 июля, 10:30", participantIds: participants(12) },
-        { id: "demo-club-plan-13", title: "Интервальный бег", description: dynamoDescription, cover: "club-run-13.jpeg", location: dynamoAddress, schedule: exactSchedule("2026-07-22", "19:30"), timeDate: "22 июля, 19:30", participantIds: participants(13) },
-        { id: "demo-club-plan-14", title: "Лонгран", description: dynamoDescription, cover: "club-run-14.jpeg", location: dynamoAddress, schedule: exactSchedule("2026-07-26", "10:30"), timeDate: "26 июля, 10:30", participantIds: participants(14) },
-        { id: "demo-club-plan-15", title: "Интервальный бег", description: dynamoDescription, cover: "club-run-15.jpeg", location: dynamoAddress, schedule: exactSchedule("2026-07-29", "19:30"), timeDate: "29 июля, 19:30", participantIds: participants(15) },
+        { id: "demo-club-plan-10", title: "Общая физическая подготовка", description: dynamoDescription, cover: "club-run-10.jpeg", location: dynamoAddress, schedule: exactSchedule("2026-07-11", "10:30"), timeDate: "11 июля, 10:30" },
+        { id: "demo-club-plan-11", title: "Интервальный бег", description: dynamoDescription, cover: "club-run-11.jpeg", location: dynamoAddress, schedule: exactSchedule("2026-07-15", "19:30"), timeDate: "15 июля, 19:30" },
+        { id: "demo-club-plan-12", title: "Лонгран", description: dynamoDescription, cover: "club-run-12.jpeg", location: dynamoAddress, schedule: exactSchedule("2026-07-19", "10:30"), timeDate: "19 июля, 10:30" },
+        { id: "demo-club-plan-13", title: "Интервальный бег", description: dynamoDescription, cover: "club-run-13.jpeg", location: dynamoAddress, schedule: exactSchedule("2026-07-22", "19:30"), timeDate: "22 июля, 19:30" },
+        { id: "demo-club-plan-14", title: "Лонгран", description: dynamoDescription, cover: "club-run-14.jpeg", location: dynamoAddress, schedule: exactSchedule("2026-07-26", "10:30"), timeDate: "26 июля, 10:30" },
+        { id: "demo-club-plan-15", title: "Интервальный бег", description: dynamoDescription, cover: "club-run-15.jpeg", location: dynamoAddress, schedule: exactSchedule("2026-07-29", "19:30"), timeDate: "29 июля, 19:30" },
       ],
     },
   ],
 } as const satisfies { clubs: DemoClub[] };
-
-const demoPersonById = new Map(demoCommunity.people.map((person) => [person.id, person]));
 
 export const demoClubPlans: HomeFeedPlan[] = demoClubs.clubs.flatMap((club) => {
   const avatarUrl = demoClubAssets.avatars[club.avatar];
@@ -207,14 +185,8 @@ export const demoClubPlans: HomeFeedPlan[] = demoClubs.clubs.flatMap((club) => {
     coverUrl: demoClubAssets.covers[plan.cover],
     gradient: "linear-gradient(135deg, var(--accent) 0%, var(--primary) 100%)",
     schedule: plan.schedule,
-    participants: [
-      avatarUrl,
-      ...plan.participantIds
-        .map((id) => demoPersonById.get(id))
-        .filter((person): person is typeof demoCommunity.people[number] => Boolean(person))
-        .map((person) => demoCommunityAssets.avatars[person.avatar]),
-    ],
-    participantsLabel: `${plan.participantIds.length + 1} чел.`,
+    participants: [avatarUrl],
+    participantsLabel: "1 чел.",
     timeDate: plan.timeDate,
     address: plan.location,
     author: {
@@ -226,20 +198,14 @@ export const demoClubPlans: HomeFeedPlan[] = demoClubs.clubs.flatMap((club) => {
   }));
 });
 
-export const demoClubPlanIds = new Set(demoClubPlans.map((plan) => String(plan.id)));
+export const activeDemoClubPlans = demoClubPlans.filter((plan) => {
+  const club = demoClubs.clubs.find((item) => item.id === plan.author.id);
+  return club?.disabled !== true;
+});
+
+export const activeDemoClubPlanIds = new Set(activeDemoClubPlans.map((plan) => String(plan.id)));
 
 export const getDemoClubParticipantPeers = (planId: string): ChatPeer[] => {
-  const owner = demoClubs.clubs.find((club) => club.plans.some((plan) => plan.id === planId));
-  const plan = owner?.plans.find((item) => item.id === planId);
-  if (!owner || !plan) return [];
-
-  return plan.participantIds
-    .map((id) => demoPersonById.get(id))
-    .filter((person): person is typeof demoCommunity.people[number] => Boolean(person))
-    .map((person) => ({
-      id: person.id,
-      name: person.name,
-      avatarUrl: demoCommunityAssets.avatars[person.avatar],
-      isDemo: true,
-    }));
+  void planId;
+  return [];
 };

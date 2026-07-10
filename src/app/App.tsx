@@ -5,7 +5,7 @@ import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
 import { formatNearestDate, getNextOccurrence } from "@/app/data/calendar";
 import { experts, expertProfile, profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
-import { demoClubPlans, getDemoClubParticipantPeers } from "@/app/data/demoClubs";
+import { activeDemoClubPlans, getDemoClubParticipantPeers } from "@/app/data/demoClubs";
 import { demoCommunityPlanIds, demoCommunityPlans, getDemoCommunityParticipantPeers } from "@/app/data/demoCommunity";
 import { acceptProfileTerms, deleteProfile, fetchProfile, fetchProfilesByIds, upsertProfile } from "@/app/lib/api/profiles";
 import { deleteUserFollows, fetchFollowers, fetchFollowing, follow, unfollow } from "@/app/lib/api/follows";
@@ -231,8 +231,9 @@ const getParticipantsCount = (plan: HomeFeedPlan) => {
 };
 
 const planKey = (id: PlanId) => String(id);
-const demoPlanIds = new Set([...demoCommunityPlanIds, ...demoClubPlans.map((plan) => planKey(plan.id))]);
-const demoPlans = [...demoCommunityPlans, ...demoClubPlans];
+const activeDemoClubPlanIds = new Set(activeDemoClubPlans.map((plan) => planKey(plan.id)));
+const demoPlanIds = new Set([...demoCommunityPlanIds, ...activeDemoClubPlanIds]);
+const demoPlans = [...demoCommunityPlans, ...activeDemoClubPlans];
 const isDemoCommunityPlanId = (id: PlanId) => demoPlanIds.has(planKey(id));
 const getPlanDeepLink = (plan: HomeFeedPlan) => buildPlanStartAppUrl(planKey(plan.id));
 const planSourceFromScreen = (source: Screen): PlanViewSource => {
@@ -475,6 +476,10 @@ export default function App() {
     const currentIds = demoCommunityPlans.slice(0, 12).map((plan) => planKey(plan.id));
     return shuffleIds(currentIds);
   });
+  const [homeClubPlanOrder] = useState(() => {
+    const currentIds = activeDemoClubPlans.map((plan) => planKey(plan.id));
+    return shuffleIds(currentIds);
+  });
   const [editableProfile, setEditableProfile] = useState<ExpertProfile>(() =>
     normalizeProfile(readJson(profileStorageKey, buildTelegramProfile(telegramUser)))
   );
@@ -666,18 +671,23 @@ export default function App() {
     .filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index);
   const publicPlans = useMemo(() => {
     const demoPlanById = new Map(demoPlansWithParticipants.map((plan) => [planKey(plan.id), plan]));
+    const orderedClubPlans = homeClubPlanOrder
+      .map((id) => demoPlanById.get(id))
+      .filter((plan): plan is HomeFeedPlan => Boolean(plan))
+      .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)));
     const orderedTopDemoPlans = homeDemoPlanOrder
       .map((id) => demoPlanById.get(id))
       .filter((plan): plan is HomeFeedPlan => Boolean(plan))
       .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)));
     const remainingDemoPlans = demoPlansWithParticipants
       .filter((plan) => !homeDemoPlanOrder.includes(planKey(plan.id)))
+      .filter((plan) => !homeClubPlanOrder.includes(planKey(plan.id)))
       .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)));
     const sortedPlans = [...catalogPublicPlans, ...justCreatedPublicPlans]
       .filter((plan) => !moderatorHiddenPlanIdSet.has(planKey(plan.id)))
       .sort((a, b) => getParticipantsCount(b) - getParticipantsCount(a));
-    return [...orderedTopDemoPlans, ...remainingDemoPlans, ...sortedPlans];
-  }, [catalogPublicPlans, deletedPlanIdSet, demoPlansWithParticipants, homeDemoPlanOrder, justCreatedPublicPlans, moderatorHiddenPlanIdSet]);
+    return [...orderedClubPlans, ...orderedTopDemoPlans, ...remainingDemoPlans, ...sortedPlans];
+  }, [catalogPublicPlans, deletedPlanIdSet, demoPlansWithParticipants, homeClubPlanOrder, homeDemoPlanOrder, justCreatedPublicPlans, moderatorHiddenPlanIdSet]);
   const participantChatPeers: ChatPeer[] = useMemo(() => EVENT_PARTICIPANTS.map((participant) => ({
     id: participant.id,
     name: participant.name,
