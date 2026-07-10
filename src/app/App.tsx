@@ -516,6 +516,7 @@ export default function App() {
   const allPlanDetailsRef = useRef<HomeFeedPlan[]>([]);
   const myParticipantIdsRef = useRef<ParticipantPlanRef[]>([]);
   const currentUserIdRef = useRef("");
+  const syncedDemoFollowingUserIdsRef = useRef(new Set<string>());
   const currentUserId = editableProfile.id;
   const isModerator = MODERATOR_IDS.includes(currentUserId);
   const currentAuthor = {
@@ -738,6 +739,28 @@ export default function App() {
     }
     return sets;
   }, [currentUserId, idsToConnections, localDemoFollowersFor, localDemoFollowingFor]);
+
+  useEffect(() => {
+    if (syncedDemoFollowingUserIdsRef.current.has(currentUserId)) return;
+    syncedDemoFollowingUserIdsRef.current.add(currentUserId);
+    const demoFollowingIds = myFollowing
+      .map((item) => item.id)
+      .filter(isDemoProfileId);
+    if (demoFollowingIds.length === 0) return;
+
+    const syncDemoFollowing = async () => {
+      try {
+        const remoteFollowingIds = new Set(await fetchFollowing(currentUserId));
+        const missingIds = Array.from(new Set(demoFollowingIds)).filter((id) => !remoteFollowingIds.has(id));
+        await Promise.all(missingIds.map((id) => follow(currentUserId, id)));
+        if (missingIds.length > 0) await loadConnectionSets(currentUserId);
+      } catch (error) {
+        console.error("Supabase demo follows sync failed", error);
+      }
+    };
+
+    void syncDemoFollowing();
+  }, [currentUserId, loadConnectionSets, myFollowing]);
 
   const loadPlanParticipants = useCallback(async (planId: PlanId) => {
     const id = planKey(planId);
@@ -1892,13 +1915,16 @@ export default function App() {
       });
       return;
     }
-    const wasDemoFollowed = myFollowing.some((item) => item.id === profile.id);
+    const wasDemoFollowed = myFollowing.some((item) => item.id === profile.id)
+      || dbFollowingIds.has(profile.id)
+      || (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === profile.id);
     if (wasDemoFollowed === nextFollowed) return;
+    const connection = { id: profile.id, name: profile.name, avatarUrl: profile.photoUrl, isFollowedByMe: true };
     if (nextFollowed) track("follow", { target_id: profile.id, target_is_demo: true });
     setMyFollowing((items) => {
       if (!nextFollowed) return items.filter((item) => item.id !== profile.id);
       if (items.some((item) => item.id === profile.id)) return items;
-      return [{ id: profile.id, name: profile.name, avatarUrl: profile.photoUrl, isFollowedByMe: true }, ...items];
+      return [connection, ...items];
     });
     setConnectionSetsByUser((items) => {
       const mySets = items[currentUserId] ?? { followers: localDemoFollowersFor(currentUserId), following: localDemoFollowingFor(currentUserId) };
@@ -1907,10 +1933,32 @@ export default function App() {
         [currentUserId]: {
           ...mySets,
           following: nextFollowed
-            ? dedupeConnections([{ id: profile.id, name: profile.name, avatarUrl: profile.photoUrl, isFollowedByMe: true }, ...mySets.following])
+            ? dedupeConnections([connection, ...mySets.following])
             : mySets.following.filter((item) => item.id !== profile.id),
         },
       };
+    });
+    void (nextFollowed ? follow(currentUserId, profile.id) : unfollow(currentUserId, profile.id)).catch((error) => {
+      console.error("Supabase demo follow update failed", error);
+      setMyFollowing((items) => nextFollowed
+        ? items.filter((item) => item.id !== profile.id)
+        : items.some((item) => item.id === profile.id) ? items : [connection, ...items]);
+      setConnectionSetsByUser((items) => {
+        const mySets = items[currentUserId] ?? { followers: localDemoFollowersFor(currentUserId), following: localDemoFollowingFor(currentUserId) };
+        return {
+          ...items,
+          [currentUserId]: {
+            ...mySets,
+            following: nextFollowed
+              ? mySets.following.filter((item) => item.id !== profile.id)
+              : dedupeConnections([connection, ...mySets.following]),
+          },
+        };
+      });
+    }).finally(() => {
+      void loadConnectionSets(currentUserId).catch((error) => {
+        console.error("Supabase follows reload failed", error);
+      });
     });
   };
 
@@ -2025,6 +2073,8 @@ export default function App() {
               followingCount: viewedFollowingCount,
               isFollowedByMe: isDemoProfile(baseViewedProfile)
                 ? myFollowing.some((item) => item.id === baseViewedProfile.id)
+                  || dbFollowingIds.has(baseViewedProfile.id)
+                  || (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === baseViewedProfile.id)
                 : (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === baseViewedProfile.id),
             };
         const isCurrentUserProfile = viewedProfile.id === currentUserId;
@@ -2182,6 +2232,8 @@ export default function App() {
           const isAuthorFollowedByMe = authorProfile
             ? isDemoProfile(authorProfile)
               ? myFollowing.some((item) => item.id === authorProfile.id)
+                || dbFollowingIds.has(authorProfile.id)
+                || (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === authorProfile.id)
               : (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === authorProfile.id)
             : false;
           return (
