@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type TouchEvent } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { ArrowLeft, Image as ImageIcon, Plus, X } from "lucide-react";
-import { ImageCropSheet } from "@/app/components/ImageCropSheet";
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { DEFAULT_COVER_URLS, resolveCoverUrl, type ExpertProfile } from "@/app/data/profile";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
 import { uploadPhoto } from "@/app/lib/api/storage";
 
 type CropTarget = "avatar" | "cover";
+const MAX_CROP_SIDE = 1600;
 
 const scrollFocusedFieldIntoView = (element: HTMLElement) => {
   window.setTimeout(() => {
@@ -17,6 +17,47 @@ const scrollFocusedFieldIntoView = (element: HTMLElement) => {
 
 const isEditableElement = (element: Element | null): element is HTMLInputElement | HTMLTextAreaElement =>
   element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
+
+const loadImage = (file: File) => new Promise<HTMLImageElement>((resolve, reject) => {
+  const imageUrl = URL.createObjectURL(file);
+  const image = new Image();
+  image.onload = () => {
+    URL.revokeObjectURL(imageUrl);
+    resolve(image);
+  };
+  image.onerror = () => {
+    URL.revokeObjectURL(imageUrl);
+    reject(new Error("Image decode failed"));
+  };
+  image.src = imageUrl;
+});
+
+const centerCropImageFile = async (file: File, aspect: number) => {
+  const image = await loadImage(file);
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  const sourceAspect = sourceWidth / sourceHeight;
+  const cropWidth = sourceAspect > aspect ? sourceHeight * aspect : sourceWidth;
+  const cropHeight = sourceAspect > aspect ? sourceHeight : sourceWidth / aspect;
+  const cropX = (sourceWidth - cropWidth) / 2;
+  const cropY = (sourceHeight - cropHeight) / 2;
+  const scale = Math.min(1, MAX_CROP_SIDE / Math.max(cropWidth, cropHeight));
+
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas context is not available");
+
+  canvas.width = Math.max(1, Math.round(cropWidth * scale));
+  canvas.height = Math.max(1, Math.round(cropHeight * scale));
+  context.drawImage(image, cropX, cropY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
+
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, "image/jpeg", 0.9);
+  });
+  if (!blob) throw new Error("Canvas export failed");
+
+  return new File([blob], "cropped-photo.jpg", { type: "image/jpeg" });
+};
 
 export function EditProfileScreen({
   profile,
@@ -33,7 +74,6 @@ export function EditProfileScreen({
   const [bio, setBio] = useState(profile.bio);
   const [photoUrl, setPhotoUrl] = useState<string | null>(profile.photoUrl);
   const [coverUrls, setCoverUrls] = useState<string[] | null>(profile.coverUrls);
-  const [cropRequest, setCropRequest] = useState<{ target: CropTarget; imageUrl: string } | null>(null);
   const [uploadTarget, setUploadTarget] = useState<CropTarget | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -48,17 +88,6 @@ export function EditProfileScreen({
     .map((part) => part[0])
     .slice(0, 2)
     .join("");
-
-  const closeCrop = () => {
-    if (cropRequest) URL.revokeObjectURL(cropRequest.imageUrl);
-    setCropRequest(null);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (cropRequest) URL.revokeObjectURL(cropRequest.imageUrl);
-    };
-  }, [cropRequest]);
 
   const onCoverSelect = useCallback(() => {
     if (!coverEmblaApi) return;
@@ -80,28 +109,27 @@ export function EditProfileScreen({
   const handleImagePick = (target: CropTarget) => (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      setCropRequest({ target, imageUrl: URL.createObjectURL(file) });
+      const aspect = target === "avatar" ? 1 : 3 / 4;
+      setUploadTarget(target);
+      setUploadProgress(0);
+      void centerCropImageFile(file, aspect)
+        .then((croppedFile) => uploadPhoto(croppedFile, { onProgress: setUploadProgress }))
+        .then((uploadedUrl) => {
+          if (uploadedUrl && target === "avatar") {
+            setPhotoUrl(uploadedUrl);
+          } else if (uploadedUrl) {
+            setCoverUrls((current) => [...(current ?? []), uploadedUrl].slice(0, 5));
+          }
+        })
+        .catch((error) => {
+          console.error("Profile image upload failed", error);
+        })
+        .finally(() => {
+          setUploadProgress(null);
+          setUploadTarget(null);
+        });
     }
     event.target.value = "";
-  };
-
-  const handleCropComplete = async (file: File) => {
-    if (!cropRequest) return;
-    const target = cropRequest.target;
-    closeCrop();
-    setUploadTarget(target);
-    setUploadProgress(0);
-    try {
-      const uploadedUrl = await uploadPhoto(file, { onProgress: setUploadProgress });
-      if (uploadedUrl && target === "avatar") {
-        setPhotoUrl(uploadedUrl);
-      } else if (uploadedUrl) {
-        setCoverUrls((current) => [...(current ?? []), uploadedUrl].slice(0, 5));
-      }
-    } finally {
-      setUploadProgress(null);
-      setUploadTarget(null);
-    }
   };
 
   const handleSave = () => {
@@ -283,14 +311,6 @@ export function EditProfileScreen({
         </button>
       </div>
 
-      {cropRequest && (
-        <ImageCropSheet
-          imageUrl={cropRequest.imageUrl}
-          aspect={cropRequest.target === "avatar" ? 1 : 3 / 4}
-          onCancel={closeCrop}
-          onComplete={handleCropComplete}
-        />
-      )}
       {deleteOpen && (
         <HomeSheet title="Удалить аккаунт" onClose={() => setDeleteOpen(false)}>
           <p className="mb-4 text-[14px] leading-5 text-gray-500">Все твои данные будут удалены без возможности восстановления: профиль, планы, комментарии, сообщения и подписки.</p>
