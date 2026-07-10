@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type TouchEvent } from "react";
 import useEmblaCarousel from "embla-carousel-react";
-import { ArrowLeft, Image as ImageIcon, Plus, X } from "lucide-react";
+import { ArrowLeft, Image as ImageIcon, X } from "lucide-react";
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { DEFAULT_COVER_URLS, resolveCoverUrl, type ExpertProfile } from "@/app/data/profile";
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
@@ -81,8 +81,8 @@ export function EditProfileScreen({
   const [selectedCoverIndex, setSelectedCoverIndex] = useState(0);
   const [coverEmblaRef, coverEmblaApi] = useEmblaCarousel({ loop: false });
   const visibleCoverUrls = coverUrls === null ? [...DEFAULT_COVER_URLS] : coverUrls;
-  const showAddCoverSlide = visibleCoverUrls.length < 5;
-  const coverSlideCount = visibleCoverUrls.length + (showAddCoverSlide ? 1 : 0);
+  const canAddCover = visibleCoverUrls.length < 5;
+  const coverSlideCount = visibleCoverUrls.length;
   const initials = name
     .split(" ")
     .map((part) => part[0])
@@ -198,61 +198,63 @@ export function EditProfileScreen({
             <span className="text-[13px] leading-4 text-muted-foreground">Обложки</span>
             <span className="text-[12px] leading-4 text-muted-foreground">{visibleCoverUrls.length}/5</span>
           </div>
-          <div className="relative aspect-[3/4] w-44 overflow-hidden rounded-xl bg-gray-200">
-            <div ref={coverEmblaRef} className="h-full overflow-hidden">
-              <div className="flex h-full">
-                {visibleCoverUrls.map((coverUrl, index) => {
-                  const isDefaultCover = coverUrl.startsWith("default:");
-                  return (
-                    <div key={`${coverUrl}-${index}`} className="relative min-w-0 flex-[0_0_100%]">
-                      <img loading="lazy" decoding="async" src={resolveCoverUrl(coverUrl)} alt="" className="h-full w-full object-cover" />
-                      {isDefaultCover && (
-                        <span className="absolute inset-x-2 bottom-3 rounded-full bg-black/45 px-2 py-1 text-center text-[10px] font-medium leading-3 text-white">
-                          Обложка по умолчанию
-                        </span>
-                      )}
-                      <button
-                        onClick={() => setCoverUrls((current) => (current ?? [...DEFAULT_COVER_URLS]).filter((_, coverIndex) => coverIndex !== index))}
-                        className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white active:opacity-85"
-                        aria-label="Удалить обложку"
-                      >
-                        <X size={15} strokeWidth={2.2} />
-                      </button>
-                    </div>
-                  );
-                })}
-                {showAddCoverSlide && (
-                  <div className="min-w-0 flex-[0_0_100%] p-2">
-                    <label className={`flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border bg-muted text-[12px] font-semibold text-foreground ${uploadProgress === null ? "active:opacity-85" : "cursor-not-allowed opacity-50"}`}>
-                      <Plus size={20} strokeWidth={2.2} />
-                      Добавить
-                      <input type="file" accept="image/*" disabled={uploadProgress !== null} className="hidden" onChange={handleImagePick("cover")} />
-                    </label>
+          <div className="flex items-center gap-4">
+            <div className="relative aspect-[3/4] w-24 flex-shrink-0 overflow-hidden rounded-xl bg-gray-200">
+              {visibleCoverUrls.length > 0 ? (
+                <div ref={coverEmblaRef} className="h-full overflow-hidden">
+                  <div className="flex h-full">
+                    {visibleCoverUrls.map((coverUrl, index) => {
+                      const isDefaultCover = coverUrl.startsWith("default:");
+                      return (
+                        <div key={`${coverUrl}-${index}`} className="relative min-w-0 flex-[0_0_100%]">
+                          <img loading="lazy" decoding="async" src={resolveCoverUrl(coverUrl)} alt="" className="h-full w-full object-cover" />
+                          {isDefaultCover && (
+                            <span className="absolute bottom-2 left-2 h-2 w-2 rounded-full bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.35)]" aria-label="Обложка по умолчанию" />
+                          )}
+                          <button
+                            onClick={() => setCoverUrls((current) => (current ?? [...DEFAULT_COVER_URLS]).filter((_, coverIndex) => coverIndex !== index))}
+                            className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-white active:opacity-85"
+                            aria-label="Удалить обложку"
+                          >
+                            <X size={13} strokeWidth={2.2} />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-muted">
+                  <ImageIcon size={24} strokeWidth={1.8} className="text-muted-foreground" />
+                </div>
+              )}
+              {uploadTarget === "cover" && uploadProgress !== null && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/60">
+                  <span className="text-[15px] font-semibold text-white">{uploadProgress}%</span>
+                </div>
+              )}
+              {coverSlideCount > 1 && (
+                <div className="absolute bottom-2 left-1/2 z-10 flex -translate-x-1/2 gap-1">
+                  {Array.from({ length: coverSlideCount }).map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => coverEmblaApi?.scrollTo(index)}
+                      className="h-1.5 rounded-full transition-all"
+                      style={{
+                        width: selectedCoverIndex === index ? 14 : 5,
+                        backgroundColor: selectedCoverIndex === index ? "#fff" : "rgba(255,255,255,0.55)",
+                      }}
+                      aria-label={`Обложка ${index + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-            {uploadTarget === "cover" && uploadProgress !== null && (
-              <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/60">
-                <span className="text-[17px] font-semibold text-white">{uploadProgress}%</span>
-              </div>
-            )}
-            {coverSlideCount > 1 && (
-              <div className="absolute bottom-2 left-1/2 z-10 flex -translate-x-1/2 gap-1.5">
-                {Array.from({ length: coverSlideCount }).map((_, index) => (
-                  <button
-                    key={index}
-                    onClick={() => coverEmblaApi?.scrollTo(index)}
-                    className="h-1.5 rounded-full transition-all"
-                    style={{
-                      width: selectedCoverIndex === index ? 18 : 6,
-                      backgroundColor: selectedCoverIndex === index ? "#fff" : "rgba(255,255,255,0.55)",
-                    }}
-                    aria-label={`Обложка ${index + 1}`}
-                  />
-                ))}
-              </div>
-            )}
+            <label className={`flex h-11 items-center gap-2 rounded-xl border px-4 text-[14px] font-semibold text-foreground ${uploadProgress === null && canAddCover ? "active:opacity-85" : "cursor-not-allowed opacity-50"}`}>
+              <ImageIcon size={17} strokeWidth={2} />
+              Добавить фото
+              <input type="file" accept="image/*" disabled={uploadProgress !== null || !canAddCover} className="hidden" onChange={handleImagePick("cover")} />
+            </label>
           </div>
         </div>
 
