@@ -53,6 +53,7 @@ export interface ChatThread {
   unreadCount?: number;
 }
 export type PlanRepeat =
+  | { type: "none" }
   | { type: "days"; days: number }
   | { type: "weekly" }
   | { type: "untilWeek"; week: number }

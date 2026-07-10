@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type TouchEvent } from "react";
 import confetti from "canvas-confetti";
 import { ArrowLeft, Check, ChevronDown, Clock, Eye, Image as ImageIcon, Lock, MapPin, Plus, Repeat2, Search, Sparkles, Users, X } from "lucide-react";
 import type { HomeFeedPlan, PartOfDay, PlanRepeat, Schedule, Screen, TimeMode, Visibility } from "@/app/types";
@@ -12,7 +12,7 @@ type CreateStep = "welcome" | "name" | "description" | "image" | "schedule" | "f
 type PlanDraft = { title: string; description: string; coverImage: string | null; schedule: Schedule };
 type Person = { id: string; name: string; avatarUrl: string | null };
 const TITLE_LIMIT = 80;
-const DESCRIPTION_LIMIT = 1000;
+const DESCRIPTION_LIMIT = 3000;
 
 export type CreatedPlanResult = {
   plan: PlanDraft;
@@ -52,6 +52,15 @@ const splitDateTime = (value: string) => {
   return { date, time };
 };
 
+const scrollFocusedFieldIntoView = (element: HTMLElement) => {
+  window.setTimeout(() => {
+    element.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, 300);
+};
+
+const isEditableElement = (element: Element | null): element is HTMLInputElement | HTMLTextAreaElement =>
+  element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
+
 const defaultSchedule = (): Schedule => ({
   mode: "partOfDay",
   timeMode: "partOfDay",
@@ -82,7 +91,7 @@ export function CreateScreen({
   const isEditing = Boolean(editingPlan);
   const [people, setPeople] = useState<Person[]>([]);
 
-  const [step, setStep] = useState<CreateStep>(isEditing ? "name" : "welcome");
+  const [step, setStep] = useState<CreateStep>("name");
   const [history, setHistory] = useState<CreateStep[]>([]);
   const [draft, setDraft] = useState<PlanDraft>(() => editingPlan ? {
     title: editingPlan.title.slice(0, TITLE_LIMIT),
@@ -101,6 +110,7 @@ export function CreateScreen({
   const [participantQuery, setParticipantQuery] = useState("");
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [fieldFocused, setFieldFocused] = useState(false);
   const [locationMode, setLocationMode] = useState<"online" | "offline">(editingPlan?.format ?? "online");
   const [locationAddress, setLocationAddress] = useState(editingPlan?.address ?? "");
 
@@ -175,6 +185,7 @@ export function CreateScreen({
   const updateDescription = (value: string) => updatePlan({ description: value.slice(0, DESCRIPTION_LIMIT) });
 
   const getRepeatEnd = (schedule: Schedule) => {
+    if (schedule.repeat?.type === "none") return schedule.start;
     if (schedule.repeat?.type !== "days" || !schedule.start) return typeof schedule.end === "string" ? schedule.end : undefined;
     const startDate = new Date(schedule.start);
     if (Number.isNaN(startDate.getTime())) return typeof schedule.end === "string" ? schedule.end : undefined;
@@ -296,7 +307,14 @@ export function CreateScreen({
     goTo("finalOptions");
   };
 
-  const repeatLabel = repeat.type === "days" ? `${repeat.days} день` : repeat.type === "weekly" ? "Каждую неделю" : repeat.type === "untilWeek" ? `До недели ${repeat.week}` : "Бессрочно";
+  const handleScrollTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    const activeElement = document.activeElement;
+    if (isEditableElement(activeElement) && event.target !== activeElement) {
+      activeElement.blur();
+    }
+  };
+
+  const repeatLabel = repeat.type === "none" ? "Не повторять" : repeat.type === "days" ? `${repeat.days} день` : repeat.type === "weekly" ? "Каждую неделю" : repeat.type === "untilWeek" ? `До недели ${repeat.week}` : "Бессрочно";
   const titleLeft = TITLE_LIMIT - draft.title.length;
   const descriptionLeft = DESCRIPTION_LIMIT - draft.description.length;
   const progressSteps = 6;
@@ -379,6 +397,7 @@ export function CreateScreen({
       {showRepeatPicker && (
         <div className="mt-2 rounded-lg bg-muted p-2">
           {[
+            { label: "Не повторять", action: () => updateSchedule({ repeat: { type: "none" }, start: currentSchedule.start ?? exactStart }), active: repeat.type === "none" },
             { label: "21 день", action: () => updateSchedule({ repeat: { type: "days", days: 21 } }), active: repeat.type === "days" },
             { label: "Каждую неделю", action: () => updateSchedule({ repeat: { type: "weekly" } }), active: repeat.type === "weekly" },
             { label: "До недели N", action: () => updateSchedule({ repeat: { type: "untilWeek", week: untilWeek } }), active: repeat.type === "untilWeek" },
@@ -410,13 +429,34 @@ export function CreateScreen({
         onClick={() => setParticipantsOpen(true)}
         control={selectedParticipantItems.length > 0 ? <div className="flex -space-x-2">{selectedParticipantItems.slice(0, 4).map((person) => person.avatarUrl ? <img loading="lazy" decoding="async" key={person.id} src={person.avatarUrl} alt={person.name} className="h-7 w-7 rounded-full border-2 border-card object-cover" /> : <span key={person.id} className="h-7 w-7 rounded-full border-2 border-card bg-secondary" />)}</div> : <Plus size={18} color={GREEN} />}
       />
-      <OptionRow
-        icon={<MapPin size={17} color={GREEN} />}
-        label="Локация"
-        subtitle={locationMode === "online" ? "Онлайн" : locationAddress || "Адрес не указан"}
-        onClick={() => setLocationMode((mode) => mode === "online" ? "offline" : "online")}
-        control={<span className="text-[13px] font-semibold" style={{ color: GREEN }}>{locationMode === "online" ? "Офлайн" : "Онлайн"}</span>}
-      />
+      <div className="rounded-xl bg-card px-4 py-3.5">
+        <div className="mb-3 flex items-center gap-3">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-secondary">
+            <MapPin size={17} color={GREEN} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[15px] font-medium text-foreground">Локация</p>
+            <p className="mt-0.5 truncate text-[12px] leading-4 text-muted-foreground">
+              {locationMode === "online" ? "Онлайн" : locationAddress || "Адрес не указан"}
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
+          {(["online", "offline"] as const).map((mode) => {
+            const active = locationMode === mode;
+            return (
+              <button
+                key={mode}
+                onClick={() => setLocationMode(mode)}
+                className="h-10 rounded-lg text-[14px] font-semibold transition-colors"
+                style={active ? { backgroundColor: GREEN, color: "#fff" } : { color: "var(--foreground)" }}
+              >
+                {mode === "online" ? "Онлайн" : "Офлайн"}
+              </button>
+            );
+          })}
+        </div>
+      </div>
       {locationMode === "offline" && <input value={locationAddress} onChange={(event) => setLocationAddress(event.target.value)} placeholder="Адрес места проведения" className="h-12 w-full rounded-xl bg-card px-4 text-[14px] outline-none placeholder:text-muted-foreground" />}
     </div>
   );
@@ -426,9 +466,9 @@ export function CreateScreen({
       case "welcome":
         return <div className="flex min-h-full flex-col justify-center"><div className="mb-5 flex h-16 w-16 items-center justify-center rounded-3xl" style={{ backgroundColor: GREEN_LIGHT }}><Sparkles size={30} color={GREEN} /></div><h2 className="text-[32px] font-bold leading-[36px] text-foreground">Соберём твой план</h2><p className="mt-3 text-[16px] leading-6 text-muted-foreground">Пара шагов, немного расписания, и план уже в твоём списке.</p></div>;
       case "name":
-        return <div className="pt-6 transition-all duration-200"><h2 className="mb-5 text-[28px] font-bold leading-[34px]">Название плана</h2><label><span className="mb-2 block text-[13px] text-muted-foreground">Название</span><input value={draft.title} maxLength={TITLE_LIMIT} onChange={(e) => updateTitle(e.target.value)} placeholder="Например, вечерняя пробежка" className="h-14 w-full rounded-xl bg-card px-4 text-[16px] outline-none" autoFocus /></label>{titleLeft < TITLE_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{titleLeft}</p>}{titleError && <p className="mt-2 text-[12px] font-medium text-destructive">{titleError}</p>}</div>;
+        return <div className="pt-6 transition-all duration-200"><p className="mb-2 text-[13px] text-muted-foreground">Шаг 1: собираем твой план</p><h2 className="mb-5 text-[28px] font-bold leading-[34px]">Название плана</h2><label><span className="mb-2 block text-[13px] text-muted-foreground">Название</span><input value={draft.title} maxLength={TITLE_LIMIT} onChange={(e) => updateTitle(e.target.value)} onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }} onBlur={() => setFieldFocused(false)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} enterKeyHint="done" placeholder="Например, вечерняя пробежка" className="h-14 w-full rounded-xl bg-card px-4 text-[16px] outline-none" autoFocus /></label>{titleLeft < TITLE_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{titleLeft}</p>}{titleError && <p className="mt-2 text-[12px] font-medium text-destructive">{titleError}</p>}</div>;
       case "description":
-        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Описание</h2><textarea value={draft.description} maxLength={DESCRIPTION_LIMIT} onChange={(e) => updateDescription(e.target.value)} placeholder="Что будет в плане и зачем он нужен" rows={5} className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none" />{descriptionLeft < DESCRIPTION_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{descriptionLeft}</p>}</div>;
+        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Описание</h2><textarea value={draft.description} maxLength={DESCRIPTION_LIMIT} onChange={(e) => updateDescription(e.target.value)} onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }} onBlur={() => setFieldFocused(false)} placeholder="Что будет в плане и зачем он нужен" rows={5} className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none" />{descriptionLeft < DESCRIPTION_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{descriptionLeft}</p>}</div>;
       case "image":
         return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Обложка</h2><label className={`relative flex min-h-[220px] flex-col items-center justify-center overflow-hidden rounded-2xl bg-card px-6 text-center ${uploadProgress === null ? "active:opacity-90" : "cursor-not-allowed"}`}>{draft.coverImage ? <img loading="lazy" decoding="async" src={draft.coverImage} alt="" className="mb-4 h-28 w-28 rounded-xl object-cover" /> : <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary"><ImageIcon size={28} color={GREEN} /></div>}<p className="text-[16px] font-semibold">Добавь обложку</p><span className="mt-4 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Загрузить</span><input type="file" accept="image/*" disabled={uploadProgress !== null} className="hidden" onChange={async (event) => { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; setUploadProgress(0); try { const publicUrl = await uploadPhoto(file, { onProgress: setUploadProgress }); if (publicUrl) updatePlan({ coverImage: publicUrl }); } finally { setUploadProgress(null); } }} />{uploadProgress !== null && <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60"><span className="text-[22px] font-semibold text-white">{uploadProgress}%</span></div>}</label></div>;
       case "schedule":
@@ -458,7 +498,12 @@ export function CreateScreen({
         <div className="h-10 w-10" />
       </div>
       {renderProgress()}
-      <div className="flex-1 overflow-y-auto px-4 pb-4 transition-all duration-200">{renderStep()}</div>
+      <div
+        className={`flex-1 overflow-y-auto px-4 transition-all duration-200 ${fieldFocused ? "pb-[40vh]" : "pb-4"}`}
+        onTouchStart={handleScrollTouchStart}
+      >
+        {renderStep()}
+      </div>
       {footer && <div className="flex-shrink-0 border-t border-border bg-card px-4 pb-4 pt-3">{footer}</div>}
       {participantsOpen && (
         <HomeSheet title="Участники" onClose={() => setParticipantsOpen(false)} panelClassName="max-h-[85vh] flex flex-col" bodyClassName="flex min-h-0 flex-col">

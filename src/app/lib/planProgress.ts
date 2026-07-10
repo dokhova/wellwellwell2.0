@@ -1,12 +1,11 @@
 import type { HomeFeedPlan } from "@/app/types";
-import { weekDateMonths, weekDates } from "@/app/data/calendar";
 
 export const PLAN_START_DATE = new Date();
 PLAN_START_DATE.setHours(0, 0, 0, 0);
 
 export const getDateKey = (date: Date) => date.toISOString().slice(0, 10);
 
-export const calendarDays = weekDates.map((dayNumber, index) => {
+export const calendarDays = Array.from({ length: 31 }, (_, index) => {
   const date = new Date(PLAN_START_DATE);
   date.setDate(PLAN_START_DATE.getDate() + index);
   const jsDay = date.getDay();
@@ -15,11 +14,29 @@ export const calendarDays = weekDates.map((dayNumber, index) => {
     date,
     dateKey: getDateKey(date),
     dayIndex: index,
-    dayNumber,
-    monthName: weekDateMonths[index],
+    dayNumber: date.getDate(),
+    monthName: date.toLocaleDateString("ru-RU", { month: "long" }),
     weekday: jsDay === 0 ? 7 : jsDay,
   };
 });
+
+const getScheduleStartKey = (start?: string) => {
+  if (!start) return null;
+  const date = new Date(start);
+  return Number.isNaN(date.getTime()) ? null : getDateKey(date);
+};
+
+const getScheduleEndKey = (plan: HomeFeedPlan, startKey: string | null) => {
+  if (plan.schedule.repeat?.type === "days" && plan.schedule.start) {
+    const startDate = new Date(plan.schedule.start);
+    if (Number.isNaN(startDate.getTime())) return null;
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + Math.max(1, plan.schedule.repeat.days) - 1);
+    return getDateKey(endDate);
+  }
+  if (typeof plan.schedule.end === "string") return getScheduleStartKey(plan.schedule.end);
+  return plan.schedule.repeat?.type === "none" ? startKey : null;
+};
 
 export const getPlanWeekItems = (plans: HomeFeedPlan[]) => {
   const sourceOrder = new Map(plans.map((plan, index) => [plan.id, index]));
@@ -27,8 +44,32 @@ export const getPlanWeekItems = (plans: HomeFeedPlan[]) => {
 
   return plans
     .flatMap((plan) => {
-      const weekdays = plan.schedule.weekdays.length ? plan.schedule.weekdays : [calendarDays[0].weekday];
-      const matchingDays = calendarDays.filter((day) => weekdays.includes(day.weekday));
+      const startKey = getScheduleStartKey(plan.schedule.start);
+      const endKey = getScheduleEndKey(plan, startKey);
+      if (plan.schedule.repeat?.type === "none") {
+        const day = calendarDays.find((item) => item.dateKey === startKey);
+        return day ? [{
+          plan,
+          dateKey: day.dateKey,
+          dayIndex: day.dayIndex,
+          dayNumber: day.dayNumber,
+          monthName: day.monthName,
+          sortKey: day.dayIndex,
+          progressKey: `${day.dateKey}:${plan.id}`,
+        }] : [];
+      }
+
+      const startDay = startKey ? calendarDays.find((day) => day.dateKey === startKey) : null;
+      const weekdays = plan.schedule.weekdays.length
+        ? plan.schedule.weekdays
+        : plan.schedule.repeat?.type === "days" && startKey
+          ? []
+          : [startDay?.weekday ?? calendarDays[0].weekday];
+      const matchingDays = calendarDays.filter((day) =>
+        (weekdays.length === 0 || weekdays.includes(day.weekday))
+        && (!startKey || day.dateKey >= startKey)
+        && (!endKey || day.dateKey <= endKey)
+      );
 
       return matchingDays.map((day) => ({
         plan,

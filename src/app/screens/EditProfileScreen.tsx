@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type TouchEvent } from "react";
 import { ArrowLeft, Image as ImageIcon, Plus, X } from "lucide-react";
 import { ImageCropSheet } from "@/app/components/ImageCropSheet";
 import { HomeSheet } from "@/app/components/HomeSheet";
@@ -7,6 +7,15 @@ import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
 import { uploadPhoto } from "@/app/lib/api/storage";
 
 type CropTarget = "avatar" | "cover";
+
+const scrollFocusedFieldIntoView = (element: HTMLElement) => {
+  window.setTimeout(() => {
+    element.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, 300);
+};
+
+const isEditableElement = (element: Element | null): element is HTMLInputElement | HTMLTextAreaElement =>
+  element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
 
 export function EditProfileScreen({
   profile,
@@ -27,6 +36,7 @@ export function EditProfileScreen({
   const [uploadTarget, setUploadTarget] = useState<CropTarget | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [fieldFocused, setFieldFocused] = useState(false);
   const visibleCoverUrls = coverUrls === null ? [...DEFAULT_COVER_URLS] : coverUrls;
   const initials = name
     .split(" ")
@@ -87,6 +97,13 @@ export function EditProfileScreen({
     }
   };
 
+  const handleScrollTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    const activeElement = document.activeElement;
+    if (isEditableElement(activeElement) && event.target !== activeElement) {
+      activeElement.blur();
+    }
+  };
+
   return (
     <div className="flex h-full flex-col bg-surface">
       <div className="flex h-14 flex-shrink-0 items-center justify-between px-4">
@@ -97,7 +114,10 @@ export function EditProfileScreen({
         <div className="h-10 w-10" />
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
+      <div
+        className={`flex-1 overflow-y-auto px-4 ${fieldFocused ? "pb-[40vh]" : "pb-4"}`}
+        onTouchStart={handleScrollTouchStart}
+      >
         <div className="mb-6 rounded-xl bg-card px-4 py-4">
           <span className="mb-3 block text-[13px] leading-4 text-muted-foreground">Аватар</span>
           <div className="flex items-center gap-4">
@@ -130,7 +150,7 @@ export function EditProfileScreen({
           </div>
           <div className="flex gap-3 overflow-x-auto pb-1">
             {uploadTarget === "cover" && uploadProgress !== null && (
-              <div className="relative h-[92px] w-[164px] flex-shrink-0 overflow-hidden rounded-xl bg-gray-200">
+              <div className="relative h-[123px] w-[92px] flex-shrink-0 overflow-hidden rounded-xl bg-gray-200">
                 <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/60">
                   <span className="text-[17px] font-semibold text-white">{uploadProgress}%</span>
                 </div>
@@ -139,7 +159,7 @@ export function EditProfileScreen({
             {visibleCoverUrls.map((coverUrl, index) => {
               const isDefaultCover = coverUrl.startsWith("default:");
               return (
-                <div key={`${coverUrl}-${index}`} className="relative h-[92px] w-[164px] flex-shrink-0 overflow-hidden rounded-xl bg-gray-200">
+                <div key={`${coverUrl}-${index}`} className="relative h-[123px] w-[92px] flex-shrink-0 overflow-hidden rounded-xl bg-gray-200">
                   <img loading="lazy" decoding="async" src={resolveCoverUrl(coverUrl)} alt="" className="h-full w-full object-cover" />
                   {isDefaultCover && (
                     <span className="absolute inset-x-2 bottom-2 rounded-full bg-black/45 px-2 py-1 text-center text-[11px] font-medium text-white">
@@ -157,7 +177,7 @@ export function EditProfileScreen({
               );
             })}
             {visibleCoverUrls.length < 5 && (
-              <label className={`flex h-[92px] w-[116px] flex-shrink-0 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted text-[13px] font-semibold text-foreground ${uploadProgress === null ? "active:opacity-85" : "cursor-not-allowed opacity-50"}`}>
+              <label className={`flex h-[123px] w-[92px] flex-shrink-0 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted text-[13px] font-semibold text-foreground ${uploadProgress === null ? "active:opacity-85" : "cursor-not-allowed opacity-50"}`}>
                 <Plus size={20} strokeWidth={2.2} />
                 Добавить
                 <input type="file" accept="image/*" disabled={uploadProgress !== null} className="hidden" onChange={handleImagePick("cover")} />
@@ -173,6 +193,15 @@ export function EditProfileScreen({
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
+                onFocus={(event) => {
+                  setFieldFocused(true);
+                  scrollFocusedFieldIntoView(event.currentTarget);
+                }}
+                onBlur={() => setFieldFocused(false)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }}
+                enterKeyHint="done"
                 className="h-12 w-full rounded-xl bg-card px-4 text-[15px] text-foreground outline-none"
               />
             </label>
@@ -182,6 +211,11 @@ export function EditProfileScreen({
               <textarea
                 value={bio}
                 onChange={(event) => setBio(event.target.value)}
+                onFocus={(event) => {
+                  setFieldFocused(true);
+                  scrollFocusedFieldIntoView(event.currentTarget);
+                }}
+                onBlur={() => setFieldFocused(false)}
                 rows={5}
                 className="min-h-[120px] w-full resize-none rounded-xl bg-card px-4 py-3.5 text-[15px] leading-5 text-foreground outline-none"
               />
@@ -210,7 +244,7 @@ export function EditProfileScreen({
       {cropRequest && (
         <ImageCropSheet
           imageUrl={cropRequest.imageUrl}
-          aspect={cropRequest.target === "avatar" ? 1 : 16 / 9}
+          aspect={cropRequest.target === "avatar" ? 1 : 3 / 4}
           onCancel={closeCrop}
           onComplete={handleCropComplete}
         />

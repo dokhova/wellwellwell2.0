@@ -287,7 +287,7 @@ export function ProfileScreen(props: {
   return (
     <div className="h-full overflow-y-auto bg-card">
       <div className="relative flex min-h-full flex-col">
-        <div className="relative h-[280px] w-full overflow-hidden bg-gray-300">
+        <div className="relative aspect-[3/4] w-full overflow-hidden bg-gray-300">
           {resolvedCoverUrls.length > 0 ? (
             <div ref={emblaRef} className="h-full overflow-hidden">
               <div className="flex h-full">

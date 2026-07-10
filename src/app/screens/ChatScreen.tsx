@@ -334,7 +334,11 @@ export function ChatScreen({
         </button>
         <button onClick={() => onPeerProfile(peer)} className="min-w-0 flex-1 text-left active:opacity-80">
           <p className="truncate text-[16px] font-semibold text-foreground">{peer.name}</p>
-          <p className="text-[12px] leading-4 text-muted-foreground">{isReadOnly ? "сервисные уведомления" : isDemoPeer ? "демо-ответы включены" : "чат готов к реальному собеседнику"}</p>
+          {(isReadOnly || isDemoPeer) && (
+            <p className="text-[12px] leading-4 text-muted-foreground">
+              {isReadOnly ? "сервисные уведомления" : "демо-ответы включены"}
+            </p>
+          )}
         </button>
       </div>
 

@@ -8,9 +8,10 @@ import { addComment, deleteComment, fetchComments, type CommentRow } from "@/app
 import { fetchProfilesByIds } from "@/app/lib/api/profiles";
 import { track } from "@/app/lib/analytics";
 import { uploadPhoto } from "@/app/lib/api/storage";
+import { pluralizeParticipants } from "@/app/lib/pluralize";
 
 type MentionCandidate = { id: string; name: string; avatarUrl: string | null };
-type LocalComment = { id: string; authorId: string | null; author: string; avatarUrl: string; time: string; text: string; photoUrl: string | null; mentionedUserIds: string[]; persisted: boolean };
+type LocalComment = { id: string; authorId: string | null; author: string; avatarUrl: string | null; time: string; text: string; photoUrl: string | null; mentionedUserIds: string[]; persisted: boolean };
 
 const MENTION_REGEX = /@\[([^\]]+)\]\(([^)]+)\)/g;
 type DraftMention = { id: string; name: string };
@@ -21,11 +22,16 @@ const formatCommentTime = (value: string) => {
   return date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 };
 
+const normalizeAvatarUrl = (value?: string | null) => {
+  const url = value?.trim();
+  return url && !url.startsWith("blob:") ? url : null;
+};
+
 const mapCommentRow = (row: CommentRow): LocalComment => ({
   id: row.id,
   authorId: row.author_id,
   author: row.author_name,
-  avatarUrl: row.author_avatar_url ?? UNSPLASH.userAvatar,
+  avatarUrl: normalizeAvatarUrl(row.author_avatar_url),
   time: formatCommentTime(row.created_at),
   text: row.text,
   photoUrl: row.photo_url,
@@ -239,7 +245,7 @@ function CommentsBlock({
             const canDelete = currentAuthor && (item.authorId === currentAuthor.id || planAuthorId === currentAuthor.id);
             const resolvedAuthor = item.authorId ? profileById[item.authorId] : null;
             const authorName = resolvedAuthor?.name ?? item.author;
-            const authorAvatarUrl = resolvedAuthor?.avatarUrl ?? item.avatarUrl;
+            const authorAvatarUrl = normalizeAvatarUrl(resolvedAuthor?.avatarUrl ?? item.avatarUrl);
             return (
             <div key={item.id} className="flex gap-2.5">
               <button
@@ -249,7 +255,7 @@ function CommentsBlock({
                 className="h-8 w-8 flex-shrink-0 rounded-full active:opacity-80"
                 aria-label="Открыть профиль"
               >
-                <img loading="lazy" decoding="async" src={authorAvatarUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
+                <AuthorAvatar name={authorName} avatarUrl={authorAvatarUrl} size={32} />
               </button>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
@@ -349,6 +355,10 @@ export function EventDetailScreen({
   const tagLabel = tag ? PLAN_TAG_LABELS[normalizePlanTag(tag)] : "План";
   const participantCountLabel = participantsLabel ?? `${participants.length} чел.`;
   const overflowLabel = meta.plusN.startsWith("+") ? meta.plusN : "";
+  const extraParticipantsCount = Number.parseInt(meta.plusN.replace(/\D/g, ""), 10);
+  const extraParticipantsLabel = Number.isFinite(extraParticipantsCount)
+    ? pluralizeParticipants(extraParticipantsCount)
+    : `${meta.plusN} участников`;
   const isOwnPlan = Boolean(currentAuthor?.id && authorId === currentAuthor.id);
 
   useEffect(() => () => {
@@ -520,7 +530,7 @@ export function EventDetailScreen({
       id: `local-${Date.now()}`,
       authorId: author.id,
       author: author.name,
-      avatarUrl: author.avatarUrl ?? UNSPLASH.userAvatar,
+      avatarUrl: normalizeAvatarUrl(author.avatarUrl),
       time: "сейчас",
       text,
       photoUrl,
@@ -793,7 +803,7 @@ export function EventDetailScreen({
               >
                 <div className="flex items-center gap-3">
                   <Users size={20} strokeWidth={1.8} className="flex-shrink-0 text-muted-foreground" />
-                  <span className="text-[14px] text-foreground">{participants.length} участников</span>
+                  <span className="text-[14px] text-foreground">{pluralizeParticipants(participants.length)}</span>
                 </div>
                 <div className="flex items-center">
                   <div className="flex -space-x-2">
@@ -873,7 +883,7 @@ export function EventDetailScreen({
                 </div>
               );
             })}
-            <p className="pt-2 text-center text-[13px] text-gray-400">И ещё {meta.plusN} участников</p>
+            <p className="pt-2 text-center text-[13px] text-gray-400">И ещё {extraParticipantsLabel}</p>
           </div>
         </HomeSheet>
       )}
