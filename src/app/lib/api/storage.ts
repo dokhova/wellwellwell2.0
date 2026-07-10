@@ -69,12 +69,24 @@ export const uploadPhoto = async (
     return null;
   }
 
+  let displayedProgress = 0;
+  const emitProgress = (percent: number) => {
+    const nextProgress = Math.max(displayedProgress, Math.min(100, Math.round(percent)));
+    if (nextProgress === displayedProgress) return;
+    displayedProgress = nextProgress;
+    options?.onProgress?.(displayedProgress);
+  };
+
   options?.onProgress?.(0);
-  const uploadFile = await compressPhoto(file);
-  const extension = getExtension(uploadFile);
-  const fileName = `${Date.now()}-${crypto.randomUUID()}.${extension}`;
+  const progressTimer = window.setInterval(() => {
+    emitProgress(Math.min(90, displayedProgress + 4));
+  }, 120);
 
   try {
+    const uploadFile = await compressPhoto(file);
+    const extension = getExtension(uploadFile);
+    const fileName = `${Date.now()}-${crypto.randomUUID()}.${extension}`;
+
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${supabaseUrl}/storage/v1/object/photos/${fileName}`);
@@ -85,12 +97,12 @@ export const uploadPhoto = async (
       xhr.setRequestHeader("content-type", uploadFile.type);
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable && event.total > 0) {
-          options?.onProgress?.(Math.round((event.loaded / event.total) * 100));
+          emitProgress((event.loaded / event.total) * 100);
         }
       };
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          options?.onProgress?.(100);
+          emitProgress(100);
           resolve();
           return;
         }
@@ -110,5 +122,7 @@ export const uploadPhoto = async (
   } catch (error) {
     console.error("Supabase photo upload failed:", error instanceof Error ? error.message : String(error), error);
     return null;
+  } finally {
+    window.clearInterval(progressTimer);
   }
 };
