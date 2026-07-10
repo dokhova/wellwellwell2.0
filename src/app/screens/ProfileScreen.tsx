@@ -361,7 +361,7 @@ export function ProfileScreen(props: {
                 style={isFollowed ? { backgroundColor: "var(--muted)", borderColor: "var(--border)", color: "var(--foreground)" } : { backgroundImage: "linear-gradient(90deg, #00887F, #00A99D, #4DD0C4)", borderColor: GREEN, color: "#fff" }}
               >
                 {isFollowed ? <Check size={16} strokeWidth={2.4} /> : <UserPlus size={16} strokeWidth={2.2} />}
-                {isFollowed ? "Вы подписаны" : "Подписаться"}
+                {isFollowed ? "В подписках" : "Подписаться"}
               </button>
             )}
           </div>
@@ -464,7 +464,7 @@ export function ProfileScreen(props: {
                 </div>
               ) : (
                 <div className="rounded-xl bg-muted px-4 py-6 text-center">
-                  <p className="text-[14px] leading-5 text-muted-foreground">Пока нет ближайших планов</p>
+                  <p className="text-[14px] leading-5 text-muted-foreground">Нет ближайших планов</p>
                 </div>
               )}
             </div>
@@ -498,7 +498,7 @@ export function ProfileScreen(props: {
                 </div>
               ) : (
                 <div className="rounded-xl bg-muted px-4 py-8 text-center">
-                  <p className="text-[14px] leading-5 text-muted-foreground">Пока нет опубликованных планов</p>
+                  <p className="text-[14px] leading-5 text-muted-foreground">Нет публичных планов</p>
                 </div>
               )}
             </div>

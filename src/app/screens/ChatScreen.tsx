@@ -376,7 +376,7 @@ export function ChatScreen({
                 >
                   {message.kind === "invite" ? (
                     <div className="min-w-[210px]">
-                      <p className="text-[14px] font-semibold leading-5">Приглашение в план</p>
+                      <p className="text-[14px] font-semibold leading-5">Приглашение</p>
                       <p className="mt-1 text-[14px] leading-5">{message.text}</p>
                       {message.inviteStatus ? (
                         <p className={`mt-2 text-[12px] font-semibold ${mine ? "text-white/80" : "text-muted-foreground"}`}>

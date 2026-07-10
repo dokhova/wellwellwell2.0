@@ -57,7 +57,7 @@ export function WelcomeScreen({ onAccept }: { onAccept: () => void | Promise<voi
           Среда совместных активностей
         </h1>
         <p className="mt-4 max-w-[350px] text-[16px] font-medium leading-6 text-white/88">
-          Находите единомышленников, присоединяйтесь к их активностям или переносите понравившиеся планы в свой календарь
+          Найди единомышленников, участвуй в их активностях и создавай из планов привычки
         </p>
         <button
           type="button"

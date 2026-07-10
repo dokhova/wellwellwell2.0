@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type TouchEvent } from "react";
 import confetti from "canvas-confetti";
-import { ArrowLeft, Check, ChevronDown, Clock, Eye, Image as ImageIcon, Lock, MapPin, Plus, Repeat2, Search, Sparkles, Users, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Eye, Image as ImageIcon, Lock, MapPin, Plus, Repeat2, Search, Sparkles, Users, X } from "lucide-react";
 import type { HomeFeedPlan, PartOfDay, PlanRepeat, Schedule, Screen, TimeMode, Visibility } from "@/app/types";
 import { ALL_DAYS, GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES, WEEKDAY_VALUES } from "@/app/data/constants";
 import { DEFAULT_PLAN_AUTHOR, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
@@ -328,21 +328,51 @@ export function CreateScreen({
     </div>
   );
 
+  const renderWeekdayGrid = (className = "mt-5") => (
+    <div className={`${className} grid grid-cols-7 gap-[5px]`}>
+      {ALL_DAYS.map((day, index) => {
+        const value = WEEKDAY_VALUES[index];
+        const active = selectedDays.includes(value);
+        return (
+          <button key={day} onClick={() => {
+            const nextDays = active ? selectedDays.filter((item) => item !== value) : [...selectedDays, value].sort((a, b) => a - b);
+            updateSchedule({ weekdays: nextDays });
+            setScheduleError("");
+          }} className="aspect-square rounded-full border text-[12px] font-semibold" style={active ? { backgroundColor: GREEN, borderColor: GREEN, color: "#fff" } : { borderColor: "var(--border)", color: "var(--foreground)" }}>
+            {day}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   const renderSchedule = () => (
     <div className="rounded-2xl bg-card p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-[13px] text-muted-foreground">Время</p>
-        <button onClick={() => {
-          if (timeMode === "partOfDay") {
-            updateSchedule({ mode: "exact", timeMode: "exact", time: null, partOfDay: null, weekdays: [], start: exactStart, end: exactEnd || exactStart });
-          } else {
-            updateSchedule({ mode: "partOfDay", timeMode: "partOfDay", time: null, start: undefined, end: undefined });
-          }
-          setScheduleError("");
-        }} className="flex items-center gap-1.5 text-[14px] font-medium" style={{ color: GREEN }}>
-          <Clock size={15} strokeWidth={2} />
-          {timeMode === "partOfDay" ? "Точное время" : "Время суток"}
-        </button>
+      <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
+        {[
+          { mode: "partOfDay" as const, label: "Время суток" },
+          { mode: "exact" as const, label: "Точное время" },
+        ].map((item) => {
+          const active = timeMode === item.mode;
+          return (
+            <button
+              key={item.mode}
+              onClick={() => {
+                if (item.mode === timeMode) return;
+                if (item.mode === "exact") {
+                  updateSchedule({ mode: "exact", timeMode: "exact", time: null, partOfDay: null, start: exactStart, end: exactEnd || exactStart });
+                } else {
+                  updateSchedule({ mode: "partOfDay", timeMode: "partOfDay", time: null, start: undefined, end: undefined });
+                }
+                setScheduleError("");
+              }}
+              className="h-10 rounded-lg text-[14px] font-semibold transition-colors"
+              style={active ? { backgroundColor: GREEN, color: "#fff" } : { color: "var(--foreground)" }}
+            >
+              {item.label}
+            </button>
+          );
+        })}
       </div>
 
       {timeMode === "partOfDay" ? (
@@ -357,27 +387,13 @@ export function CreateScreen({
               );
             })}
           </div>
-          <div className="mt-5 grid grid-cols-7 gap-[5px]">
-            {ALL_DAYS.map((day, index) => {
-              const value = WEEKDAY_VALUES[index];
-              const active = selectedDays.includes(value);
-              return (
-                <button key={day} onClick={() => {
-                  const nextDays = active ? selectedDays.filter((item) => item !== value) : [...selectedDays, value].sort((a, b) => a - b);
-                  updateSchedule({ weekdays: nextDays });
-                  setScheduleError("");
-                }} className="aspect-square rounded-full border text-[12px] font-semibold" style={active ? { backgroundColor: GREEN, borderColor: GREEN, color: "#fff" } : { borderColor: "var(--border)", color: "var(--foreground)" }}>
-                  {day}
-                </button>
-              );
-            })}
-          </div>
+          {renderWeekdayGrid()}
         </>
       ) : (
         <div className="space-y-3">
           {[
             { label: "Начало", date: startParts.date, time: startParts.time, onDate: (value: string) => updateSchedule({ start: `${value}T${startParts.time || "00:00"}`, end: `${value}T${endParts.time || startParts.time || "00:00"}` }), onTime: (value: string) => updateSchedule({ start: `${startParts.date}T${value || "00:00"}` }) },
-            { label: "Окончание", date: endParts.date || startParts.date, time: endParts.time, onDate: (value: string) => updateSchedule({ end: `${value}T${endParts.time || "00:00"}` }), onTime: (value: string) => updateSchedule({ end: `${endParts.date || startParts.date}T${value || "00:00"}` }) },
+            { label: "Конец", date: endParts.date || startParts.date, time: endParts.time, onDate: (value: string) => updateSchedule({ end: `${value}T${endParts.time || "00:00"}` }), onTime: (value: string) => updateSchedule({ end: `${endParts.date || startParts.date}T${value || "00:00"}` }) },
           ].map((row) => (
             <div key={row.label} className="rounded-lg border border-border px-3.5 py-3">
               <p className="mb-2 text-[13px] font-medium text-foreground">{row.label}</p>
@@ -387,11 +403,12 @@ export function CreateScreen({
               </div>
             </div>
           ))}
+          {repeat.type !== "none" && renderWeekdayGrid("pt-2")}
         </div>
       )}
 
       <button onClick={() => setShowRepeatPicker((show) => !show)} className="mt-5 flex w-full items-center justify-between rounded-lg bg-muted px-3.5 py-3 text-left">
-        <span className="flex items-center gap-2 text-[14px]"><Repeat2 size={18} />Повторение</span>
+        <span className="flex items-center gap-2 text-[14px]"><Repeat2 size={18} />Повторять</span>
         <span className="flex items-center gap-1.5 text-[14px] text-muted-foreground">{repeatLabel}<ChevronDown size={16} /></span>
       </button>
       {showRepeatPicker && (
@@ -425,7 +442,7 @@ export function CreateScreen({
       <OptionRow
         icon={<Users size={17} color={GREEN} />}
         label="Участники"
-        subtitle={selectedParticipantItems.length ? `${selectedParticipantItems.length} выбрано` : "Выбрать участников"}
+        subtitle={selectedParticipantItems.length ? `Выбрано: ${selectedParticipantItems.length}` : "Выбрать участников"}
         onClick={() => setParticipantsOpen(true)}
         control={selectedParticipantItems.length > 0 ? <div className="flex -space-x-2">{selectedParticipantItems.slice(0, 4).map((person) => person.avatarUrl ? <img loading="lazy" decoding="async" key={person.id} src={person.avatarUrl} alt={person.name} className="h-7 w-7 rounded-full border-2 border-card object-cover" /> : <span key={person.id} className="h-7 w-7 rounded-full border-2 border-card bg-secondary" />)}</div> : <Plus size={18} color={GREEN} />}
       />
@@ -464,17 +481,17 @@ export function CreateScreen({
   const renderStep = () => {
     switch (step) {
       case "welcome":
-        return <div className="flex min-h-full flex-col justify-center"><div className="mb-5 flex h-16 w-16 items-center justify-center rounded-3xl" style={{ backgroundColor: GREEN_LIGHT }}><Sparkles size={30} color={GREEN} /></div><h2 className="text-[32px] font-bold leading-[36px] text-foreground">Соберём твой план</h2><p className="mt-3 text-[16px] leading-6 text-muted-foreground">Пара шагов, немного расписания, и план уже в твоём списке.</p></div>;
+        return <div className="flex min-h-full flex-col justify-center"><div className="mb-5 flex h-16 w-16 items-center justify-center rounded-3xl" style={{ backgroundColor: GREEN_LIGHT }}><Sparkles size={30} color={GREEN} /></div><h2 className="text-[32px] font-bold leading-[36px] text-foreground">Собери свой план</h2><p className="mt-3 text-[16px] leading-6 text-muted-foreground">Пара шагов, немного расписания, и план уже в твоём списке.</p></div>;
       case "name":
-        return <div className="pt-6 transition-all duration-200"><p className="mb-2 text-[13px] text-muted-foreground">Шаг 1: собираем твой план</p><h2 className="mb-5 text-[28px] font-bold leading-[34px]">Название плана</h2><label><span className="mb-2 block text-[13px] text-muted-foreground">Название</span><input value={draft.title} maxLength={TITLE_LIMIT} onChange={(e) => updateTitle(e.target.value)} onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }} onBlur={() => setFieldFocused(false)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} enterKeyHint="done" placeholder="Например, вечерняя пробежка" className="h-14 w-full rounded-xl bg-card px-4 text-[16px] outline-none" /></label>{titleLeft < TITLE_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{titleLeft}</p>}{titleError && <p className="mt-2 text-[12px] font-medium text-destructive">{titleError}</p>}</div>;
+        return <div className="pt-6 transition-all duration-200"><p className="mb-2 text-[13px] text-muted-foreground">Шаг 1: собери свой план</p><h2 className="mb-5 text-[28px] font-bold leading-[34px]">Название плана</h2><label><span className="mb-2 block text-[13px] text-muted-foreground">Короткое и ёмкое</span><input value={draft.title} maxLength={TITLE_LIMIT} onChange={(e) => updateTitle(e.target.value)} onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }} onBlur={() => setFieldFocused(false)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} enterKeyHint="done" placeholder="Например, вечерняя пробежка" className="h-14 w-full rounded-xl bg-card px-4 text-[16px] outline-none" /></label>{titleLeft < TITLE_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{titleLeft}</p>}{titleError && <p className="mt-2 text-[12px] font-medium text-destructive">{titleError}</p>}</div>;
       case "description":
-        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Описание</h2><textarea value={draft.description} maxLength={DESCRIPTION_LIMIT} onChange={(e) => updateDescription(e.target.value)} onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }} onBlur={() => setFieldFocused(false)} placeholder="Что будет в плане и зачем он нужен" rows={5} className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none" />{descriptionLeft < DESCRIPTION_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{descriptionLeft}</p>}</div>;
+        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Описание</h2><textarea value={draft.description} maxLength={DESCRIPTION_LIMIT} onChange={(e) => updateDescription(e.target.value)} onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }} onBlur={() => setFieldFocused(false)} placeholder="Что будешь делать, и с какой целью" rows={5} className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none" />{descriptionLeft < DESCRIPTION_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{descriptionLeft}</p>}</div>;
       case "image":
         return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Обложка</h2><label className={`relative flex min-h-[220px] flex-col items-center justify-center overflow-hidden rounded-2xl bg-card px-6 text-center ${uploadProgress === null ? "active:opacity-90" : "cursor-not-allowed"}`}>{draft.coverImage ? <img loading="lazy" decoding="async" src={draft.coverImage} alt="" className="mb-4 h-28 w-28 rounded-xl object-cover" /> : <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary"><ImageIcon size={28} color={GREEN} /></div>}<p className="text-[16px] font-semibold">Добавь обложку</p><span className="mt-4 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Загрузить</span><input type="file" accept="image/*" disabled={uploadProgress !== null} className="hidden" onChange={async (event) => { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; setUploadProgress(0); try { const publicUrl = await uploadPhoto(file, { onProgress: setUploadProgress }); if (publicUrl) updatePlan({ coverImage: publicUrl }); } finally { setUploadProgress(null); } }} />{uploadProgress !== null && <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60"><span className="text-[22px] font-semibold text-white">{uploadProgress}%</span></div>}</label></div>;
       case "schedule":
-        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Дата и время</h2>{renderSchedule()}</div>;
+        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Регулярность</h2>{renderSchedule()}</div>;
       case "finalOptions":
-        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Финальные настройки</h2>{renderFinalOptions()}</div>;
+        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Настройки</h2>{renderFinalOptions()}</div>;
       case "success":
         return <div className="flex min-h-full flex-col items-center justify-center text-center"><div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full" style={{ backgroundColor: GREEN_LIGHT }}><Check size={38} color={GREEN} /></div><h2 className="text-[28px] font-bold">План создан</h2></div>;
     }
@@ -494,7 +511,7 @@ export function CreateScreen({
     <div className="flex h-full flex-col bg-surface">
       <div className="flex h-14 flex-shrink-0 items-center justify-between px-4">
         <button onClick={goBack} className="flex h-10 w-10 items-center justify-start">{history.length > 0 ? <ArrowLeft size={20} color="var(--foreground)" /> : <X size={20} color="var(--foreground)" />}</button>
-        <h1 className="text-[16px] font-semibold">{isEditing ? "Редактирование" : "Создание"}</h1>
+        <h1 className="text-[16px] font-semibold">{isEditing ? "Редактирование" : "Новый план"}</h1>
         <div className="h-10 w-10" />
       </div>
       {renderProgress()}
@@ -540,7 +557,7 @@ export function CreateScreen({
           </div>
           <div className="flex-shrink-0 border-t border-border bg-white pt-3">
             <button onClick={() => setParticipantsOpen(false)} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
-              Готово
+              Пригласить участников
             </button>
           </div>
         </HomeSheet>

@@ -169,7 +169,7 @@ export function PlansScreen({
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[12px] leading-4 text-white/60">
-                    {nextItem.dayIndex === todayIndex ? "Сегодня" : "Скоро"} · {nextItem.dayNumber} {nextItem.monthName}
+                    {nextItem.dayIndex === todayIndex ? "Сегодня" : "Скоро"} · {nextItem.date.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}
                   </p>
                   <h3 className="mt-0.5 truncate text-[15px] font-semibold leading-5 text-white">{nextItem.plan.title}</h3>
                 </div>

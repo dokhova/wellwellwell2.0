@@ -274,11 +274,7 @@ function CommentsBlock({
             );
           })}
         </div>
-      ) : (
-        <div className="flex justify-center py-8">
-          <p className="text-[13px] text-muted-foreground">Пока нет комментариев</p>
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -355,10 +351,6 @@ export function EventDetailScreen({
   const tagLabel = tag ? PLAN_TAG_LABELS[normalizePlanTag(tag)] : "План";
   const participantCountLabel = participantsLabel ?? `${participants.length} чел.`;
   const overflowLabel = meta.plusN.startsWith("+") ? meta.plusN : "";
-  const extraParticipantsCount = Number.parseInt(meta.plusN.replace(/\D/g, ""), 10);
-  const extraParticipantsLabel = Number.isFinite(extraParticipantsCount)
-    ? pluralizeParticipants(extraParticipantsCount)
-    : `${meta.plusN} участников`;
   const isOwnPlan = Boolean(currentAuthor?.id && authorId === currentAuthor.id);
 
   useEffect(() => () => {
@@ -742,7 +734,7 @@ export function EventDetailScreen({
                     className="rounded-full border px-3 py-1.5 text-[12px] font-semibold"
                     style={subscribed ? { borderColor: "var(--border)", color: "var(--foreground)" } : { borderColor: GREEN, backgroundColor: GREEN, color: "#fff" }}
                   >
-                    {subscribed ? "Подписан" : "Подписаться"}
+                    {subscribed ? "В подписках" : "Подписаться"}
                   </button>
                 )}
               </div>
@@ -883,7 +875,6 @@ export function EventDetailScreen({
                 </div>
               );
             })}
-            <p className="pt-2 text-center text-[13px] text-gray-400">И ещё {extraParticipantsLabel}</p>
           </div>
         </HomeSheet>
       )}

@@ -18,7 +18,7 @@ export const weekDateMonths = Array.from({ length: 7 }, (_, index) =>
 );
 export const PERIODS = ["День", "Неделя", "Месяц"] as const;
 export const weekRanges = [
-  `${weekDates[0]}–${weekDates[6]} ${weekDateMonths[6]}`,
+  `${weekDates[0]}–${getWeekDate(6).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}`,
 ];
 
 export const chartData = [

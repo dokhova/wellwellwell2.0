@@ -123,7 +123,7 @@ const SUPPORT_PEER: ChatPeer = {
   readOnly: true,
 };
 
-const SUPPORT_MESSAGE = "Это сервисный чат WellWellWell. Сюда будут приходить уведомления и новости приложения.";
+const SUPPORT_MESSAGE = "Это сервисный чат WellWellWell. Будем присылать сюда важные уведомления и новости приложения.";
 const MODERATOR_IDS = ["353298824"];
 const DEMO_PROFILE_IDS = new Set(experts.filter((profile) => profile.isDemo).map((profile) => profile.id));
 const isNumericUserId = (id?: string | null) => Boolean(id && /^\d+$/.test(id));
