@@ -5,6 +5,7 @@ import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
 import { formatNearestDate, getNextOccurrence } from "@/app/data/calendar";
 import { experts, expertProfile, profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
+import { demoClubPlans, getDemoClubParticipantPeers } from "@/app/data/demoClubs";
 import { demoCommunityPlanIds, demoCommunityPlans, getDemoCommunityParticipantPeers } from "@/app/data/demoCommunity";
 import { acceptProfileTerms, deleteProfile, fetchProfile, fetchProfilesByIds, upsertProfile } from "@/app/lib/api/profiles";
 import { deleteUserFollows, fetchFollowers, fetchFollowing, follow, unfollow } from "@/app/lib/api/follows";
@@ -230,7 +231,9 @@ const getParticipantsCount = (plan: HomeFeedPlan) => {
 };
 
 const planKey = (id: PlanId) => String(id);
-const isDemoCommunityPlanId = (id: PlanId) => demoCommunityPlanIds.has(planKey(id));
+const demoPlanIds = new Set([...demoCommunityPlanIds, ...demoClubPlans.map((plan) => planKey(plan.id))]);
+const demoPlans = [...demoCommunityPlans, ...demoClubPlans];
+const isDemoCommunityPlanId = (id: PlanId) => demoPlanIds.has(planKey(id));
 const getPlanDeepLink = (plan: HomeFeedPlan) => buildPlanStartAppUrl(planKey(plan.id));
 const planSourceFromScreen = (source: Screen): PlanViewSource => {
   if (source === "home") return "feed";
@@ -591,7 +594,9 @@ export default function App() {
       name: plan.author.name,
       avatarUrl: plan.author.avatarUrl,
     };
-    const demoPeers = isDemoCommunityPlanId(plan.id) ? getDemoCommunityParticipantPeers(id) : [];
+    const demoPeers = isDemoCommunityPlanId(plan.id)
+      ? [...getDemoCommunityParticipantPeers(id), ...getDemoClubParticipantPeers(id)]
+      : [];
     return [
       authorParticipant,
       ...joinedPeers.filter((peer) => peer.id !== authorParticipant.id),
@@ -617,7 +622,7 @@ export default function App() {
       participantsLabel: participantPresentation.label,
     };
   });
-  const demoPlansWithParticipants = demoCommunityPlans.map((plan) => {
+  const demoPlansWithParticipants = demoPlans.map((plan) => {
     const participantPresentation = getPlanParticipantPresentation(plan);
     return {
       ...plan,
@@ -938,7 +943,7 @@ export default function App() {
     let cancelled = false;
     const loadDemoPlanParticipants = async () => {
       try {
-        const entries = await Promise.all(demoCommunityPlans.map(async (plan) => {
+        const entries = await Promise.all(demoPlans.map(async (plan) => {
           const rows = await fetchParticipants(planKey(plan.id));
           return [planKey(plan.id), rows] as const;
         }));
@@ -946,7 +951,7 @@ export default function App() {
         setJoinedCounts((items) => ({
           ...items,
           ...Object.fromEntries(entries.map(([id, rows]) => {
-            const authorId = demoCommunityPlans.find((plan) => planKey(plan.id) === id)?.author.id;
+            const authorId = demoPlans.find((plan) => planKey(plan.id) === id)?.author.id;
             const joinedIds = new Set(rows
               .filter((row) => row.status === "joined" && row.user_id !== authorId)
               .map((row) => row.user_id));
@@ -2264,6 +2269,7 @@ export default function App() {
               duration={feedPlan.duration}
               onBack={() => goBackInStack(planEventOrigin)}
               planId={feedPlan.id}
+              externalJoinUrl={feedPlan.externalJoinUrl}
               initiallyJoined={feedPlan.author.id === currentUserId || myParticipantIds.some((item) => item.id === feedPlan.id)}
               onJoin={(id) => addCatalogPlanToRoutine(id, planSourceFromScreen(planEventOrigin))}
               onLeave={(id) => removePlanFromMine(id, "single", planEventSource)}

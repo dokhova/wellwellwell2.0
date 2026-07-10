@@ -5,6 +5,7 @@ declare global {
         ready: () => void;
         expand: () => void;
         disableVerticalSwipes?: () => void;
+        openLink?: (url: string) => void;
         setHeaderColor?: (color: string) => void;
         setBackgroundColor?: (color: string) => void;
         initDataUnsafe: {

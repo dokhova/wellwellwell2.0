@@ -10,6 +10,7 @@ import expertAvatarSvetlanaVoronova from "@/imports/avatar_03.webp";
 import expertAvatarAlexeyPetrov from "@/imports/avatar_04.webp";
 import expertAvatarYuliaBelova from "@/imports/avatar_05.webp";
 import { P_AVATARS, UNSPLASH } from "@/app/data/constants";
+import { demoClubAssets, demoClubs } from "@/app/data/demoClubs";
 import { demoCommunity, demoCommunityAssets } from "@/app/data/demoCommunity";
 import { homeFeedPlans, normalizePlanTag } from "@/app/data/plans";
 import type { PlanId, PlanTag } from "@/app/types";
@@ -253,6 +254,28 @@ export const experts: ExpertProfile[] = [
       isMe: false,
       isDemo: true,
       tags: [...person.tags],
+    };
+  }),
+  ...demoClubs.clubs.map((club) => {
+    const avatarUrl = demoClubAssets.avatars[club.avatar];
+    const firstPlan = club.plans[0];
+    const coverUrl = firstPlan ? demoClubAssets.covers[firstPlan.cover] : avatarUrl;
+    const followerIds = new Set(club.plans.flatMap((plan) => plan.participantIds));
+    return {
+      id: club.id,
+      telegramId: 0,
+      name: club.name,
+      bio: club.bio,
+      photoUrl: avatarUrl,
+      photoUrls: [avatarUrl],
+      coverUrls: [coverUrl],
+      followersCount: followerIds.size,
+      followingCount: 0,
+      plansCount: club.plans.length,
+      isFollowedByMe: false,
+      isMe: false,
+      isDemo: true,
+      tags: [...club.tags],
     };
   }),
 ];

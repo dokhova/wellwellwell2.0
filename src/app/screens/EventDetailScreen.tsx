@@ -303,7 +303,7 @@ export function EventDetailScreen({
   title, coverSrc, backgroundGradient, authorName, authorAvatarUrl, authorVerified,
   readTime, badgeDate, paragraphs, meta, format = "offline", duration, tag, schedule, shareUrl,
   participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, planId, onJoin, onLeave, onProfile,
-  authorId, onMessageAuthor, isAuthorFollowedByMe = false, onToggleAuthorFollow, participantItems, onMessageParticipant,
+  externalJoinUrl, authorId, onMessageAuthor, isAuthorFollowedByMe = false, onToggleAuthorFollow, participantItems, onMessageParticipant,
   currentAuthor, canDelete = false, onDelete, canEdit = false, onEdit, canHide = false, onHide, refreshKey, onProfileOpen, profileById = {},
 }: EventDetailProps) {
   void authorVerified;
@@ -422,14 +422,19 @@ export function EventDetailScreen({
     return endTime ? `${startTime} — ${endTime}` : startTime || meta.time;
   };
 
+  const isWeeklyExactSchedule = (schedule?.mode === "exact" || schedule?.timeMode === "exact") && schedule?.repeat?.type === "weekly";
   const schedulePrimary =
-    schedule?.mode === "partOfDay" || schedule?.timeMode === "partOfDay"
+    isWeeklyExactSchedule
+      ? weekdayLabel(schedule.weekdays) || exactDateLabel(schedule.start)
+      : schedule?.mode === "partOfDay" || schedule?.timeMode === "partOfDay"
       ? `${weekdayLabel(schedule.weekdays) || "Дни не выбраны"} · ${schedule.partOfDay ? PART_OF_DAY_RANGES[schedule.partOfDay].label : "Время суток"}`
       : schedule?.mode === "exact" || schedule?.timeMode === "exact"
         ? exactDateLabel(schedule.start)
         : meta.date;
   const scheduleSecondary =
-    schedule?.mode === "exact" || schedule?.timeMode === "exact"
+    isWeeklyExactSchedule
+      ? exactTimeLabel(schedule.start)
+      : schedule?.mode === "exact" || schedule?.timeMode === "exact"
       ? [exactTimeLabel(schedule.start, typeof schedule.end === "string" ? schedule.end : undefined), repeatEndDateLabel() ? `до ${repeatEndDateLabel()}` : ""].filter(Boolean).join(" · ")
       : "";
 
@@ -439,6 +444,15 @@ export function EventDetailScreen({
   };
 
   const joinPlan = () => {
+    if (externalJoinUrl) {
+      const telegramOpenLink = window.Telegram?.WebApp?.openLink;
+      if (telegramOpenLink) {
+        telegramOpenLink(externalJoinUrl);
+      } else {
+        window.open(externalJoinUrl, "_blank");
+      }
+      return;
+    }
     setJoined(true);
     if (planId !== undefined) onJoin?.(planId);
     showJoinToast();
