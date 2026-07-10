@@ -50,6 +50,7 @@ export const getPlanWeekItems = (plans: HomeFeedPlan[]) => {
         const day = calendarDays.find((item) => item.dateKey === startKey);
         return day ? [{
           plan,
+          date: day.date,
           dateKey: day.dateKey,
           dayIndex: day.dayIndex,
           dayNumber: day.dayNumber,
@@ -73,6 +74,7 @@ export const getPlanWeekItems = (plans: HomeFeedPlan[]) => {
 
       return matchingDays.map((day) => ({
         plan,
+        date: day.date,
         dateKey: day.dateKey,
         dayIndex: day.dayIndex,
         dayNumber: day.dayNumber,
