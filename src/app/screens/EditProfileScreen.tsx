@@ -198,7 +198,7 @@ export function EditProfileScreen({
             <span className="text-[13px] leading-4 text-muted-foreground">Обложки</span>
             <span className="text-[12px] leading-4 text-muted-foreground">{visibleCoverUrls.length}/5</span>
           </div>
-          <div className="relative aspect-[3/4] w-full max-h-[45dvh] overflow-hidden rounded-xl bg-gray-200">
+          <div className="relative aspect-[3/4] w-44 overflow-hidden rounded-xl bg-gray-200">
             <div ref={coverEmblaRef} className="h-full overflow-hidden">
               <div className="flex h-full">
                 {visibleCoverUrls.map((coverUrl, index) => {
@@ -207,24 +207,24 @@ export function EditProfileScreen({
                     <div key={`${coverUrl}-${index}`} className="relative min-w-0 flex-[0_0_100%]">
                       <img loading="lazy" decoding="async" src={resolveCoverUrl(coverUrl)} alt="" className="h-full w-full object-cover" />
                       {isDefaultCover && (
-                        <span className="absolute inset-x-4 bottom-4 rounded-full bg-black/45 px-3 py-1.5 text-center text-[12px] font-medium text-white">
+                        <span className="absolute inset-x-2 bottom-3 rounded-full bg-black/45 px-2 py-1 text-center text-[10px] font-medium leading-3 text-white">
                           Обложка по умолчанию
                         </span>
                       )}
                       <button
                         onClick={() => setCoverUrls((current) => (current ?? [...DEFAULT_COVER_URLS]).filter((_, coverIndex) => coverIndex !== index))}
-                        className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-white active:opacity-85"
+                        className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white active:opacity-85"
                         aria-label="Удалить обложку"
                       >
-                        <X size={18} strokeWidth={2.2} />
+                        <X size={15} strokeWidth={2.2} />
                       </button>
                     </div>
                   );
                 })}
                 {showAddCoverSlide && (
-                  <div className="min-w-0 flex-[0_0_100%] p-3">
-                    <label className={`flex h-full w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted text-[14px] font-semibold text-foreground ${uploadProgress === null ? "active:opacity-85" : "cursor-not-allowed opacity-50"}`}>
-                      <Plus size={24} strokeWidth={2.2} />
+                  <div className="min-w-0 flex-[0_0_100%] p-2">
+                    <label className={`flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border bg-muted text-[12px] font-semibold text-foreground ${uploadProgress === null ? "active:opacity-85" : "cursor-not-allowed opacity-50"}`}>
+                      <Plus size={20} strokeWidth={2.2} />
                       Добавить
                       <input type="file" accept="image/*" disabled={uploadProgress !== null} className="hidden" onChange={handleImagePick("cover")} />
                     </label>
@@ -234,11 +234,11 @@ export function EditProfileScreen({
             </div>
             {uploadTarget === "cover" && uploadProgress !== null && (
               <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/60">
-                <span className="text-[22px] font-semibold text-white">{uploadProgress}%</span>
+                <span className="text-[17px] font-semibold text-white">{uploadProgress}%</span>
               </div>
             )}
             {coverSlideCount > 1 && (
-              <div className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 gap-1.5">
+              <div className="absolute bottom-2 left-1/2 z-10 flex -translate-x-1/2 gap-1.5">
                 {Array.from({ length: coverSlideCount }).map((_, index) => (
                   <button
                     key={index}
