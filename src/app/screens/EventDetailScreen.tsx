@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Calendar, Check, ChevronRight, Copy, Edit3, Eye, Image as ImageIcon, MapPin, Plus, Share2, Trash2, Users, Video, X } from "lucide-react";
+import { ArrowLeft, Calendar, Check, ChevronRight, Copy, Edit3, Eye, Image as ImageIcon, MapPin, Plus, Share2, Tag, Trash2, Users, Video, X } from "lucide-react";
 import type { EventDetailProps } from "@/app/types";
 import { normalizePlanTag, PLAN_TAG_GRADIENTS, PLAN_TAG_LABELS } from "@/app/data/plans";
 import { ALL_DAYS, GREEN, PART_OF_DAY_RANGES, UNSPLASH, WEEKDAY_VALUES } from "@/app/data/constants";
@@ -437,6 +437,14 @@ export function EventDetailScreen({
       : schedule?.mode === "exact" || schedule?.timeMode === "exact"
       ? [exactTimeLabel(schedule.start, typeof schedule.end === "string" ? schedule.end : undefined), repeatEndDateLabel() ? `до ${repeatEndDateLabel()}` : ""].filter(Boolean).join(" · ")
       : "";
+  const exactScheduleWeekday = (() => {
+    if (isWeeklyExactSchedule || !(schedule?.mode === "exact" || schedule?.timeMode === "exact") || !schedule.start) return "";
+    const date = new Date(schedule.start);
+    if (Number.isNaN(date.getTime())) return "";
+    const label = date.toLocaleDateString("ru-RU", { weekday: "long" });
+    return label ? `${label[0].toUpperCase()}${label.slice(1)}` : "";
+  })();
+  const scheduleDetailsSecondary = [exactScheduleWeekday, scheduleSecondary || duration].filter(Boolean).join(" · ");
 
   const showJoinToast = () => {
     setToast("Добавлено в Мои планы");
@@ -602,6 +610,35 @@ export function EventDetailScreen({
     setCopied(true);
   };
 
+  const inviteFriends = async () => {
+    if (!shareUrl) return;
+    await copyText(shareUrl);
+    const trackedPlanId = planId === undefined ? undefined : String(planId);
+
+    if (typeof navigator.share === "function") {
+      if (trackedPlanId) track("plan_invite_clicked", { plan_id: trackedPlanId, method: "native" });
+      try {
+        await navigator.share({ title, url: shareUrl });
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          console.error("Native plan share failed", error);
+        }
+      }
+      return;
+    }
+
+    const openTelegramLink = window.Telegram?.WebApp?.openTelegramLink;
+    if (openTelegramLink) {
+      if (trackedPlanId) track("plan_invite_clicked", { plan_id: trackedPlanId, method: "telegram" });
+      openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(title)}`);
+      return;
+    }
+
+    if (trackedPlanId) track("plan_invite_clicked", { plan_id: trackedPlanId, method: "copy" });
+    setCopied(true);
+    setSheet("share");
+  };
+
   return (
     <div className="relative flex h-full flex-col bg-surface">
       {toast && (
@@ -620,7 +657,7 @@ export function EventDetailScreen({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-[calc(88px+env(safe-area-inset-bottom))]">
         <div className="px-4 pb-4">
           <div className="relative aspect-[4/5] overflow-hidden rounded-xl" style={{ background: backgroundGradient ?? PLAN_TAG_GRADIENTS.other }}>
             {coverSrc && (
@@ -715,17 +752,6 @@ export function EventDetailScreen({
             </div>
           </div>
 
-          {!isOwnPlan && (
-            <button
-              onClick={toggleJoin}
-              className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl border text-[15px] active:opacity-90"
-              style={joined ? { backgroundColor: "var(--surface)", borderColor: "var(--border)", color: "var(--foreground)", fontWeight: 500 } : { backgroundColor: GREEN, borderColor: GREEN, color: "#fff", fontWeight: 600 }}
-            >
-              {joined ? <Check size={18} strokeWidth={2.4} color={GREEN} /> : <Plus size={18} strokeWidth={2.3} color="#fff" />}
-              {joined ? "Вы участвуете" : "Присоединиться"}
-            </button>
-          )}
-
           <div className="mt-4 border-t border-border pt-4">
             <div className="mb-4 flex items-center justify-between gap-3">
               <button onClick={organizerAction} className="flex min-w-0 items-center gap-2.5 text-left active:opacity-80">
@@ -777,73 +803,120 @@ export function EventDetailScreen({
               )}
             </div>
 
-            <div className="space-y-3.5 pb-5">
-              <div className="flex items-start gap-3">
-                <Calendar size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
-                <div>
-                  <p className="text-[14px] leading-5 text-foreground">{schedulePrimary}</p>
-                  {(scheduleSecondary || duration) && <p className="text-[13px] leading-4 text-muted-foreground">{scheduleSecondary || duration}</p>}
-                </div>
-              </div>
-
-              {format === "offline" && meta.location && (
-                <div className="flex items-start gap-3">
-                  <MapPin size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
-                  <div>
-                    <p className="text-[14px] leading-5 text-foreground">{meta.location}</p>
-                    {meta.locationSub && <p className="text-[13px] leading-4 text-muted-foreground">{meta.locationSub}</p>}
+            <div className="pb-5">
+              <h2 className="mb-3 text-[16px] font-semibold text-foreground">Детали плана</h2>
+              <div className="overflow-hidden rounded-xl bg-card">
+                <div className="flex items-start gap-3 border-b border-border px-4 py-3">
+                  <Tag size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] leading-5 text-foreground">{tagLabel}</p>
+                    <p className="text-[13px] leading-4 text-muted-foreground">Категория</p>
                   </div>
                 </div>
-              )}
 
-              <div className="flex items-start gap-3">
-                <Video size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[14px] leading-5 text-foreground">{formatLabel}</p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setSheet("participants")}
-                className="flex w-full items-center justify-between gap-3 text-left active:opacity-85"
-              >
-                <div className="flex items-center gap-3">
-                  <Users size={20} strokeWidth={1.8} className="flex-shrink-0 text-muted-foreground" />
-                  <span className="text-[14px] text-foreground">{pluralizeParticipants(participants.length)}</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="flex -space-x-2">
-                    {participants.slice(0, 3).map((participant, i) => (
-                      participant.avatarUrl ? (
-                        <button
-                          key={participant.id ?? i}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onProfileOpen?.(participant.id);
-                          }}
-                          className="h-7 w-7 rounded-full active:opacity-80"
-                          aria-label="Открыть профиль"
-                        >
-                          <img loading="lazy" decoding="async" src={participant.avatarUrl} alt="" className="h-7 w-7 rounded-full border object-cover" style={{ borderColor: "var(--surface)" }} />
-                        </button>
-                      ) : (
-                        <span key={participant.id ?? i} className="h-7 w-7 rounded-full border bg-secondary" style={{ borderColor: "var(--surface)" }} />
-                      )
-                    ))}
-                  </div>
-                  {overflowLabel && (
-                    <div className="-ml-2 flex h-7 w-7 items-center justify-center rounded-full bg-muted">
-                      <span className="text-[10px] font-bold text-foreground">{overflowLabel}</span>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSheet("participants")}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") setSheet("participants");
+                  }}
+                  className="flex w-full items-center justify-between gap-3 border-b border-border px-4 py-3 text-left active:opacity-85"
+                >
+                  <div className="flex min-w-0 items-start gap-3">
+                    <Users size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
+                    <div className="min-w-0">
+                      <p className="text-[14px] leading-5 text-foreground">{pluralizeParticipants(participants.length)}</p>
+                      <p className="text-[13px] leading-4 text-muted-foreground">Участники</p>
                     </div>
-                  )}
+                  </div>
+                  <div className="flex flex-shrink-0 items-center">
+                    <div className="flex -space-x-2">
+                      {participants.slice(0, 3).map((participant, i) => (
+                        participant.avatarUrl ? (
+                          <button
+                            key={participant.id ?? i}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onProfileOpen?.(participant.id);
+                            }}
+                            className="h-7 w-7 rounded-full active:opacity-80"
+                            aria-label="Открыть профиль"
+                          >
+                            <img loading="lazy" decoding="async" src={participant.avatarUrl} alt="" className="h-7 w-7 rounded-full border object-cover" style={{ borderColor: "var(--surface)" }} />
+                          </button>
+                        ) : (
+                          <span key={participant.id ?? i} className="h-7 w-7 rounded-full border bg-secondary" style={{ borderColor: "var(--surface)" }} />
+                        )
+                      ))}
+                    </div>
+                    {overflowLabel && (
+                      <div className="-ml-2 flex h-7 w-7 items-center justify-center rounded-full bg-muted">
+                        <span className="text-[10px] font-bold text-foreground">{overflowLabel}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </button>
+
+                <div className="flex items-start gap-3 border-b border-border px-4 py-3">
+                  <Calendar size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] leading-5 text-foreground">{schedulePrimary}</p>
+                    {scheduleDetailsSecondary && <p className="text-[13px] leading-4 text-muted-foreground">{scheduleDetailsSecondary}</p>}
+                  </div>
+                </div>
+
+                {format === "offline" && meta.location && (
+                  <div className="flex items-start gap-3 border-b border-border px-4 py-3">
+                    <MapPin size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[14px] leading-5 text-foreground">{meta.location}</p>
+                      <p className="text-[13px] leading-4 text-muted-foreground">{meta.locationSub || "Место"}</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-start gap-3 px-4 py-3">
+                  <Video size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] leading-5 text-foreground">{formatLabel}</p>
+                    <p className="text-[13px] leading-4 text-muted-foreground">Формат</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} currentAuthor={currentAuthor} planAuthorId={authorId} onDelete={removeComment} onProfileOpen={onProfileOpen} mentionCandidates={mentionCandidates} onMentionSelected={(mention) => setDraftMentions((items) => [...items.filter((item) => item.id !== mention.id), mention])} profileById={{ ...commentAuthorProfiles, ...profileById }} photoPreviewUrl={commentPhotoPreviewUrl} photoUploadProgress={commentPhotoUploadProgress} photoUrl={commentPhotoUrl} onPhotoSelected={(file) => { void selectCommentPhoto(file); }} onPhotoRemoved={removeCommentPhoto} />
       </div>
+
+      {(shareUrl || !isOwnPlan) && (
+        <div className="sticky bottom-0 z-30 flex flex-shrink-0 gap-2.5 border-t border-border bg-surface px-4 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
+          {shareUrl && (
+            <button
+              type="button"
+              onClick={() => { void inviteFriends(); }}
+              className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border bg-transparent px-3 text-[15px] font-semibold active:opacity-90"
+              style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+            >
+              <Share2 size={18} strokeWidth={2.2} />
+              <span className="truncate">Пригласить друзей</span>
+            </button>
+          )}
+          {!isOwnPlan && (
+            <button
+              type="button"
+              onClick={toggleJoin}
+              className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border px-3 text-[15px] active:opacity-90"
+              style={joined ? { backgroundColor: "var(--surface)", borderColor: "var(--border)", color: "var(--foreground)", fontWeight: 500 } : { backgroundColor: GREEN, borderColor: GREEN, color: "#fff", fontWeight: 600 }}
+            >
+              {joined ? <Check size={18} strokeWidth={2.4} color={GREEN} /> : <Plus size={18} strokeWidth={2.3} color="#fff" />}
+              <span className="truncate">{joined ? "Вы участвуете" : "Присоединиться"}</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {sheet === "participants" && (
         <HomeSheet title="Участники" onClose={() => setSheet(null)}>

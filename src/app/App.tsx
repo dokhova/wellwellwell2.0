@@ -13,6 +13,7 @@ import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/st
 import { deleteUserMessages, fetchUserThreadMessages, makeThreadId, sendMessage, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
 import { createPlanRemote, deletePlanParticipant, deletePlanParticipantsForPlans, deletePlanRemote, deletePlansByAuthor, deleteUserPlanParticipants, fetchJoinedCounts, fetchParticipants, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, updatePlanRemote, upsertPlanParticipant } from "@/app/lib/api/plans";
 import { deleteCommentsByAuthor } from "@/app/lib/api/comments";
+import { deleteUserPlanProgress, fetchPlanProgressKeys, upsertPlanProgress } from "@/app/lib/api/planProgress";
 import { buildPlanStartAppUrl, getTelegramAuthDate, getTelegramStartParam, getTelegramUser, initTelegram, parsePlanStartParam } from "@/app/lib/telegram";
 import { checkBackendHealth } from "@/app/lib/health";
 import { identifyUser, track, type PlanViewSource } from "@/app/lib/analytics";
@@ -1317,6 +1318,31 @@ export default function App() {
   }, [checkedItemKeys, checkedItemsStorageKey]);
 
   useEffect(() => {
+    if (!currentUserId) return;
+    let cancelled = false;
+    const localKeys = readJson<string[]>(checkedItemsStorageKey, []);
+
+    void fetchPlanProgressKeys(currentUserId).then((remoteKeys) => {
+      if (cancelled) return;
+      const mergedKeys = Array.from(new Set([...remoteKeys, ...localKeys]));
+      setCheckedItemKeys(mergedKeys);
+      const remoteKeySet = new Set(remoteKeys);
+      void Promise.all(localKeys
+        .filter((key) => !remoteKeySet.has(key))
+        .map((key) => upsertPlanProgress(currentUserId, key, true)))
+        .catch((error) => {
+          console.error("Supabase plan progress migration failed", error);
+        });
+    }).catch((error) => {
+      console.error("Supabase plan progress fetch failed", error);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [checkedItemsStorageKey, currentUserId]);
+
+  useEffect(() => {
     writeJson(createdPlansStorageKey, createdPlans.map(sanitizePlan));
   }, [createdPlans, createdPlansStorageKey]);
 
@@ -1794,6 +1820,9 @@ export default function App() {
       await deleteUserPlanParticipants(currentUserId);
       await deletePlanParticipantsForPlans(authoredPlanIds);
       await deleteCommentsByAuthor(currentUserId);
+      await deleteUserPlanProgress(currentUserId).catch((error) => {
+        console.error("Supabase plan progress cleanup failed", error);
+      });
       await deleteUserMessages(currentUserId);
       await deleteUserFollows(currentUserId);
       await deletePlansByAuthor(currentUserId);
@@ -1810,6 +1839,9 @@ export default function App() {
     setCheckedItemKeys((keys) => {
       const checked = keys.includes(key);
       if (!checked) track("plan_check", { plan_id: planIdFromProgressKey(key) });
+      void upsertPlanProgress(currentUserId, key, !checked).catch((error) => {
+        console.error("Supabase plan progress update failed", error);
+      });
       return checked ? keys.filter((item) => item !== key) : [...keys, key];
     });
   };
@@ -1987,7 +2019,7 @@ export default function App() {
             onPlanOpen={(id) => openPlanEvent(id, "home")}
             onAuthorOpen={openExpertProfile}
             onMessagePeer={openChatWithPeer}
-            canMessageAuthor={(authorId) => authorId !== currentUserId && !isDemoProfileId(authorId)}
+            canMessageAuthor={(authorId) => authorId !== currentUserId && experts.find((profile) => profile.id === authorId)?.isDemo !== true}
             canHidePlan={canHidePlanFromHome}
             onHidePlan={hidePlanFromHome}
             initialScrollTop={homeScrollTopRef.current}
@@ -2285,7 +2317,7 @@ export default function App() {
               onLeave={(id) => removePlanFromMine(id, "single", planEventSource)}
               onProfile={() => feedPlan.author.id ? openExpertProfile(feedPlan.author.id) : setScreen("profile")}
               onProfileOpen={openExpertProfile}
-              onMessageAuthor={feedPlan.author.id === currentUserId || isDemoProfileId(feedPlan.author.id) ? undefined : (peer) => openChatWithPeer({ ...peer, id: feedPlan.author.id ?? peer.id })}
+              onMessageAuthor={feedPlan.author.id === currentUserId || authorProfile?.isDemo === true ? undefined : (peer) => openChatWithPeer({ ...peer, id: feedPlan.author.id ?? peer.id })}
               isAuthorFollowedByMe={isAuthorFollowedByMe}
               onToggleAuthorFollow={authorProfile && feedPlan.author.id !== currentUserId ? (nextFollowed) => toggleFollowing({
                 ...authorProfile,

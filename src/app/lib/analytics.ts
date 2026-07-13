@@ -13,6 +13,7 @@ type AnalyticsEventProps = {
   plan_join: { plan_id: string; source: PlanViewSource };
   plan_leave: { plan_id: string; source: PlanViewSource };
   plan_link_copied: { plan_id: string; screen: "feed" | "plan" };
+  plan_invite_clicked: { plan_id: string; method: "native" | "telegram" | "copy" };
   plan_check: { plan_id: string };
   comment_sent: { plan_id: string; mentions_count: number; has_photo: boolean };
   follow: { target_id: string; target_is_demo: boolean };

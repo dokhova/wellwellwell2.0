@@ -18,6 +18,7 @@ import clubRun14 from "@/imports/club-run-14.jpeg";
 import clubRun15 from "@/imports/club-run-15.jpeg";
 import clubShuAvatar from "@/imports/club-shu-avatar.jpg";
 import clubVitalikAvatar from "@/imports/club-vitalik-running-avatar.jpg";
+import { demoCommunity, demoCommunityAssets } from "@/app/data/demoCommunity";
 import type { ChatPeer, HomeFeedPlan, PlanTag, Schedule } from "@/app/types";
 
 const MOSCOW_OFFSET = "+03:00";
@@ -107,7 +108,6 @@ export const demoClubs = {
       name: "SHU RUN",
       avatar: "club-shu-avatar.jpg",
       isDemo: true,
-      disabled: true,
       tags: ["Бег"],
       bio: "SHU RUN™ — бренд современной технологичной одежды для бега, запущенный в 2023 году как новая линейка бренда SHU. Мы создаем функциональные куртки, тайтсы, шорты, лонгсливы, жилеты и аксессуары, которые разработаны для различных типов тренировок. В год бренд выпускает две коллекции — весенне-летнюю и осенне-зимнюю. Кроме того SHU RUN™ — это беговое сообщество с клубами в Санкт-Петербурге, Москве и Екатеринбурге.",
       plans: [
@@ -132,10 +132,9 @@ export const demoClubs = {
     },
     {
       id: "demo-club-03",
-      name: "Peak Runing Club",
+      name: "Peak Running Club",
       avatar: "club-peak-running-avatar.jpg",
       isDemo: true,
-      disabled: true,
       tags: ["Бег"],
       bio: "Беговой клуб на базе концептуального магазина Peak Moscow. Стараемся создать приятную атмосферу для бегунов с разным уровнем подготовки и сообщество, в котором люди хорошо проводят время. Пробежки проходят каждое воскресенье. Дистанция и темп регулярно меняются, их определяют заранее и анонсируют по четвергам в телеграм-канале магазина.",
       plans: [
@@ -206,6 +205,24 @@ export const activeDemoClubPlans = demoClubPlans.filter((plan) => {
 export const activeDemoClubPlanIds = new Set(activeDemoClubPlans.map((plan) => String(plan.id)));
 
 export const getDemoClubParticipantPeers = (planId: string): ChatPeer[] => {
-  void planId;
-  return [];
+  const clubId = demoClubs.clubs.find((club) => club.plans.some((plan) => plan.id === planId))?.id;
+  if (!clubId) return [];
+
+  const participantIdsByClub: Record<string, readonly string[]> = {
+    "demo-club-01": ["demo-01", "demo-02", "demo-03", "demo-04", "demo-05", "demo-06", "demo-07", "demo-08", "demo-09"],
+    "demo-club-02": ["demo-02", "demo-04", "demo-06", "demo-08", "demo-10", "demo-12"],
+    "demo-club-03": ["demo-01", "demo-03", "demo-05", "demo-07", "demo-09", "demo-11", "demo-12"],
+    "demo-club-04": ["demo-02", "demo-05", "demo-07", "demo-10", "demo-11"],
+    "demo-club-05": ["demo-01", "demo-02", "demo-03", "demo-04", "demo-05", "demo-06", "demo-07", "demo-08", "demo-09", "demo-10"],
+  };
+
+  return (participantIdsByClub[clubId] ?? [])
+    .map((id) => demoCommunity.people.find((person) => person.id === id))
+    .filter((person): person is typeof demoCommunity.people[number] => Boolean(person))
+    .map((person) => ({
+      id: person.id,
+      name: person.name,
+      avatarUrl: demoCommunityAssets.avatars[person.avatar],
+      isDemo: true,
+    }));
 };

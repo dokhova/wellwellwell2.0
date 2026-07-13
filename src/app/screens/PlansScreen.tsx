@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { HomeFeedPlan, PlanId, Screen } from "@/app/types";
 import { normalizePlanTag, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
 import { GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES } from "@/app/data/constants";
-import { getPlanWeekItems } from "@/app/lib/planProgress";
+import { getPlanPastItems, getPlanWeekItems } from "@/app/lib/planProgress";
 import { HomeSheet } from "@/app/components/HomeSheet";
 
 export function PlanListCard({
@@ -100,9 +100,11 @@ export function PlansScreen({
 }) {
   const isEmpty = participantPlans.length === 0;
   const [removingPlan, setRemovingPlan] = useState<HomeFeedPlan | null>(null);
+  const [activeTab, setActiveTab] = useState<"upcoming" | "past">("upcoming");
 
   const todayIndex = 0;
   const planItems = getPlanWeekItems(participantPlans);
+  const pastPlanItems = getPlanPastItems(participantPlans);
   const nextItem = planItems.find((item) => item.dayIndex >= todayIndex) ?? planItems[0];
 
   const getStatus = (progressKey: string, dayIndex: number) => {
@@ -147,8 +149,64 @@ export function PlansScreen({
         <div className="h-10 w-10" />
       </div>
 
+      <div className="flex flex-shrink-0 gap-1 border-b border-border bg-surface px-4 py-2">
+        {([
+          ["upcoming", "Предстоящие"],
+          ["past", "Прошедшие"],
+        ] as const).map(([value, label]) => {
+          const active = activeTab === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setActiveTab(value)}
+              className="h-9 flex-1 rounded-xl text-[14px] font-semibold transition-colors"
+              style={active ? { backgroundColor: GREEN_LIGHT, color: GREEN } : { color: "var(--muted-foreground)" }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        {isEmpty ? (
+        {activeTab === "past" ? (
+          pastPlanItems.length === 0 ? (
+            <div className="flex min-h-[420px] flex-col items-center justify-center rounded-xl bg-card px-6 text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full" style={{ backgroundColor: GREEN_LIGHT }}>
+                <CalendarPlus size={24} strokeWidth={1.9} color={GREEN} />
+              </div>
+              <p className="text-[17px] font-semibold text-foreground">Прошедших планов пока нет</p>
+              <p className="mt-2 text-[14px] leading-5 text-muted-foreground">Здесь появится история твоих планов</p>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {pastPlanItems.map((item) => {
+                const { plan, dateKey, dayIndex, dayNumber, progressKey } = item;
+                const done = checkedItemKeys.includes(progressKey);
+                const status = done ? "Выполнено" : "Пропущено";
+                const scheduleMeta = `${getTimeLabel(plan)} · ${status}`;
+                const itemDate = new Date(`${dateKey}T00:00:00`);
+                const monthLabel = Number.isNaN(itemDate.getTime())
+                  ? "Дата"
+                  : itemDate.toLocaleDateString("ru-RU", { month: "short" }).replace(".", "");
+                return (
+                  <div key={`${plan.id}-${dayIndex}`} className={`relative rounded-[16px] transition-colors duration-700 ${highlightedPlanId === plan.id ? "bg-secondary" : ""}`}>
+                    <PlanListCard
+                      plan={plan}
+                      dayNumber={dayNumber}
+                      monthLabel={monthLabel}
+                      scheduleMeta={scheduleMeta}
+                      done={done}
+                      onOpen={() => onPlanOpen(plan.id)}
+                      onToggle={() => onToggleCheck(progressKey)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )
+        ) : isEmpty ? (
           <div className="flex min-h-[420px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full" style={{ backgroundColor: GREEN_LIGHT }}>
               <CalendarPlus size={24} strokeWidth={1.9} color={GREEN} />

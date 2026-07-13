@@ -2,6 +2,7 @@ import type { HomeFeedPlan } from "@/app/types";
 
 export const PLAN_START_DATE = new Date();
 PLAN_START_DATE.setHours(0, 0, 0, 0);
+export const PAST_DAYS = 30;
 
 export const getDateKey = (date: Date) => date.toISOString().slice(0, 10);
 
@@ -14,6 +15,22 @@ export const calendarDays = Array.from({ length: 31 }, (_, index) => {
     date,
     dateKey: getDateKey(date),
     dayIndex: index,
+    dayNumber: date.getDate(),
+    monthName: date.toLocaleDateString("ru-RU", { month: "long" }),
+    weekday: jsDay === 0 ? 7 : jsDay,
+  };
+});
+
+export const pastCalendarDays = Array.from({ length: PAST_DAYS }, (_, index) => {
+  const dayIndex = index - PAST_DAYS;
+  const date = new Date(PLAN_START_DATE);
+  date.setDate(PLAN_START_DATE.getDate() + dayIndex);
+  const jsDay = date.getDay();
+
+  return {
+    date,
+    dateKey: getDateKey(date),
+    dayIndex,
     dayNumber: date.getDate(),
     monthName: date.toLocaleDateString("ru-RU", { month: "long" }),
     weekday: jsDay === 0 ? 7 : jsDay,
@@ -90,6 +107,64 @@ export const getPlanWeekItems = (plans: HomeFeedPlan[]) => {
       const bExactTime = b.plan.schedule.time ?? "";
 
       return a.sortKey - b.sortKey
+        || aTime - bTime
+        || aExactTime.localeCompare(bExactTime)
+        || (sourceOrder.get(a.plan.id) ?? 0) - (sourceOrder.get(b.plan.id) ?? 0);
+    });
+};
+
+export const getPlanPastItems = (plans: HomeFeedPlan[]) => {
+  const sourceOrder = new Map(plans.map((plan, index) => [plan.id, index]));
+  const partOfDayOrder: Record<string, number> = { morning: 0, day: 1, noon: 1, evening: 2 };
+
+  return plans
+    .flatMap((plan) => {
+      const startKey = getScheduleStartKey(plan.schedule.start);
+      const endKey = getScheduleEndKey(plan, startKey);
+      if (plan.schedule.repeat?.type === "none") {
+        const day = pastCalendarDays.find((item) => item.dateKey === startKey);
+        return day ? [{
+          plan,
+          date: day.date,
+          dateKey: day.dateKey,
+          dayIndex: day.dayIndex,
+          dayNumber: day.dayNumber,
+          monthName: day.monthName,
+          sortKey: day.dayIndex,
+          progressKey: `${day.dateKey}:${plan.id}`,
+        }] : [];
+      }
+
+      const startDay = startKey ? pastCalendarDays.find((day) => day.dateKey === startKey) : null;
+      const weekdays = plan.schedule.weekdays.length
+        ? plan.schedule.weekdays
+        : plan.schedule.repeat?.type === "days" && startKey
+          ? []
+          : [startDay?.weekday ?? pastCalendarDays[0].weekday];
+      const matchingDays = pastCalendarDays.filter((day) =>
+        (weekdays.length === 0 || weekdays.includes(day.weekday))
+        && (!startKey || day.dateKey >= startKey)
+        && (!endKey || day.dateKey <= endKey)
+      );
+
+      return matchingDays.map((day) => ({
+        plan,
+        date: day.date,
+        dateKey: day.dateKey,
+        dayIndex: day.dayIndex,
+        dayNumber: day.dayNumber,
+        monthName: day.monthName,
+        sortKey: day.dayIndex,
+        progressKey: `${day.dateKey}:${plan.id}`,
+      }));
+    })
+    .sort((a, b) => {
+      const aTime = a.plan.schedule.partOfDay ? partOfDayOrder[a.plan.schedule.partOfDay] ?? 3 : 3;
+      const bTime = b.plan.schedule.partOfDay ? partOfDayOrder[b.plan.schedule.partOfDay] ?? 3 : 3;
+      const aExactTime = a.plan.schedule.time ?? "";
+      const bExactTime = b.plan.schedule.time ?? "";
+
+      return b.sortKey - a.sortKey
         || aTime - bTime
         || aExactTime.localeCompare(bExactTime)
         || (sourceOrder.get(a.plan.id) ?? 0) - (sourceOrder.get(b.plan.id) ?? 0);
