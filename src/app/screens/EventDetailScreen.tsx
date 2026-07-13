@@ -610,33 +610,35 @@ export function EventDetailScreen({
     setCopied(true);
   };
 
-  const inviteFriends = async () => {
+  const inviteFriends = () => {
     if (!shareUrl) return;
-    await copyText(shareUrl);
-    const trackedPlanId = planId === undefined ? undefined : String(planId);
+    void copyText(shareUrl);
+    if (planId !== undefined) {
+      track("plan_invite_clicked", {
+        plan_id: String(planId),
+        method: typeof navigator.share === "function" ? "native" : "fallback",
+      });
+    }
+
+    const openShareFallback = () => {
+      const openTelegramLink = window.Telegram?.WebApp?.openTelegramLink;
+      if (openTelegramLink) {
+        openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(title)}`);
+        return;
+      }
+      setCopied(true);
+      setSheet("share");
+    };
 
     if (typeof navigator.share === "function") {
-      if (trackedPlanId) track("plan_invite_clicked", { plan_id: trackedPlanId, method: "native" });
-      try {
-        await navigator.share({ title, url: shareUrl });
-      } catch (error) {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          console.error("Native plan share failed", error);
-        }
-      }
+      void navigator.share({ title, url: shareUrl }).catch((error: unknown) => {
+        if (error && typeof error === "object" && "name" in error && error.name === "AbortError") return;
+        openShareFallback();
+      });
       return;
     }
 
-    const openTelegramLink = window.Telegram?.WebApp?.openTelegramLink;
-    if (openTelegramLink) {
-      if (trackedPlanId) track("plan_invite_clicked", { plan_id: trackedPlanId, method: "telegram" });
-      openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(title)}`);
-      return;
-    }
-
-    if (trackedPlanId) track("plan_invite_clicked", { plan_id: trackedPlanId, method: "copy" });
-    setCopied(true);
-    setSheet("share");
+    openShareFallback();
   };
 
   return (
@@ -896,23 +898,23 @@ export function EventDetailScreen({
           {shareUrl && (
             <button
               type="button"
-              onClick={() => { void inviteFriends(); }}
-              className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border bg-transparent px-3 text-[15px] font-semibold active:opacity-90"
+              onClick={inviteFriends}
+              className="flex h-12 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl border bg-transparent px-2 text-[14px] font-semibold active:opacity-90"
               style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
             >
               <Share2 size={18} strokeWidth={2.2} />
-              <span className="truncate">Пригласить друзей</span>
+              <span className="min-w-0 whitespace-nowrap">{isOwnPlan ? "Пригласить друзей" : "Пригласить"}</span>
             </button>
           )}
           {!isOwnPlan && (
             <button
               type="button"
               onClick={toggleJoin}
-              className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border px-3 text-[15px] active:opacity-90"
+              className="flex h-12 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl border px-2 text-[14px] active:opacity-90"
               style={joined ? { backgroundColor: "var(--surface)", borderColor: "var(--border)", color: "var(--foreground)", fontWeight: 500 } : { backgroundColor: GREEN, borderColor: GREEN, color: "#fff", fontWeight: 600 }}
             >
               {joined ? <Check size={18} strokeWidth={2.4} color={GREEN} /> : <Plus size={18} strokeWidth={2.3} color="#fff" />}
-              <span className="truncate">{joined ? "Вы участвуете" : "Присоединиться"}</span>
+              <span className="min-w-0 whitespace-nowrap">{joined ? "Вы участвуете" : "Присоединиться"}</span>
             </button>
           )}
         </div>
