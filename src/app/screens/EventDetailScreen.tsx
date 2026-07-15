@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowUp, Bookmark, CheckSquare, ChevronRight, Copy, Edit3, Eye, Heart, MessageCircle, Paperclip, Plus, Repeat2, Share2, Trash2, UserPlus, Users, X } from "lucide-react";
 import type { EventDetailProps } from "@/app/types";
 import { normalizePlanTag, PLAN_TAG_LABELS } from "@/app/data/plans";
@@ -14,7 +14,7 @@ type MentionCandidate = { id: string; name: string; avatarUrl: string | null };
 type LocalComment = { id: string; authorId: string | null; author: string; avatarUrl: string | null; time: string; text: string; photoUrl: string | null; parentId: string | null; mentionedUserIds: string[]; persisted: boolean };
 
 const MENTION_REGEX = /@\[([^\]]+)\]\(([^)]+)\)/g;
-const COVER_MASK = "linear-gradient(180deg, #000 0%, #000 52%, rgba(0,0,0,0.96) 60%, rgba(0,0,0,0.85) 68%, rgba(0,0,0,0.68) 76%, rgba(0,0,0,0.45) 84%, rgba(0,0,0,0.22) 91%, rgba(0,0,0,0.07) 96%, transparent 100%)";
+const COVER_MASK = "linear-gradient(180deg, #000 0%, #000 45%, transparent 100%)";
 type DraftMention = { id: string; name: string };
 
 const formatCommentTime = (value: string) => {
@@ -209,7 +209,7 @@ function CommentsBlock({
   return (
     <section className="px-4 pb-8 pt-6">
       <h3 className="mb-3 text-[12px] font-medium uppercase tracking-[0.08em]" style={{ color: PLAN_DARK.textSecondary }}>{comments.length} комментариев</h3>
-      <div className="rounded-xl" style={{ background: PLAN_DARK.card }}>
+      <div className="rounded-[14px]" style={{ background: PLAN_DARK.card }}>
         <div className="max-h-[60vh] space-y-5 overflow-y-auto p-4">
           {roots.map((item) => {
             const replies = repliesByRoot[item.id] ?? [];
@@ -336,6 +336,11 @@ export function EventDetailScreen({
   const [sheet, setSheet] = useState<"participants" | "profile" | "share" | "photos" | null>(null);
   const [subscribed, setSubscribed] = useState(isAuthorFollowedByMe);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [locationExpanded, setLocationExpanded] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [visiblePhotoIndex, setVisiblePhotoIndex] = useState(0);
+  const viewerTrackRef = useRef<HTMLDivElement | null>(null);
+  const viewerSlideRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [comment, setComment] = useState("");
   const [commentPhotoUrl, setCommentPhotoUrl] = useState<string | null>(null);
   const [commentPhotoPreviewUrl, setCommentPhotoPreviewUrl] = useState<string | null>(null);
@@ -386,7 +391,6 @@ export function EventDetailScreen({
     : "";
   const partOfDayLabel = schedule?.partOfDay ? PART_OF_DAY_RANGES[schedule.partOfDay].label : "";
   const startTimeOnly = schedule?.time || (startDate && !Number.isNaN(startDate.getTime()) ? startDate.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : meta.time);
-  const addressParts = meta.location.split(",").map((part) => part.trim()).filter(Boolean);
   const levelConfig = level ? {
     well: { title: "Well", subtitle: "Без подготовки", color: PLAN_DARK.levelWell, bars: 1 },
     veryWell: { title: "Very well", subtitle: "Базовая подготовка", color: PLAN_DARK.levelVeryWell, bars: 2 },
@@ -396,6 +400,17 @@ export function EventDetailScreen({
   useEffect(() => () => {
     if (commentPhotoPreviewUrl) URL.revokeObjectURL(commentPhotoPreviewUrl);
   }, [commentPhotoPreviewUrl]);
+
+  useLayoutEffect(() => {
+    if (viewerIndex === null) return;
+    setVisiblePhotoIndex(viewerIndex);
+    viewerSlideRefs.current[viewerIndex]?.scrollIntoView({ behavior: "instant" as ScrollBehavior });
+  }, [viewerIndex]);
+
+  const openViewer = (index: number) => {
+    setVisiblePhotoIndex(index);
+    setViewerIndex(index);
+  };
 
   const removeCommentPhoto = () => {
     commentPhotoUploadToken.current += 1;
@@ -709,6 +724,24 @@ export function EventDetailScreen({
     }
   };
 
+  const actionCells = [
+    ...(!isOwnPlan ? [{
+      key: "join",
+      highlighted: joined,
+      node: <button type="button" onClick={toggleJoin} className="flex flex-1 flex-col items-center gap-1.5 rounded-xl py-3 text-[13px]" style={joined ? { color: PLAN_DARK.accent, background: "rgba(47,191,175,0.15)" } : undefined}>{joined ? <CheckSquare size={22} /> : <Plus size={22} />}<span>{joined ? "Участвую" : "Участвовать"}</span></button>,
+    }] : []),
+    {
+      key: "invite",
+      highlighted: false,
+      node: <button type="button" onClick={inviteFriends} className="flex flex-1 flex-col items-center gap-1.5 py-3 text-[13px]"><UserPlus size={22} /><span>Пригласить</span></button>,
+    },
+    {
+      key: "save",
+      highlighted: isSaved,
+      node: <button type="button" onClick={toggleSaved} className="flex flex-1 flex-col items-center gap-1.5 py-3 text-[13px]" style={{ color: isSaved ? PLAN_DARK.accent : undefined }}><Bookmark size={22} fill={isSaved ? PLAN_DARK.accent : "none"} /><span>{isSaved ? "Сохранено" : "Сохранить"}</span></button>,
+    },
+  ];
+
   return (
     <div className="relative flex h-full flex-col overflow-hidden" style={{ background: PLAN_DARK.bg, color: PLAN_DARK.text }}>
       {coverSrc && <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden"><img src={coverSrc} alt="" className="h-full w-full object-cover opacity-70" style={{ filter: "blur(60px)", transform: "scale(1.3)" }} /><div className="absolute inset-0 bg-black/60" /></div>}
@@ -774,10 +807,15 @@ export function EventDetailScreen({
             </div>
           </div>
           <div className="px-4">
-            <div className={`grid ${isOwnPlan ? "grid-cols-2" : "grid-cols-3"} py-5 text-center`}>
-              {!isOwnPlan && <button onClick={toggleJoin} className="flex flex-col items-center gap-1.5 rounded-xl py-3 text-[13px]" style={joined ? { color: PLAN_DARK.accent, background: "rgba(47,191,175,0.15)" } : undefined}>{joined ? <CheckSquare size={22} /> : <Plus size={22} />}<span>{joined ? "Участвую" : "Участвовать"}</span></button>}
-              <button onClick={inviteFriends} className={`flex flex-col items-center gap-1.5 py-3 text-[13px] ${isOwnPlan ? "" : "border-l"}`} style={{ borderColor: PLAN_DARK.divider }}><UserPlus size={22} /><span>Пригласить</span></button>
-              <button onClick={toggleSaved} className="flex flex-col items-center gap-1.5 border-l py-3 text-[13px]" style={{ borderColor: PLAN_DARK.divider, color: isSaved ? PLAN_DARK.accent : undefined }}><Bookmark size={22} fill={isSaved ? PLAN_DARK.accent : "none"} /><span>{isSaved ? "Сохранено" : "Сохранить"}</span></button>
+            <div className="flex py-5 text-center">
+              {actionCells.map((cell, index) => (
+                <Fragment key={cell.key}>
+                  {index > 0 && !actionCells[index - 1].highlighted && !cell.highlighted && (
+                    <div className="my-3 w-px self-stretch" style={{ backgroundColor: "rgba(255,255,255,0.12)" }} />
+                  )}
+                  {cell.node}
+                </Fragment>
+              ))}
             </div>
 
             <SectionTitle>Детали</SectionTitle>
@@ -788,7 +826,7 @@ export function EventDetailScreen({
                 <div className="flex items-center justify-between"><SmallLabel>{pluralizeParticipants(resolvedParticipantCount)}</SmallLabel><ChevronRight size={18} style={{ color: PLAN_DARK.textSecondary }} /></div>
                 <div className="mt-3 flex items-center -space-x-2">{participants.slice(0, 5).map((participant, index) => <AuthorAvatar key={participant.id} name={participant.name} avatarUrl={participant.avatarUrl} size={index === Math.min(2, participants.length - 1) ? 44 : 28} />)}{overflowLabel && <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-[10px] font-bold">{overflowLabel}</span>}</div>
               </button>
-              {format === "offline" && meta.location ? <DetailCard><SmallLabel>Где</SmallLabel><p className="mt-2 font-bold">{addressParts[0]}</p><p className="mt-1 text-[13px]" style={{ color: PLAN_DARK.textSecondary }}>{addressParts.slice(1).join(", ")}</p></DetailCard> : format === "online" ? <DetailCard><SmallLabel>Формат</SmallLabel><p className="mt-2 text-[24px] font-bold">Онлайн</p></DetailCard> : null}
+              {format === "offline" && meta.location ? <DetailCard><SmallLabel>Где</SmallLabel><button type="button" onClick={() => setLocationExpanded((value) => !value)} className="mt-2 w-full text-left"><p className="text-[15px] leading-[20px] text-white/90" style={locationExpanded ? undefined : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{meta.location}</p></button></DetailCard> : format === "online" ? <DetailCard><SmallLabel>Формат</SmallLabel><p className="mt-2 text-[24px] font-bold">Онлайн</p></DetailCard> : null}
             </div>
 
             {(levelConfig || distanceLabel || duration) && <><SectionTitle>Уровень</SectionTitle><div className="grid grid-cols-2 gap-2.5">{levelConfig && <DetailCard><SmallLabel>{levelConfig.subtitle}</SmallLabel><div className="mt-2 flex items-center justify-between text-[24px] font-bold"><span>{levelConfig.title}</span><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">{[0,1,2].map((bar) => <rect key={bar} x={2 + bar * 6} y={13 - bar * 4} width="4" height={5 + bar * 4} rx="1" fill={bar < levelConfig.bars ? levelConfig.color : "rgba(255,255,255,0.25)"} />)}</svg></div></DetailCard>}{(distanceLabel || duration) && <DetailCard><SmallLabel>{distanceLabel ? "Дистанция" : "Время"}</SmallLabel><p className="mt-2 text-[24px] font-bold">{distanceLabel || duration}</p></DetailCard>}</div></>}
@@ -804,7 +842,7 @@ export function EventDetailScreen({
       </div>
 
       {sheet === "participants" && (
-        <HomeSheet title="Участники" onClose={() => setSheet(null)}>
+        <HomeSheet title="Участники" onClose={() => setSheet(null)} fixedHeight="50vh">
           <div className="space-y-2">
             {participants.map((participant, i) => {
               return (
@@ -867,7 +905,7 @@ export function EventDetailScreen({
       {sheet === "photos" && (
         <HomeSheet title="Фото" onClose={() => setSheet(null)}>
           <div className="grid grid-cols-3 gap-1">
-            {photos.map((photo, index) => <img key={`${photo}-${index}`} src={photo} alt="" className="aspect-square w-full rounded-lg object-cover" />)}
+            {photos.map((photo, index) => <button key={`${photo}-${index}`} type="button" onClick={() => openViewer(index)} className="aspect-square w-full overflow-hidden rounded-lg"><img src={photo} alt="" className="h-full w-full object-cover" /></button>)}
           </div>
         </HomeSheet>
       )}
@@ -880,6 +918,36 @@ export function EventDetailScreen({
             <p className="mt-1 text-[14px] text-gray-400">Профиль организатора в работе.</p>
           </div>
         </HomeSheet>
+      )}
+
+      {viewerIndex !== null && (
+        <div className="fixed inset-0 z-50" style={{ background: "rgba(0,0,0,0.92)" }}>
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 12px)" }}>
+            <span className="text-[15px] font-medium text-white">{visiblePhotoIndex + 1} / {photos.length}</span>
+            <button type="button" onClick={() => setViewerIndex(null)} className="pointer-events-auto absolute right-4 flex h-10 w-10 items-center justify-center rounded-full text-white" style={{ top: "calc(env(safe-area-inset-top) + 8px)", background: "rgba(255,255,255,0.15)" }} aria-label="Закрыть просмотр фото"><X size={22} /></button>
+          </div>
+          <div
+            ref={viewerTrackRef}
+            className="flex h-full w-full overflow-x-auto"
+            style={{ scrollSnapType: "x mandatory" }}
+            onScroll={(event) => {
+              const { scrollLeft, clientWidth } = event.currentTarget;
+              if (clientWidth > 0) setVisiblePhotoIndex(Math.round(scrollLeft / clientWidth));
+            }}
+          >
+            {photos.map((photo, index) => (
+              <div
+                key={`${photo}-viewer-${index}`}
+                ref={(node) => { viewerSlideRefs.current[index] = node; }}
+                className="flex h-full items-center justify-center"
+                style={{ flex: "0 0 100%", scrollSnapAlign: "center" }}
+                onClick={() => setViewerIndex(null)}
+              >
+                <img src={photo} alt="" className="max-h-full max-w-full object-contain" onClick={(event) => event.stopPropagation()} />
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

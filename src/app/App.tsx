@@ -757,7 +757,9 @@ export default function App() {
       idsToConnections(followingIds, followedByMeIds),
       idsToConnections(followerIds, followedByMeIds),
     ]);
-    const ownerIsFollowedByMe = myFollowing.some((item) => item.id === ownerId) || dbFollowingIds.has(ownerId);
+    const ownerIsFollowedByMe = followedByMeIds.has(ownerId)
+      || myFollowing.some((item) => item.id === ownerId)
+      || dbFollowingIds.has(ownerId);
     const localFollowers = localDemoFollowersFor(ownerId);
     const followersWithMe = ownerIsFollowedByMe && !localFollowers.some((item) => item.id === currentUserId)
       ? [{ id: currentUserId, name: currentAuthor.name, avatarUrl: currentAuthor.avatarUrl, isFollowedByMe: false }, ...localFollowers]
@@ -2127,8 +2129,12 @@ export default function App() {
             };
         const isCurrentUserProfile = viewedProfile.id === currentUserId;
         const viewedRemotePlans = (profileRemotePlans[viewedProfile.id] ?? []).map((plan) => {
-          const joinedCount = joinedCounts[planKey(plan.id)];
-          return joinedCount === undefined ? plan : { ...plan, participantsLabel: `${1 + joinedCount} чел.` };
+          const presentation = getPlanParticipantPresentation(plan);
+          return {
+            ...plan,
+            participants: presentation.avatars,
+            participantsLabel: presentation.label,
+          };
         });
         const viewedPlans = isCurrentUserProfile
           ? myPlans
