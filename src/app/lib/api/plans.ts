@@ -24,8 +24,14 @@ const getStartsAt = (plan: HomeFeedPlan) => {
   return null;
 };
 
+const normalizePlanDuration = (plan: HomeFeedPlan): HomeFeedPlan => ({
+  ...plan,
+  duration: plan.duration?.trim() === "План" ? undefined : plan.duration,
+  items: plan.items?.map(normalizePlanDuration),
+});
+
 const mapPlanRows = (rows: PlanRow[] | null): HomeFeedPlan[] =>
-  (rows ?? []).map((row) => row.payload ? { ...row.payload, id: row.id, hidden: row.hidden ?? false } : null).filter((plan): plan is HomeFeedPlan => Boolean(plan));
+  (rows ?? []).map((row) => row.payload ? normalizePlanDuration({ ...row.payload, id: row.id, hidden: row.hidden ?? false }) : null).filter((plan): plan is HomeFeedPlan => Boolean(plan));
 
 export const createPlanRemote = async (plan: HomeFeedPlan): Promise<HomeFeedPlan | null> => {
   if (!supabase) return null;
@@ -96,7 +102,7 @@ export const fetchPlan = async (planId: string): Promise<HomeFeedPlan | null> =>
     .maybeSingle<PlanRow>();
 
   if (error) throw error;
-  return data?.payload ? { ...data.payload, id: data.id, hidden: data.hidden ?? false } : null;
+  return data?.payload ? normalizePlanDuration({ ...data.payload, id: data.id, hidden: data.hidden ?? false }) : null;
 };
 
 export const fetchPlansByAuthor = async (authorId: string): Promise<HomeFeedPlan[]> => {

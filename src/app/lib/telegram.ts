@@ -27,6 +27,27 @@ declare global {
 
 export const BOT_USERNAME = "WellWellWell_New_bot";
 
+const TELEGRAM_URL_PATTERN = /^(?:https?:\/\/)?t\.me\/|^tg:\/\//i;
+
+export const openExternalUrl = (url: string) => {
+  const trimmedUrl = url.trim();
+  const normalizedUrl = /^t\.me\//i.test(trimmedUrl) ? `https://${trimmedUrl}` : trimmedUrl;
+  if (!normalizedUrl) return;
+
+  const webApp = window.Telegram?.WebApp;
+  if (TELEGRAM_URL_PATTERN.test(normalizedUrl)) {
+    if (webApp?.openTelegramLink) {
+      webApp.openTelegramLink(normalizedUrl);
+      return;
+    }
+  } else if (/^https?:\/\//i.test(normalizedUrl) && webApp?.openLink) {
+    webApp.openLink(normalizedUrl);
+    return;
+  }
+
+  window.open(normalizedUrl, "_blank", "noopener,noreferrer");
+};
+
 const CAMPAIGN_PATTERN = /^[a-z0-9-]+$/;
 
 export const buildPlanStartAppUrl = (planId: string, campaign?: string) => {

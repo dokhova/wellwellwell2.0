@@ -21,6 +21,7 @@ type AnalyticsEventProps = {
   follow: { target_id: string; target_is_demo: boolean };
   message_sent: Record<string, never>;
   plan_created: { plan_id: string };
+  plan_description_format_applied: { format: "bold" | "italic" | "link" };
 };
 
 export type AnalyticsEvent = keyof AnalyticsEventProps;

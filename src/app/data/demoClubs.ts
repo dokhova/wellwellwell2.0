@@ -22,8 +22,8 @@ import { demoCommunity, demoCommunityAssets } from "@/app/data/demoCommunity";
 import type { ChatPeer, HomeFeedPlan, PlanTag, Schedule } from "@/app/types";
 
 const MOSCOW_OFFSET = "+03:00";
-const SHU_JOIN_URL = "https://web.telegram.org/k/#@shu_run_tracking_bot";
-const PEAK_JOIN_URL = "https://web.telegram.org/k/#@peakmoscow";
+const SHU_JOIN_URL = "https://t.me/shu_run_tracking_bot";
+const PEAK_JOIN_URL = "https://t.me/peakmoscow";
 
 type DemoClubPlan = {
   id: string;
@@ -98,8 +98,8 @@ const weeklyExactSchedule = (weekday: number, date: string, time: string): Sched
   repeat: { type: "weekly" },
 });
 
-const shuLongDescription = `Утренняя субботняя пробежка по улицам и набережным города — выбирайте свою дистанцию и темп в зависимости от уровня подготовки. Бежим двумя группами: 21 км в темпе 6:00 и 8 км в темпе 7:00.\n\nРегистрация: ${SHU_JOIN_URL}`;
-const shuCityDescription = `Совместная пробежка со Skuratov Running club по улицам города, скверам и паркам. Бежим группой 10 км в темпе 6:00-6:30 и 5 км в темпе 7:00.\n\nРегистрация: ${SHU_JOIN_URL}`;
+const shuLongDescription = `Утренняя субботняя пробежка по улицам и набережным города — выбирайте свою дистанцию и темп в зависимости от уровня подготовки. Бежим двумя группами: 21 км в темпе 6:00 и 8 км в темпе 7:00.\n\nРегистрация по [ссылке](${SHU_JOIN_URL})`;
+const shuCityDescription = `Совместная пробежка со Skuratov Running club по улицам города, скверам и паркам. Бежим группой 10 км в темпе 6:00-6:30 и 5 км в темпе 7:00.\n\nРегистрация по [ссылке](${SHU_JOIN_URL})`;
 const shuStoreAddress = "магазин SHU (Чистопрудный бульвар, 16)";
 const shuCoffeeAddress = "Skuratov на Большом Овчинниковском переулке, 16 (ТЦ Аркадия, метро Новокузнецкая)";
 const dynamoAddress = "Фан-шоп ФК «Динамо» (ТЦ «Арена Плаза»)";
@@ -145,7 +145,7 @@ export const demoClubs = {
       followerIds: ["demo-03", "demo-06", "demo-09", "demo-10"],
       bio: "Беговой клуб на базе концептуального магазина Peak Moscow. Стараемся создать приятную атмосферу для бегунов с разным уровнем подготовки и сообщество, в котором люди хорошо проводят время. Пробежки проходят каждое воскресенье. Дистанция и темп регулярно меняются, их определяют заранее и анонсируют по четвергам в телеграм-канале магазина.",
       plans: [
-        { id: "demo-club-plan-08", title: "Peak running", description: `Дистанция: 5 км / 8 км / 15 км. Темп: 6:30 / 6:00 / 5:30\n\nРегистрация: ${PEAK_JOIN_URL}`, cover: "club-run-08.jpeg", location: "PEAK, Петровский бульвар, 8/1", schedule: weeklyExactSchedule(7, "2026-07-12", "09:00"), timeDate: "12 июля, 09:00", externalJoinUrl: PEAK_JOIN_URL },
+        { id: "demo-club-plan-08", title: "Peak running", description: `Дистанция: 5 км / 8 км / 15 км. Темп: 6:30 / 6:00 / 5:30\n\nРегистрация по [ссылке](${PEAK_JOIN_URL})`, cover: "club-run-08.jpeg", location: "PEAK, Петровский бульвар, 8/1", schedule: weeklyExactSchedule(7, "2026-07-12", "09:00"), timeDate: "12 июля, 09:00", externalJoinUrl: PEAK_JOIN_URL },
       ],
     },
     {

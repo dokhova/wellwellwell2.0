@@ -187,7 +187,7 @@ export function PlansScreen({
               {savedPlans.map((plan) => {
                 const start = plan.schedule.start ? new Date(plan.schedule.start) : null;
                 const hasDate = Boolean(start && !Number.isNaN(start.getTime()));
-                return <PlanListCard key={String(plan.id)} plan={plan} dayNumber={hasDate ? start!.getDate() : "—"} monthLabel={hasDate ? start!.toLocaleDateString("ru-RU", { month: "short" }).replace(".", "") : "План"} scheduleMeta={plan.timeDate} showToggle={false} onOpen={() => onPlanOpen(plan.id)} />;
+                return <PlanListCard key={String(plan.id)} plan={plan} dayNumber={hasDate ? start!.getDate() : "—"} monthLabel={hasDate ? start!.toLocaleDateString("ru-RU", { month: "short" }).replace(".", "") : "—"} scheduleMeta={plan.timeDate} showToggle={false} onOpen={() => onPlanOpen(plan.id)} />;
               })}
             </div>
           )

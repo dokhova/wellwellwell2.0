@@ -9,6 +9,8 @@ import { fetchProfilesByIds } from "@/app/lib/api/profiles";
 import { track } from "@/app/lib/analytics";
 import { uploadPhoto } from "@/app/lib/api/storage";
 import { pluralizeParticipants } from "@/app/lib/pluralize";
+import { renderFormattedText } from "@/app/lib/formattedText";
+import { openExternalUrl } from "@/app/lib/telegram";
 
 type MentionCandidate = { id: string; name: string; avatarUrl: string | null };
 type LocalComment = { id: string; authorId: string | null; author: string; avatarUrl: string | null; time: string; text: string; photoUrl: string | null; parentId: string | null; mentionedUserIds: string[]; persisted: boolean };
@@ -104,11 +106,6 @@ function CommentText({ text, onProfileOpen }: { text: string; onProfileOpen?: (p
       ))}
     </p>
   );
-}
-
-function DescriptionText({ text }: { text: string }) {
-  const parts = text.split(/(https?:\/\/[^\s]+)/g);
-  return <>{parts.map((part, index) => /^https?:\/\//.test(part) ? <button key={`${part}-${index}`} type="button" onClick={() => { const openLink = window.Telegram?.WebApp?.openLink; if (openLink) openLink(part); else window.open(part, "_blank", "noopener,noreferrer"); }} className="inline break-all text-left underline underline-offset-2" style={{ color: PLAN_DARK.accent }}>{part}</button> : <span key={index}>{part}</span>)}</>;
 }
 
 function CommentsBlock({
@@ -329,7 +326,6 @@ export function EventDetailScreen({
   void authorVerified;
   void readTime;
   void badgeDate;
-  void externalJoinUrl;
   void backgroundGradient;
   const [joined, setJoined] = useState(Boolean(initiallyJoined));
   const [toast, setToast] = useState("");
@@ -349,6 +345,7 @@ export function EventDetailScreen({
   const [draftMentions, setDraftMentions] = useState<DraftMention[]>([]);
   const [comments, setComments] = useState<LocalComment[]>([]);
   const [likesByComment, setLikesByComment] = useState<Record<string, string[]>>({});
+  const likesMutationVersion = useRef(0);
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
   const [replyRootId, setReplyRootId] = useState<string | null>(null);
   const [commentFocusKey, setCommentFocusKey] = useState(0);
@@ -379,7 +376,7 @@ export function EventDetailScreen({
   const organizerAction = onProfile ?? (() => setSheet("profile"));
   const needsDescriptionClamp = description.length > 260;
   const formatLabel = format === "online" ? "Онлайн" : "Офлайн";
-  const tagLabel = tag ? PLAN_TAG_LABELS[normalizePlanTag(tag)] : "План";
+  const tagLabel = tag ? PLAN_TAG_LABELS[normalizePlanTag(tag)] : "Активность";
   const resolvedParticipantCount = participantCount ?? meta.participants ?? participants.length;
   const participantCountLabel = participantsLabel ?? `${resolvedParticipantCount} чел.`;
   const overflowLabel = meta.plusN.startsWith("+") ? meta.plusN : "";
@@ -396,6 +393,7 @@ export function EventDetailScreen({
     veryWell: { title: "Very well", subtitle: "Базовая подготовка", color: PLAN_DARK.levelVeryWell, bars: 2 },
     tooWell: { title: "Too well", subtitle: "Уверенная подготовка", color: PLAN_DARK.levelTooWell, bars: 3 },
   }[level] : null;
+  const validDuration = duration?.trim() && duration.trim() !== "План" ? duration.trim() : undefined;
 
   useEffect(() => () => {
     if (commentPhotoPreviewUrl) URL.revokeObjectURL(commentPhotoPreviewUrl);
@@ -500,7 +498,7 @@ export function EventDetailScreen({
     const label = date.toLocaleDateString("ru-RU", { weekday: "long" });
     return label ? `${label[0].toUpperCase()}${label.slice(1)}` : "";
   })();
-  const scheduleDetailsSecondary = [exactScheduleWeekday, scheduleSecondary || duration].filter(Boolean).join(" · ");
+  const scheduleDetailsSecondary = [exactScheduleWeekday, scheduleSecondary || validDuration].filter(Boolean).join(" · ");
 
   const showJoinToast = () => {
     setToast("Добавлено в Мои планы");
@@ -508,6 +506,7 @@ export function EventDetailScreen({
   };
 
   const joinPlan = () => {
+    if (externalJoinUrl) openExternalUrl(externalJoinUrl);
     setJoined(true);
     if (planId !== undefined) onJoin?.(planId);
     showJoinToast();
@@ -543,13 +542,12 @@ export function EventDetailScreen({
 
     const loadComments = async () => {
       try {
-        const [rows, likes] = await Promise.all([fetchComments(String(planId)), fetchCommentLikes(String(planId))]);
+        const rows = await fetchComments(String(planId));
         if (!cancelled) {
           setComments((localItems) => [
             ...localItems.filter((item) => !item.persisted),
             ...rows.map(mapCommentRow),
           ]);
-          setLikesByComment(Object.fromEntries(Array.from(new Set(likes.map((like) => like.comment_id))).map((commentId) => [commentId, likes.filter((like) => like.comment_id === commentId).map((like) => like.user_id)])));
         }
       } catch (error) {
         console.error("Supabase comments fetch failed", error);
@@ -561,6 +559,24 @@ export function EventDetailScreen({
       cancelled = true;
     };
   }, [planId, refreshKey]);
+
+  useEffect(() => {
+    if (planId === undefined) return;
+    let cancelled = false;
+    const versionAtFetch = likesMutationVersion.current;
+    setLikesByComment({});
+
+    void fetchCommentLikes(String(planId)).then((likes) => {
+      if (cancelled || likesMutationVersion.current !== versionAtFetch) return;
+      setLikesByComment(Object.fromEntries(Array.from(new Set(likes.map((like) => like.comment_id))).map((commentId) => [commentId, likes.filter((like) => like.comment_id === commentId).map((like) => like.user_id)])));
+    }).catch((error) => {
+      console.error("Supabase comment likes fetch failed", error);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [planId]);
 
   useEffect(() => {
     const authorIds = Array.from(new Set(comments.map((item) => item.authorId).filter((id): id is string => Boolean(id))));
@@ -639,11 +655,14 @@ export function EventDetailScreen({
     if (!currentAuthor || !item.persisted) return;
     const previous = likesByComment[item.id] ?? [];
     const liked = previous.includes(currentAuthor.id);
+    likesMutationVersion.current += 1;
     if (planId !== undefined) track("comment_like_toggled", { plan_id: String(planId), comment_id: item.id, liked: !liked });
     setLikesByComment((items) => ({ ...items, [item.id]: liked ? previous.filter((id) => id !== currentAuthor.id) : [...previous, currentAuthor.id] }));
     void (liked ? unlikeComment(item.id, currentAuthor.id) : likeComment(item.id, currentAuthor.id)).catch((error) => {
       console.error("Supabase comment like update failed", error);
       setLikesByComment((items) => ({ ...items, [item.id]: previous }));
+      setToast(liked ? "Не удалось снять лайк" : "Не удалось поставить лайк");
+      window.setTimeout(() => setToast(""), 2400);
     });
   };
 
@@ -695,9 +714,8 @@ export function EventDetailScreen({
     }
 
     const openShareFallback = () => {
-      const openTelegramLink = window.Telegram?.WebApp?.openTelegramLink;
-      if (openTelegramLink) {
-        openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(title)}`);
+      if (window.Telegram?.WebApp?.openTelegramLink) {
+        openExternalUrl(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(title)}`);
         return;
       }
       setCopied(true);
@@ -829,13 +847,13 @@ export function EventDetailScreen({
               {format === "offline" && meta.location ? <DetailCard><SmallLabel>Где</SmallLabel><button type="button" onClick={() => setLocationExpanded((value) => !value)} className="mt-2 w-full text-left"><p className="text-[15px] leading-[20px] text-white/90" style={locationExpanded ? undefined : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{meta.location}</p></button></DetailCard> : format === "online" ? <DetailCard><SmallLabel>Формат</SmallLabel><p className="mt-2 text-[24px] font-bold">Онлайн</p></DetailCard> : null}
             </div>
 
-            {(levelConfig || distanceLabel || duration) && <><SectionTitle>Уровень</SectionTitle><div className="grid grid-cols-2 gap-2.5">{levelConfig && <DetailCard><SmallLabel>{levelConfig.subtitle}</SmallLabel><div className="mt-2 flex items-center justify-between text-[24px] font-bold"><span>{levelConfig.title}</span><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">{[0,1,2].map((bar) => <rect key={bar} x={2 + bar * 6} y={13 - bar * 4} width="4" height={5 + bar * 4} rx="1" fill={bar < levelConfig.bars ? levelConfig.color : "rgba(255,255,255,0.25)"} />)}</svg></div></DetailCard>}{(distanceLabel || duration) && <DetailCard><SmallLabel>{distanceLabel ? "Дистанция" : "Время"}</SmallLabel><p className="mt-2 text-[24px] font-bold">{distanceLabel || duration}</p></DetailCard>}</div></>}
+            {(levelConfig || distanceLabel || validDuration) && <><SectionTitle>Уровень</SectionTitle><div className="grid grid-cols-2 gap-2.5">{levelConfig && <DetailCard><SmallLabel>{levelConfig.subtitle}</SmallLabel><div className="mt-2 flex items-center justify-between text-[24px] font-bold"><span>{levelConfig.title}</span><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">{[0,1,2].map((bar) => <rect key={bar} x={2 + bar * 6} y={13 - bar * 4} width="4" height={5 + bar * 4} rx="1" fill={bar < levelConfig.bars ? levelConfig.color : "rgba(255,255,255,0.25)"} />)}</svg></div></DetailCard>}{(distanceLabel || validDuration) && <DetailCard><SmallLabel>{distanceLabel ? "Дистанция" : "Время"}</SmallLabel><p className="mt-2 text-[24px] font-bold">{distanceLabel || validDuration}</p></DetailCard>}</div></>}
 
-            {description && <><SectionTitle>Описание</SectionTitle><div className="rounded-xl p-4 text-[15px] leading-[1.45]" style={{ background: PLAN_DARK.card }}><p style={!descriptionExpanded && needsDescriptionClamp ? { display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden", whiteSpace: "pre-line" } : { whiteSpace: "pre-line" }}><DescriptionText text={description} /></p>{needsDescriptionClamp && <button onClick={() => setDescriptionExpanded((value) => !value)} className="mt-1 font-medium" style={{ color: PLAN_DARK.accent }}>{descriptionExpanded ? "Свернуть" : "Подробнее"}</button>}</div></>}
+            {description && <><SectionTitle>Описание</SectionTitle><div className="rounded-xl p-4 text-[15px] leading-[1.45]" style={{ background: PLAN_DARK.card }}><p style={!descriptionExpanded && needsDescriptionClamp ? { display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden", whiteSpace: "pre-line" } : { whiteSpace: "pre-line" }}>{renderFormattedText(description)}</p>{needsDescriptionClamp && <button onClick={() => setDescriptionExpanded((value) => !value)} className="mt-1 font-medium" style={{ color: PLAN_DARK.accent }}>{descriptionExpanded ? "Свернуть" : "Подробнее"}</button>}</div></>}
 
             {photos.length > 0 && <button onClick={() => setSheet("photos")} className="mt-5 w-full rounded-xl p-4 text-left" style={{ background: PLAN_DARK.card }}><div className="mb-3 flex items-center justify-between text-[15px] font-semibold"><span>{photos.length} фото</span><ChevronRight size={18} /></div><div className="grid grid-cols-3 gap-2">{photos.slice(0,3).map((photo, index) => <img key={`${photo}-${index}`} src={photo} alt="" className="aspect-[4/3] w-full rounded-[10px] object-cover" />)}</div></button>}
 
-            <div className="flex items-center gap-3 py-7"><button onClick={organizerAction}><AuthorAvatar name={authorName} avatarUrl={authorAvatarUrl} size={44} /></button><button onClick={organizerAction} className="min-w-0 flex-1 text-left"><p className="truncate text-[16px] font-semibold">{authorName}</p>{authorSubtitle && <p className="text-[13px]" style={{ color: PLAN_DARK.textSecondary }}>{authorSubtitle}</p>}</button>{onMessageAuthor && !isOwnPlan && isDemo !== true && <button onClick={() => onMessageAuthor({ id: authorId ?? authorName, name: authorName, avatarUrl: authorAvatarUrl })} className="text-[13px] font-medium" style={{ color: PLAN_DARK.accent }}>Написать</button>}{!isOwnPlan && onToggleAuthorFollow && <button onClick={toggleAuthorFollow} className="text-[13px] font-medium" style={{ color: subscribed ? PLAN_DARK.textSecondary : PLAN_DARK.accent }}>{subscribed ? "В подписках" : "+ Подписаться"}</button>}</div>
+            <div className="flex items-center gap-3 py-7"><button onClick={organizerAction}><AuthorAvatar name={authorName} avatarUrl={authorAvatarUrl} size={44} /></button><button onClick={organizerAction} className="min-w-0 flex-1 text-left"><p className="truncate text-[16px] font-semibold">{authorName}</p>{authorSubtitle && <p className="text-[13px]" style={{ color: PLAN_DARK.textSecondary }}>{authorSubtitle}</p>}</button>{onMessageAuthor && !isOwnPlan && isDemo !== true && <button onClick={() => onMessageAuthor({ id: authorId ?? authorName, name: authorName, avatarUrl: authorAvatarUrl })} className="flex h-8 flex-shrink-0 items-center rounded-full px-3 text-[13px] font-semibold" style={{ color: PLAN_DARK.accent, background: "rgba(47,191,175,0.15)" }}>Написать</button>}{!isOwnPlan && onToggleAuthorFollow && <button onClick={toggleAuthorFollow} className="text-[13px] font-medium" style={{ color: subscribed ? PLAN_DARK.textSecondary : PLAN_DARK.accent }}>{subscribed ? "В подписках" : "+ Подписаться"}</button>}</div>
           </div>
 
         <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} currentAuthor={currentAuthor} planAuthorId={authorId} onDelete={removeComment} onProfileOpen={onProfileOpen} mentionCandidates={mentionCandidates} onMentionSelected={(mention) => setDraftMentions((items) => [...items.filter((item) => item.id !== mention.id), mention])} profileById={{ ...commentAuthorProfiles, ...profileById }} photoPreviewUrl={commentPhotoPreviewUrl} photoUploadProgress={commentPhotoUploadProgress} photoUrl={commentPhotoUrl} onPhotoSelected={(file) => { void selectCommentPhoto(file); }} onPhotoRemoved={removeCommentPhoto} likesByComment={likesByComment} expandedReplies={expandedReplies} onToggleReplies={(id) => setExpandedReplies((items) => { const next = new Set(items); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onLike={toggleCommentLike} onReply={beginReply} focusRequestKey={commentFocusKey} />
@@ -870,14 +888,14 @@ export function EventDetailScreen({
                   >
                     {participant.name}
                   </button>
-                  {onMessageParticipant && (
+                  {onMessageParticipant && participant.isDemo !== true && participant.id !== currentAuthor?.id && (
                     <button
                       onClick={() => {
                         setSheet(null);
                         onMessageParticipant(participant);
                       }}
-                      className="flex-shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold text-white"
-                      style={{ backgroundColor: GREEN }}
+                      className="flex h-8 flex-shrink-0 items-center rounded-full px-3 text-[13px] font-semibold"
+                      style={{ backgroundColor: "var(--secondary)", color: GREEN }}
                     >
                       Написать
                     </button>

@@ -109,7 +109,10 @@ export const fetchCommentLikes = async (planId: string): Promise<CommentLikeRow[
 export const likeComment = async (commentId: string, userId: string) => {
   if (!supabase) return;
   const { error } = await supabase.from("comment_likes").insert({ comment_id: commentId, user_id: userId });
-  if (error) throw error;
+  if (error) {
+    console.error("Supabase comment_likes insert failed", error);
+    throw error;
+  }
 };
 
 export const unlikeComment = async (commentId: string, userId: string) => {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { track } from "@/app/lib/analytics";
+import { openExternalUrl } from "@/app/lib/telegram";
 import policyImage from "@/imports/policy.png";
 
 const links = {
@@ -16,7 +17,11 @@ const DocLink = ({ href, children }: { href: string; children: ReactNode }) => (
     target="_blank"
     rel="noreferrer"
     className="underline decoration-white/80 underline-offset-2"
-    onClick={(event) => event.stopPropagation()}
+    onClick={(event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openExternalUrl(href);
+    }}
   >
     {children}
   </a>

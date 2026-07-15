@@ -154,6 +154,7 @@ const normalizeProfile = (profile: ExpertProfile): ExpertProfile => {
 
 const sanitizePlan = (plan: HomeFeedPlan): HomeFeedPlan => ({
   ...plan,
+  duration: plan.duration?.trim() === "План" ? undefined : plan.duration,
   coverUrl: sanitizeImageUrl(plan.coverUrl) ?? undefined,
   photos: plan.photos?.map(sanitizeImageUrl).filter((url): url is string => Boolean(url)),
   participants: plan.participants.map(sanitizeImageUrl).filter((url): url is string => Boolean(url)),
@@ -603,6 +604,7 @@ export default function App() {
       id: plan.author.id ?? plan.author.name,
       name: plan.author.name,
       avatarUrl: plan.author.avatarUrl,
+      isDemo: isDemoCommunityPlanId(plan.id) ? true : undefined,
     };
     const demoPeers = isDemoCommunityPlanId(plan.id)
       ? [...getDemoCommunityParticipantPeers(id), ...getDemoClubParticipantPeers(id)]
@@ -2342,7 +2344,7 @@ export default function App() {
                 photoUrl: authorProfile.photoUrl ?? feedPlan.author.avatarUrl,
               }, nextFollowed) : undefined}
               participantItems={participantItems}
-              onMessageParticipant={isDemoCommunityPlanId(feedPlan.id) ? undefined : openChatWithPeer}
+              onMessageParticipant={openChatWithPeer}
               currentAuthor={currentAuthor}
               canDelete={feedPlan.author.id === currentUserId}
               onDelete={() => deletePlan(feedPlan.id)}
