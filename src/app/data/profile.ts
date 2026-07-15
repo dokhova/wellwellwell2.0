@@ -268,7 +268,7 @@ export const experts: ExpertProfile[] = [
       photoUrl: avatarUrl,
       photoUrls: [avatarUrl],
       coverUrls: [coverUrl],
-      followersCount: 0,
+      followersCount: club.followerIds.length,
       followingCount: 0,
       plansCount: club.plans.length,
       isFollowedByMe: false,

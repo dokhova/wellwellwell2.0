@@ -24,6 +24,18 @@ export const UNSPLASH = {
 
 export const GREEN = "var(--accent)";
 export const GREEN_LIGHT = "var(--secondary)";
+export const PLAN_DARK = {
+  bg: "#0E0E10",
+  card: "rgba(255,255,255,0.08)",
+  cardPressed: "rgba(255,255,255,0.14)",
+  divider: "rgba(255,255,255,0.12)",
+  text: "#FFFFFF",
+  textSecondary: "rgba(255,255,255,0.60)",
+  accent: "#2FBFAF",
+  levelWell: "#4CD964",
+  levelVeryWell: "#2FBFAF",
+  levelTooWell: "#FF9500",
+} as const;
 export const ALL_DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 export const WEEKDAY_VALUES = [1, 2, 3, 4, 5, 6, 7];
 export const PART_OF_DAY_RANGES = {

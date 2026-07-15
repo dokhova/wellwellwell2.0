@@ -30,6 +30,8 @@ export interface ChatPeer {
   cannedReplies?: string[];
   realUser?: boolean;
   isDemo?: boolean;
+  isSaved?: boolean;
+  onToggleSaved?: () => void;
   readOnly?: boolean;
 }
 
@@ -84,6 +86,10 @@ export interface HomeFeedPlan {
   isChallenge?: boolean;
   format?: "online" | "offline";
   duration?: string;
+  level?: "well" | "veryWell" | "tooWell";
+  distanceLabel?: string;
+  photos?: string[];
+  authorSubtitle?: string;
   title: string;
   description: string;
   habit?: {
@@ -137,6 +143,12 @@ export interface EventDetailProps {
   meta: EventMeta;
   format?: "online" | "offline";
   duration?: string;
+  level?: "well" | "veryWell" | "tooWell";
+  distanceLabel?: string;
+  photos?: string[];
+  authorSubtitle?: string;
+  participantCount?: number;
+  isDemo?: boolean;
   onBack: () => void;
   initiallyJoined?: boolean;
   planId?: PlanId;

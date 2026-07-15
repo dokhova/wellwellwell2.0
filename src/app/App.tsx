@@ -5,7 +5,7 @@ import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
 import { formatNearestDate, getNextOccurrence } from "@/app/data/calendar";
 import { experts, expertProfile, profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
-import { activeDemoClubPlans, getDemoClubParticipantPeers } from "@/app/data/demoClubs";
+import { activeDemoClubPlans, demoClubs, getDemoClubParticipantPeers } from "@/app/data/demoClubs";
 import { demoCommunityPlanIds, demoCommunityPlans, getDemoCommunityParticipantPeers } from "@/app/data/demoCommunity";
 import { acceptProfileTerms, deleteProfile, fetchProfile, fetchProfilesByIds, upsertProfile } from "@/app/lib/api/profiles";
 import { deleteUserFollows, fetchFollowers, fetchFollowing, follow, unfollow } from "@/app/lib/api/follows";
@@ -30,6 +30,7 @@ import { ChatScreen, ChatsScreen } from "@/app/screens/ChatScreen";
 import { WorkInProgress } from "@/app/components/WorkInProgress";
 import { WelcomeScreen } from "@/app/screens/WelcomeScreen";
 import appLogo from "@/imports/avatar-brand.png";
+import { pluralizeFollowers } from "@/app/lib/pluralize";
 
 const readJson = <T,>(key: string, fallback: T): T => {
   try {
@@ -154,6 +155,7 @@ const normalizeProfile = (profile: ExpertProfile): ExpertProfile => {
 const sanitizePlan = (plan: HomeFeedPlan): HomeFeedPlan => ({
   ...plan,
   coverUrl: sanitizeImageUrl(plan.coverUrl) ?? undefined,
+  photos: plan.photos?.map(sanitizeImageUrl).filter((url): url is string => Boolean(url)),
   participants: plan.participants.map(sanitizeImageUrl).filter((url): url is string => Boolean(url)),
   author: {
     ...plan.author,
@@ -425,6 +427,7 @@ export default function App() {
   const storagePrefix = `wellwellwell:${telegramUser.id}`;
   const profileStorageKey = `${storagePrefix}:profile`;
   const myPlansStorageKey = `${storagePrefix}:myPlans`;
+  const savedPlanIdsStorageKey = `${storagePrefix}:savedPlanIds`;
   const checkedItemsStorageKey = `${storagePrefix}:checkedItems`;
   const createdPlansStorageKey = `${storagePrefix}:createdPlans`;
   const deletedPlansStorageKey = `${storagePrefix}:deletedPlans`;
@@ -488,6 +491,7 @@ export default function App() {
     const stored = readJson<Array<PlanId | ParticipantPlanRef>>(myPlansStorageKey, []);
     return stored.map((item) => typeof item === "number" || typeof item === "string" ? { kind: "plan", id: item } : item);
   });
+  const [savedPlanIds, setSavedPlanIds] = useState<PlanId[]>(() => readJson<PlanId[]>(savedPlanIdsStorageKey, []));
   const [checkedItemKeys, setCheckedItemKeys] = useState<string[]>(() => readJson(checkedItemsStorageKey, []));
   const [createdPlans, setCreatedPlans] = useState<HomeFeedPlan[]>(() => readJson<HomeFeedPlan[]>(createdPlansStorageKey, []).map(sanitizePlan));
   const [remotePublicPlans, setRemotePublicPlans] = useState<HomeFeedPlan[]>([]);
@@ -664,6 +668,8 @@ export default function App() {
     myParticipantKeys.has(participantKey({ kind: plan.kind ?? "plan", id: plan.id }))
     || plan.author.id === currentUserId
   );
+  const savedPlanIdSet = new Set(savedPlanIds.map(planKey));
+  const savedPlans = allPlans.filter((plan) => savedPlanIdSet.has(planKey(plan.id)));
   const catalogPublicPlans = homeFeedPlans
     .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && (plan.visibility ?? "all") === "all")
     .sort((a, b) => getNextOccurrence(a.schedule).getTime() - getNextOccurrence(b.schedule).getTime());
@@ -714,8 +720,15 @@ export default function App() {
   const localDemoFollowingFor = useCallback((ownerId: string) =>
     ownerId === expertProfile.id ? profileFollowing.map(sanitizeConnection) : [], []);
 
-  const localDemoFollowersFor = useCallback((ownerId: string) =>
-    ownerId === expertProfile.id ? profileFollowers.map(sanitizeConnection) : [], []);
+  const localDemoFollowersFor = useCallback((ownerId: string) => {
+    if (ownerId === expertProfile.id) return profileFollowers.map(sanitizeConnection);
+    const club = demoClubs.clubs.find((item) => item.id === ownerId && item.disabled !== true);
+    if (!club) return [];
+    return club.followerIds.map((id) => {
+      const profile = experts.find((item) => item.id === id);
+      return sanitizeConnection({ id, name: profile?.name ?? "Участник", avatarUrl: profile?.photoUrl ?? null, isFollowedByMe: false });
+    });
+  }, []);
 
   const idsToConnections = useCallback(async (ids: string[], followedByMeIds: Set<string>) => {
     const uniqueIds = Array.from(new Set(ids));
@@ -744,9 +757,14 @@ export default function App() {
       idsToConnections(followingIds, followedByMeIds),
       idsToConnections(followerIds, followedByMeIds),
     ]);
+    const ownerIsFollowedByMe = myFollowing.some((item) => item.id === ownerId) || dbFollowingIds.has(ownerId);
+    const localFollowers = localDemoFollowersFor(ownerId);
+    const followersWithMe = ownerIsFollowedByMe && !localFollowers.some((item) => item.id === currentUserId)
+      ? [{ id: currentUserId, name: currentAuthor.name, avatarUrl: currentAuthor.avatarUrl, isFollowedByMe: false }, ...localFollowers]
+      : localFollowers;
     const sets = {
       following: dedupeConnections([...localDemoFollowingFor(ownerId), ...remoteFollowing]),
-      followers: dedupeConnections([...localDemoFollowersFor(ownerId), ...remoteFollowers]),
+      followers: dedupeConnections([...followersWithMe, ...remoteFollowers]),
     } satisfies ProfileConnectionSets;
     setConnectionSetsByUser((items) => ({ ...items, [ownerId]: sets }));
     if (ownerId === currentUserId) {
@@ -754,7 +772,7 @@ export default function App() {
       setDbFollowers(remoteFollowers);
     }
     return sets;
-  }, [currentUserId, idsToConnections, localDemoFollowersFor, localDemoFollowingFor]);
+  }, [currentAuthor.avatarUrl, currentAuthor.name, currentUserId, dbFollowingIds, idsToConnections, localDemoFollowersFor, localDemoFollowingFor, myFollowing]);
 
   useEffect(() => {
     if (syncedDemoFollowingUserIdsRef.current.has(currentUserId)) return;
@@ -1314,6 +1332,10 @@ export default function App() {
   }, [myParticipantIds, myPlansStorageKey]);
 
   useEffect(() => {
+    writeJson(savedPlanIdsStorageKey, savedPlanIds);
+  }, [savedPlanIds, savedPlanIdsStorageKey]);
+
+  useEffect(() => {
     writeJson(checkedItemsStorageKey, checkedItemKeys);
   }, [checkedItemKeys, checkedItemsStorageKey]);
 
@@ -1456,6 +1478,8 @@ export default function App() {
     setPreviousScreen(screen);
     setScreen("planEvent");
     track("plan_view", { plan_id: planKey(id), source });
+    const localAuthorId = allPlanDetails.find((plan) => planKey(plan.id) === planKey(id))?.author.id;
+    if (localAuthorId) void loadConnectionSets(localAuthorId).catch((error) => console.error("Supabase plan author follows fetch failed", error));
     if (isDemoCommunityPlanId(id)) return;
     void fetchPlan(planKey(id)).then((remotePlan) => {
       if (!remotePlan || remotePlan.hidden) return;
@@ -1672,6 +1696,12 @@ export default function App() {
     setHighlightedPlanId(id);
     window.setTimeout(() => setHighlightedPlanId(null), 1500);
     setScreen(previousScreen === "profile" ? "profile" : "plans");
+  };
+
+  const toggleSavedPlan = (id: PlanId) => {
+    setSavedPlanIds((ids) => ids.some((item) => planKey(item) === planKey(id))
+      ? ids.filter((item) => planKey(item) !== planKey(id))
+      : [id, ...ids]);
   };
 
   const removePlanFromMine = (id: PlanId, scope: "single" | "program" = "single", source: PlanViewSource = planSourceFromScreen(screen)) => {
@@ -1973,39 +2003,9 @@ export default function App() {
       if (items.some((item) => item.id === profile.id)) return items;
       return [connection, ...items];
     });
-    setConnectionSetsByUser((items) => {
-      const mySets = items[currentUserId] ?? { followers: localDemoFollowersFor(currentUserId), following: localDemoFollowingFor(currentUserId) };
-      return {
-        ...items,
-        [currentUserId]: {
-          ...mySets,
-          following: nextFollowed
-            ? dedupeConnections([connection, ...mySets.following])
-            : mySets.following.filter((item) => item.id !== profile.id),
-        },
-      };
-    });
+    setOptimisticFollowState(profile, nextFollowed);
     void (nextFollowed ? follow(currentUserId, profile.id) : unfollow(currentUserId, profile.id)).catch((error) => {
       console.error("Supabase demo follow update failed", error);
-      setMyFollowing((items) => nextFollowed
-        ? items.filter((item) => item.id !== profile.id)
-        : items.some((item) => item.id === profile.id) ? items : [connection, ...items]);
-      setConnectionSetsByUser((items) => {
-        const mySets = items[currentUserId] ?? { followers: localDemoFollowersFor(currentUserId), following: localDemoFollowingFor(currentUserId) };
-        return {
-          ...items,
-          [currentUserId]: {
-            ...mySets,
-            following: nextFollowed
-              ? mySets.following.filter((item) => item.id !== profile.id)
-              : dedupeConnections([connection, ...mySets.following]),
-          },
-        };
-      });
-    }).finally(() => {
-      void loadConnectionSets(currentUserId).catch((error) => {
-        console.error("Supabase follows reload failed", error);
-      });
     });
   };
 
@@ -2034,6 +2034,7 @@ export default function App() {
             onNavigate={navigate}
             onPlanOpen={(id) => openPlanEvent(id, "plans")}
             participantPlans={myPlans}
+            savedPlans={savedPlans}
             checkedItemKeys={checkedItemKeys}
             onToggleCheck={toggleCheckedItem}
             onRemoveParticipant={removePlanFromMine}
@@ -2283,6 +2284,8 @@ export default function App() {
                 || (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === authorProfile.id)
               : (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === authorProfile.id)
             : false;
+          const authorFollowerItems = feedPlan.author.id ? (connectionSetsByUser[feedPlan.author.id]?.followers ?? localDemoFollowersFor(feedPlan.author.id)) : [];
+          const authorFollowersCount = isAuthorFollowedByMe && !authorFollowerItems.some((item) => item.id === currentUserId) ? authorFollowerItems.length + 1 : authorFollowerItems.length;
           return (
             <EventDetailScreen
               title={feedPlan.isChallenge ? `Челлендж: ${feedPlan.title}` : feedPlan.title}
@@ -2309,15 +2312,23 @@ export default function App() {
               }}
               format={feedPlan.format}
               duration={feedPlan.duration}
+              level={feedPlan.level}
+              distanceLabel={feedPlan.distanceLabel}
+              photos={feedPlan.photos}
+              participantCount={participantCount}
+              isDemo={isDemoCommunityPlanId(feedPlan.id) ? true : undefined}
+              isSaved={savedPlanIdSet.has(planKey(feedPlan.id))}
+              onToggleSaved={() => toggleSavedPlan(feedPlan.id)}
+              authorSubtitle={pluralizeFollowers(authorFollowersCount)}
               onBack={() => goBackInStack(planEventOrigin)}
               planId={feedPlan.id}
               externalJoinUrl={feedPlan.externalJoinUrl}
-              initiallyJoined={feedPlan.author.id === currentUserId || myParticipantIds.some((item) => item.id === feedPlan.id)}
+              initiallyJoined={feedPlan.author.id === currentUserId || myParticipantIds.some((item) => planKey(item.id) === planKey(feedPlan.id))}
               onJoin={(id) => addCatalogPlanToRoutine(id, planSourceFromScreen(planEventOrigin))}
               onLeave={(id) => removePlanFromMine(id, "single", planEventSource)}
               onProfile={() => feedPlan.author.id ? openExpertProfile(feedPlan.author.id) : setScreen("profile")}
               onProfileOpen={openExpertProfile}
-              onMessageAuthor={feedPlan.author.id === currentUserId || authorProfile?.isDemo === true ? undefined : (peer) => openChatWithPeer({ ...peer, id: feedPlan.author.id ?? peer.id })}
+              onMessageAuthor={feedPlan.author.id === currentUserId || isDemoCommunityPlanId(feedPlan.id) ? undefined : (peer) => openChatWithPeer({ ...peer, id: feedPlan.author.id ?? peer.id })}
               isAuthorFollowedByMe={isAuthorFollowedByMe}
               onToggleAuthorFollow={authorProfile && feedPlan.author.id !== currentUserId ? (nextFollowed) => toggleFollowing({
                 ...authorProfile,

@@ -1,4 +1,4 @@
-import { CalendarPlus, Check, ChevronRight, Trash2 } from "lucide-react";
+import { Bookmark, CalendarPlus, Check, ChevronRight, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { HomeFeedPlan, PlanId, Screen } from "@/app/types";
 import { normalizePlanTag, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
@@ -85,6 +85,7 @@ export function PlansScreen({
   onNavigate,
   onPlanOpen,
   participantPlans,
+  savedPlans,
   checkedItemKeys,
   onToggleCheck,
   onRemoveParticipant,
@@ -93,6 +94,7 @@ export function PlansScreen({
   onNavigate: (s: Screen, from?: Screen) => void;
   onPlanOpen: (id: PlanId) => void;
   participantPlans: HomeFeedPlan[];
+  savedPlans: HomeFeedPlan[];
   checkedItemKeys: string[];
   onToggleCheck: (key: string) => void;
   onRemoveParticipant: (id: PlanId, scope?: "single" | "program") => void;
@@ -100,7 +102,7 @@ export function PlansScreen({
 }) {
   const isEmpty = participantPlans.length === 0;
   const [removingPlan, setRemovingPlan] = useState<HomeFeedPlan | null>(null);
-  const [activeTab, setActiveTab] = useState<"upcoming" | "past">("upcoming");
+  const [activeTab, setActiveTab] = useState<"upcoming" | "saved" | "past">("upcoming");
 
   const todayIndex = 0;
   const planItems = getPlanWeekItems(participantPlans);
@@ -152,6 +154,7 @@ export function PlansScreen({
       <div className="flex flex-shrink-0 gap-1 border-b border-border bg-surface px-4 py-2">
         {([
           ["upcoming", "Предстоящие"],
+          ["saved", "Сохранённые"],
           ["past", "Прошедшие"],
         ] as const).map(([value, label]) => {
           const active = activeTab === value;
@@ -170,7 +173,25 @@ export function PlansScreen({
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        {activeTab === "past" ? (
+        {activeTab === "saved" ? (
+          savedPlans.length === 0 ? (
+            <div className="flex min-h-[420px] flex-col items-center justify-center rounded-xl bg-card px-6 text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full" style={{ backgroundColor: GREEN_LIGHT }}>
+                <Bookmark size={24} strokeWidth={1.9} color={GREEN} />
+              </div>
+              <p className="text-[17px] font-semibold text-foreground">Сохранённых планов пока нет</p>
+              <p className="mt-2 text-[14px] leading-5 text-muted-foreground">Нажимай Сохранить на плане, чтобы вернуться к нему позже</p>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {savedPlans.map((plan) => {
+                const start = plan.schedule.start ? new Date(plan.schedule.start) : null;
+                const hasDate = Boolean(start && !Number.isNaN(start.getTime()));
+                return <PlanListCard key={String(plan.id)} plan={plan} dayNumber={hasDate ? start!.getDate() : "—"} monthLabel={hasDate ? start!.toLocaleDateString("ru-RU", { month: "short" }).replace(".", "") : "План"} scheduleMeta={plan.timeDate} showToggle={false} onOpen={() => onPlanOpen(plan.id)} />;
+              })}
+            </div>
+          )
+        ) : activeTab === "past" ? (
           pastPlanItems.length === 0 ? (
             <div className="flex min-h-[420px] flex-col items-center justify-center rounded-xl bg-card px-6 text-center">
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full" style={{ backgroundColor: GREEN_LIGHT }}>

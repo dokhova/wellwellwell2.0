@@ -9,8 +9,11 @@ export type CommentRow = {
   text: string;
   mentioned_user_ids: string[] | null;
   photo_url: string | null;
+  parent_id: string | null;
   created_at: string;
 };
+
+export type CommentLikeRow = { comment_id: string; user_id: string; created_at: string };
 
 export type AddCommentInput = {
   planId: string;
@@ -20,6 +23,7 @@ export type AddCommentInput = {
   text: string;
   mentionedUserIds?: string[];
   photoUrl?: string | null;
+  parentId?: string | null;
 };
 
 export const fetchComments = async (planId: string): Promise<CommentRow[]> => {
@@ -27,7 +31,7 @@ export const fetchComments = async (planId: string): Promise<CommentRow[]> => {
 
   const { data, error } = await supabase
     .from("comments")
-    .select("id, plan_id, author_id, author_name, author_avatar_url, text, mentioned_user_ids, photo_url, created_at")
+    .select("id, plan_id, author_id, author_name, author_avatar_url, text, mentioned_user_ids, photo_url, parent_id, created_at")
     .eq("plan_id", planId)
     .order("created_at", { ascending: true })
     .returns<CommentRow[]>();
@@ -49,12 +53,36 @@ export const addComment = async (input: AddCommentInput): Promise<CommentRow | n
       text: input.text,
       mentioned_user_ids: input.mentionedUserIds ?? [],
       photo_url: input.photoUrl ?? null,
+      parent_id: input.parentId ?? null,
     })
-    .select("id, plan_id, author_id, author_name, author_avatar_url, text, mentioned_user_ids, photo_url, created_at")
+    .select("id, plan_id, author_id, author_name, author_avatar_url, text, mentioned_user_ids, photo_url, parent_id, created_at")
     .single<CommentRow>();
 
   if (error) throw error;
   return data;
+};
+
+export const fetchCommentLikes = async (planId: string): Promise<CommentLikeRow[]> => {
+  if (!supabase) return [];
+  const { data: comments, error: commentsError } = await supabase.from("comments").select("id").eq("plan_id", planId).returns<Array<{ id: string }>>();
+  if (commentsError) throw commentsError;
+  const ids = (comments ?? []).map((comment) => comment.id);
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase.from("comment_likes").select("comment_id, user_id, created_at").in("comment_id", ids).returns<CommentLikeRow[]>();
+  if (error) throw error;
+  return data ?? [];
+};
+
+export const likeComment = async (commentId: string, userId: string) => {
+  if (!supabase) return;
+  const { error } = await supabase.from("comment_likes").insert({ comment_id: commentId, user_id: userId });
+  if (error) throw error;
+};
+
+export const unlikeComment = async (commentId: string, userId: string) => {
+  if (!supabase) return;
+  const { error } = await supabase.from("comment_likes").delete().eq("comment_id", commentId).eq("user_id", userId);
+  if (error) throw error;
 };
 
 export const deleteComment = async (id: string) => {

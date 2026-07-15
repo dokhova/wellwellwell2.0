@@ -52,6 +52,12 @@ const splitDateTime = (value: string) => {
   return { date, time };
 };
 
+const getWeekdayFromDate = (value: string) => {
+  if (!value) return "";
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("ru-RU", { weekday: "long" });
+};
+
 const scrollFocusedFieldIntoView = (element: HTMLElement) => {
   window.setTimeout(() => {
     element.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -113,6 +119,11 @@ export function CreateScreen({
   const [fieldFocused, setFieldFocused] = useState(false);
   const [locationMode, setLocationMode] = useState<"online" | "offline">(editingPlan?.format ?? "online");
   const [locationAddress, setLocationAddress] = useState(editingPlan?.address ?? "");
+  const [selectedLevel, setSelectedLevel] = useState<HomeFeedPlan["level"]>(editingPlan?.level);
+  const [metricMode, setMetricMode] = useState<"none" | "distance" | "time">(editingPlan?.distanceLabel ? "distance" : editingPlan?.duration ? "time" : "none");
+  const [distanceValue, setDistanceValue] = useState(() => editingPlan?.distanceLabel?.match(/[\d.,]+/)?.[0]?.replace(",", ".") ?? "");
+  const [distanceUnit, setDistanceUnit] = useState<"км" | "м">(editingPlan?.distanceLabel?.trim().endsWith(" км") ? "км" : "м");
+  const [durationMinutes, setDurationMinutes] = useState(() => editingPlan?.duration?.match(/[\d.,]+/)?.[0]?.replace(",", ".") ?? "");
 
   const currentSchedule = draft.schedule;
   const timeMode: TimeMode = currentSchedule.timeMode ?? currentSchedule.mode ?? "partOfDay";
@@ -233,11 +244,17 @@ export function CreateScreen({
       return;
     }
 
+    const distanceLabel = metricMode === "distance" && Number(distanceValue) > 0 ? `${Number(distanceValue)} ${distanceUnit}` : undefined;
+    const duration = metricMode === "time" && Number(durationMinutes) > 0 ? `${Number(durationMinutes)} мин` : undefined;
+
     if (isEditing && editingPlan) {
       const updatedPlan: HomeFeedPlan = {
         ...editingPlan,
         visibility,
         format: locationMode,
+        level: selectedLevel,
+        distanceLabel,
+        duration,
         title: draft.title.trim(),
         description: draft.description.trim(),
         habit: { ...(editingPlan.habit ?? { durationMin: 15 }), title: draft.title.trim() },
@@ -265,7 +282,9 @@ export function CreateScreen({
       visibility,
       tag: "other",
       format: locationMode,
-      duration: "План",
+      level: selectedLevel,
+      distanceLabel,
+      duration,
       title: draft.title.trim(),
       description: draft.description.trim(),
       habit: { title: draft.title.trim(), durationMin: 15 },
@@ -398,7 +417,7 @@ export function CreateScreen({
             <div key={row.label} className="rounded-lg border border-border px-3.5 py-3">
               <p className="mb-2 text-[13px] font-medium text-foreground">{row.label}</p>
               <div className="grid grid-cols-2 gap-3">
-                <label><span className="mb-1 block text-[12px] text-muted-foreground">Дата</span><input type="date" value={row.date} onChange={(e) => row.onDate(e.target.value)} className="w-full bg-transparent text-[14px] outline-none" /></label>
+                <label><span className="mb-1 block text-[12px] text-muted-foreground">Дата{getWeekdayFromDate(row.date) ? ` · ${getWeekdayFromDate(row.date)}` : ""}</span><input type="date" value={row.date} onChange={(e) => row.onDate(e.target.value)} className="w-full bg-transparent text-[14px] outline-none" /></label>
                 <label><span className="mb-1 block text-[12px] text-muted-foreground">Время</span><input type="time" value={row.time} onChange={(e) => row.onTime(e.target.value)} className="w-full bg-transparent text-[14px] outline-none" /></label>
               </div>
             </div>
@@ -434,6 +453,27 @@ export function CreateScreen({
 
   const renderFinalOptions = () => (
     <div className="space-y-2">
+      <div className="rounded-xl bg-card px-4 py-4">
+        <p className="mb-3 text-[15px] font-medium">Уровень</p>
+        <div className="grid grid-cols-3 gap-1.5">
+          {([
+            ["well", "Well", "без подготовки"],
+            ["veryWell", "Very well", "базовая подготовка"],
+            ["tooWell", "Too well", "уверенная подготовка"],
+          ] as const).map(([value, label, subtitle]) => {
+            const active = selectedLevel === value;
+            return <button key={label} type="button" onClick={() => setSelectedLevel(active ? undefined : value)} className="min-w-0 rounded-xl border px-1.5 py-2 text-center" style={active ? { borderColor: GREEN, backgroundColor: GREEN_LIGHT, color: GREEN } : { borderColor: "var(--border)" }}><span className="block truncate text-[14px] font-semibold">{label}</span><span className="mt-0.5 block whitespace-nowrap text-[10px] text-muted-foreground">{subtitle}</span></button>;
+          })}
+        </div>
+      </div>
+      <div className="rounded-xl bg-card px-4 py-4">
+        <p className="mb-3 text-[15px] font-medium">Дистанция или время</p>
+        <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
+          {([['distance', 'Дистанция'], ['time', 'Время']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setMetricMode(metricMode === value ? "none" : value)} className="h-10 rounded-lg text-[13px] font-semibold" style={metricMode === value ? { backgroundColor: GREEN, color: "#fff" } : undefined}>{label}</button>)}
+        </div>
+        {metricMode === "distance" && <div className="mt-3 flex gap-2"><input type="number" inputMode="decimal" min="0" step="any" value={distanceValue} onChange={(event) => setDistanceValue(event.target.value)} placeholder="5" className="h-11 min-w-0 flex-1 rounded-xl bg-muted px-3 text-[14px] outline-none" /><div className="grid w-24 grid-cols-2 rounded-xl bg-muted p-1">{(["км", "м"] as const).map((unit) => <button key={unit} type="button" onClick={() => setDistanceUnit(unit)} className="rounded-lg text-[13px] font-semibold" style={distanceUnit === unit ? { backgroundColor: GREEN, color: "#fff" } : undefined}>{unit}</button>)}</div></div>}
+        {metricMode === "time" && <div className="mt-3 flex items-center gap-2"><input type="number" inputMode="numeric" min="0" step="1" value={durationMinutes} onChange={(event) => setDurationMinutes(event.target.value)} placeholder="60" className="h-11 min-w-0 flex-1 rounded-xl bg-muted px-3 text-[14px] outline-none" /><span className="text-[14px] text-muted-foreground">мин</span></div>}
+      </div>
       <button onClick={() => setVisibility((value) => value === "all" ? "onlyMe" : "all")} className="flex w-full items-center gap-3 rounded-xl bg-card px-4 py-3.5 text-left">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary">{visibility === "all" ? <Eye size={17} color={GREEN} /> : <Lock size={17} color={GREEN} />}</div>
         <span className="flex-1 text-[15px] font-medium">Видимость</span>

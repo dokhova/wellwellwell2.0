@@ -34,6 +34,9 @@ type DemoClubPlan = {
   schedule: Schedule;
   timeDate: string;
   externalJoinUrl?: string;
+  level?: "well" | "veryWell" | "tooWell";
+  distanceLabel?: string;
+  photos?: (keyof typeof demoClubAssets.covers)[];
 };
 
 type DemoClub = {
@@ -44,6 +47,7 @@ type DemoClub = {
   isDemo: true;
   disabled?: true;
   tags: string[];
+  followerIds: string[];
   plans: DemoClubPlan[];
 };
 
@@ -94,8 +98,8 @@ const weeklyExactSchedule = (weekday: number, date: string, time: string): Sched
   repeat: { type: "weekly" },
 });
 
-const shuLongDescription = "Утренняя субботняя пробежка по улицам и набережным города — выбирайте свою дистанцию и темп в зависимости от уровня подготовки. Бежим двумя группами: 21 км в темпе 6:00 и 8 км в темпе 7:00.";
-const shuCityDescription = "Совместная пробежка со Skuratov Running club по улицам города, скверам и паркам. Бежим группой 10 км в темпе 6:00-6:30 и 5 км в темпе 7:00.";
+const shuLongDescription = `Утренняя субботняя пробежка по улицам и набережным города — выбирайте свою дистанцию и темп в зависимости от уровня подготовки. Бежим двумя группами: 21 км в темпе 6:00 и 8 км в темпе 7:00.\n\nРегистрация: ${SHU_JOIN_URL}`;
+const shuCityDescription = `Совместная пробежка со Skuratov Running club по улицам города, скверам и паркам. Бежим группой 10 км в темпе 6:00-6:30 и 5 км в темпе 7:00.\n\nРегистрация: ${SHU_JOIN_URL}`;
 const shuStoreAddress = "магазин SHU (Чистопрудный бульвар, 16)";
 const shuCoffeeAddress = "Skuratov на Большом Овчинниковском переулке, 16 (ТЦ Аркадия, метро Новокузнецкая)";
 const dynamoAddress = "Фан-шоп ФК «Динамо» (ТЦ «Арена Плаза»)";
@@ -109,6 +113,7 @@ export const demoClubs = {
       avatar: "club-shu-avatar.jpg",
       isDemo: true,
       tags: ["Бег"],
+      followerIds: ["demo-01", "demo-04", "demo-09", "demo-12"],
       bio: "SHU RUN™ — бренд современной технологичной одежды для бега, запущенный в 2023 году как новая линейка бренда SHU. Мы создаем функциональные куртки, тайтсы, шорты, лонгсливы, жилеты и аксессуары, которые разработаны для различных типов тренировок. В год бренд выпускает две коллекции — весенне-летнюю и осенне-зимнюю. Кроме того SHU RUN™ — это беговое сообщество с клубами в Санкт-Петербурге, Москве и Екатеринбурге.",
       plans: [
         { id: "demo-club-plan-01", title: "Длительная пробежка от магазина", description: shuLongDescription, cover: "club-run-01.jpeg", location: shuStoreAddress, schedule: exactSchedule("2026-07-11", "09:00"), timeDate: "11 июля, 09:00", externalJoinUrl: SHU_JOIN_URL },
@@ -125,6 +130,7 @@ export const demoClubs = {
       avatar: "club-light-running-avatar.jpg",
       isDemo: true,
       tags: ["Бег"],
+      followerIds: ["demo-02", "demo-07", "demo-11"],
       bio: "Вечерние пробежки по городу, где изучаем архитектуру и свет. Проект бюро светового дизайна RAUM",
       plans: [
         { id: "demo-club-plan-07", title: "LIGHT-RUNNING: TRAINING", description: "За руководством пробежки и контролем техники проследит постоянный пейсер проекта — тренер по бегу и триатлет Антон Ионов @ionovanton. Программа 60-минутной тренировки: 20 минут — бег до Лужников; 20 минут — специальные беговые упражнения, направленные на улучшение техники бега (СБУ); 20 минут — бег обратно. Расстояние — 5 км, темп — умеренный.", cover: "club-run-07.jpeg", location: "Rébellion The Palace of Youth, Комсомольский просп., 24, стр. 1", schedule: exactSchedule("2026-07-11", "11:50"), timeDate: "11 июля, 11:50" },
@@ -136,9 +142,10 @@ export const demoClubs = {
       avatar: "club-peak-running-avatar.jpg",
       isDemo: true,
       tags: ["Бег"],
+      followerIds: ["demo-03", "demo-06", "demo-09", "demo-10"],
       bio: "Беговой клуб на базе концептуального магазина Peak Moscow. Стараемся создать приятную атмосферу для бегунов с разным уровнем подготовки и сообщество, в котором люди хорошо проводят время. Пробежки проходят каждое воскресенье. Дистанция и темп регулярно меняются, их определяют заранее и анонсируют по четвергам в телеграм-канале магазина.",
       plans: [
-        { id: "demo-club-plan-08", title: "Peak running", description: "Дистанция: 5 км / 8 км / 15 км. Темп: 6:30 / 6:00 / 5:30", cover: "club-run-08.jpeg", location: "PEAK, Петровский бульвар, 8/1", schedule: weeklyExactSchedule(7, "2026-07-12", "09:00"), timeDate: "Воскресенье, 09:00", externalJoinUrl: PEAK_JOIN_URL },
+        { id: "demo-club-plan-08", title: "Peak running", description: `Дистанция: 5 км / 8 км / 15 км. Темп: 6:30 / 6:00 / 5:30\n\nРегистрация: ${PEAK_JOIN_URL}`, cover: "club-run-08.jpeg", location: "PEAK, Петровский бульвар, 8/1", schedule: weeklyExactSchedule(7, "2026-07-12", "09:00"), timeDate: "12 июля, 09:00", externalJoinUrl: PEAK_JOIN_URL },
       ],
     },
     {
@@ -147,9 +154,10 @@ export const demoClubs = {
       avatar: "club-vitalik-running-avatar.jpg",
       isDemo: true,
       tags: ["Бег"],
+      followerIds: ["demo-01", "demo-05", "demo-08"],
       bio: "Образовалось небольшое сообщество интересующееся бегом людей. Смысл этого всего в том, что здесь любой из участников может организовать забег в любое время, месте, с комфортным темпом и расстоянием. Основные пробежки проходят по субботам, анонсы к ним появляются в ~четверг. Старт в основном от кофейни «Борис Сонный». Здесь нет «главных». Посмотрим, что из этого вырастет, а пока инджой!",
       plans: [
-        { id: "demo-club-plan-09", title: "11 июля — бег!", description: "После бега любая суббота лучше. 1 группа: 8-10 км, в темпе 6’30. 2 группа: 5-6 км, в темпе 7’00. Наши субботние пробежки всегда бесплатны, открыты и бережны для всех, кто готов побегать с нами в одном темпе.", cover: "club-run-09.jpeg", location: "Борис Сонный, Селезнёвская ул., 32, Москва", schedule: weeklyExactSchedule(6, "2026-07-11", "10:00"), timeDate: "Суббота, 10:00" },
+        { id: "demo-club-plan-09", title: "11 июля — бег!", description: "После бега любая суббота лучше. 1 группа: 8-10 км, в темпе 6’30. 2 группа: 5-6 км, в темпе 7’00. Наши субботние пробежки всегда бесплатны, открыты и бережны для всех, кто готов побегать с нами в одном темпе.", cover: "club-run-09.jpeg", location: "Борис Сонный, Селезнёвская ул., 32, Москва", schedule: weeklyExactSchedule(6, "2026-07-11", "10:00"), timeDate: "11 июля, 10:00" },
       ],
     },
     {
@@ -158,6 +166,7 @@ export const demoClubs = {
       avatar: "club-dynamo-running-avatar.jpg",
       isDemo: true,
       tags: ["Бег"],
+      followerIds: ["demo-02", "demo-04", "demo-06", "demo-12"],
       bio: "Мы объединились, чтобы вместе проводить тренировки, учиться бегать быстро и правильно, а также ставить перед собой новые цели.",
       plans: [
         { id: "demo-club-plan-10", title: "Общая физическая подготовка", description: dynamoDescription, cover: "club-run-10.jpeg", location: dynamoAddress, schedule: exactSchedule("2026-07-11", "10:30"), timeDate: "11 июля, 10:30" },
@@ -171,13 +180,33 @@ export const demoClubs = {
   ],
 } as const satisfies { clubs: DemoClub[] };
 
+const clubPlanTrainingMeta: Record<string, Pick<HomeFeedPlan, "level" | "distanceLabel" | "duration">> = {
+  "demo-club-plan-01": { level: "tooWell", distanceLabel: "21 км" },
+  "demo-club-plan-02": { level: "veryWell", distanceLabel: "10 км" },
+  "demo-club-plan-03": { level: "tooWell", distanceLabel: "21 км" },
+  "demo-club-plan-04": { level: "veryWell", distanceLabel: "10 км" },
+  "demo-club-plan-05": { level: "tooWell", distanceLabel: "21 км" },
+  "demo-club-plan-06": { level: "veryWell", distanceLabel: "10 км" },
+  "demo-club-plan-07": { level: "veryWell", distanceLabel: "5 км" },
+  "demo-club-plan-08": { level: "tooWell", distanceLabel: "15 км" },
+  "demo-club-plan-09": { level: "well", distanceLabel: "5 км" },
+  "demo-club-plan-10": { level: "veryWell", duration: "60 мин" },
+  "demo-club-plan-11": { level: "tooWell", duration: "60 мин" },
+  "demo-club-plan-12": { level: "tooWell", distanceLabel: "10 км" },
+  "demo-club-plan-13": { level: "tooWell", duration: "60 мин" },
+  "demo-club-plan-14": { level: "tooWell", distanceLabel: "10 км" },
+  "demo-club-plan-15": { level: "tooWell", duration: "60 мин" },
+};
+
 export const demoClubPlans: HomeFeedPlan[] = demoClubs.clubs.flatMap((club) => {
   const avatarUrl = demoClubAssets.avatars[club.avatar];
+  const clubPhotos = club.plans.map((item) => item.cover);
   return club.plans.map((plan) => ({
     id: plan.id,
     tag: "running" as PlanTag,
     format: "offline",
-    duration: plan.schedule.repeat?.type === "weekly" ? "Каждую неделю" : "Разовая тренировка",
+    ...clubPlanTrainingMeta[plan.id],
+    photos: (plan.photos ?? [...clubPhotos, ...Object.keys(demoClubAssets.covers) as (keyof typeof demoClubAssets.covers)[]].slice(0, 6)).map((photo) => demoClubAssets.covers[photo]),
     title: plan.title,
     description: plan.description,
     habit: { title: club.name, durationMin: 60 },

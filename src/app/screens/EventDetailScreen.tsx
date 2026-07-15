@@ -1,19 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Calendar, Check, ChevronRight, Copy, Edit3, Eye, Image as ImageIcon, MapPin, Plus, Share2, Tag, Trash2, Users, Video, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, ArrowUp, Bookmark, CheckSquare, ChevronRight, Copy, Edit3, Eye, Heart, MessageCircle, Paperclip, Plus, Repeat2, Share2, Trash2, UserPlus, Users, X } from "lucide-react";
 import type { EventDetailProps } from "@/app/types";
-import { normalizePlanTag, PLAN_TAG_GRADIENTS, PLAN_TAG_LABELS } from "@/app/data/plans";
-import { ALL_DAYS, GREEN, PART_OF_DAY_RANGES, UNSPLASH, WEEKDAY_VALUES } from "@/app/data/constants";
+import { normalizePlanTag, PLAN_TAG_LABELS } from "@/app/data/plans";
+import { ALL_DAYS, GREEN, PART_OF_DAY_RANGES, PLAN_DARK, UNSPLASH, WEEKDAY_VALUES } from "@/app/data/constants";
 import { HomeSheet } from "@/app/components/HomeSheet";
-import { addComment, deleteComment, fetchComments, type CommentRow } from "@/app/lib/api/comments";
+import { addComment, deleteComment, fetchCommentLikes, fetchComments, likeComment, unlikeComment, type CommentRow } from "@/app/lib/api/comments";
 import { fetchProfilesByIds } from "@/app/lib/api/profiles";
 import { track } from "@/app/lib/analytics";
 import { uploadPhoto } from "@/app/lib/api/storage";
 import { pluralizeParticipants } from "@/app/lib/pluralize";
 
 type MentionCandidate = { id: string; name: string; avatarUrl: string | null };
-type LocalComment = { id: string; authorId: string | null; author: string; avatarUrl: string | null; time: string; text: string; photoUrl: string | null; mentionedUserIds: string[]; persisted: boolean };
+type LocalComment = { id: string; authorId: string | null; author: string; avatarUrl: string | null; time: string; text: string; photoUrl: string | null; parentId: string | null; mentionedUserIds: string[]; persisted: boolean };
 
 const MENTION_REGEX = /@\[([^\]]+)\]\(([^)]+)\)/g;
+const COVER_MASK = "linear-gradient(180deg, #000 0%, #000 52%, rgba(0,0,0,0.96) 60%, rgba(0,0,0,0.85) 68%, rgba(0,0,0,0.68) 76%, rgba(0,0,0,0.45) 84%, rgba(0,0,0,0.22) 91%, rgba(0,0,0,0.07) 96%, transparent 100%)";
 type DraftMention = { id: string; name: string };
 
 const formatCommentTime = (value: string) => {
@@ -35,6 +36,7 @@ const mapCommentRow = (row: CommentRow): LocalComment => ({
   time: formatCommentTime(row.created_at),
   text: row.text,
   photoUrl: row.photo_url,
+  parentId: row.parent_id,
   mentionedUserIds: row.mentioned_user_ids ?? [],
   persisted: true,
 });
@@ -86,7 +88,7 @@ function CommentText({ text, onProfileOpen }: { text: string; onProfileOpen?: (p
   if (lastIndex < text.length) parts.push(text.slice(lastIndex));
 
   return (
-    <p className="mt-0.5 text-[14px] leading-5 text-foreground">
+    <p className="mt-1 text-[15px] leading-[1.45] text-white">
       {parts.map((part, index) => typeof part === "string" ? (
         <span key={index}>{part}</span>
       ) : (
@@ -95,13 +97,18 @@ function CommentText({ text, onProfileOpen }: { text: string; onProfileOpen?: (p
           type="button"
           onClick={() => onProfileOpen?.(part.id)}
           className="inline font-medium active:opacity-80"
-          style={{ color: "#00887F" }}
+          style={{ color: PLAN_DARK.accent }}
         >
           @{part.name}
         </button>
       ))}
     </p>
   );
+}
+
+function DescriptionText({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return <>{parts.map((part, index) => /^https?:\/\//.test(part) ? <button key={`${part}-${index}`} type="button" onClick={() => { const openLink = window.Telegram?.WebApp?.openLink; if (openLink) openLink(part); else window.open(part, "_blank", "noopener,noreferrer"); }} className="inline break-all text-left underline underline-offset-2" style={{ color: PLAN_DARK.accent }}>{part}</button> : <span key={index}>{part}</span>)}</>;
 }
 
 function CommentsBlock({
@@ -121,6 +128,12 @@ function CommentsBlock({
   photoUrl,
   onPhotoSelected,
   onPhotoRemoved,
+  likesByComment,
+  expandedReplies,
+  onToggleReplies,
+  onLike,
+  onReply,
+  focusRequestKey,
 }: {
   comment: string;
   setComment: (v: string) => void;
@@ -138,6 +151,12 @@ function CommentsBlock({
   photoUrl: string | null;
   onPhotoSelected: (file: File) => void;
   onPhotoRemoved: () => void;
+  likesByComment: Record<string, string[]>;
+  expandedReplies: Set<string>;
+  onToggleReplies: (commentId: string) => void;
+  onLike: (comment: LocalComment) => void;
+  onReply: (comment: LocalComment) => void;
+  focusRequestKey: number;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [mentionTrigger, setMentionTrigger] = useState<{ start: number; end: number; query: string } | null>(null);
@@ -145,6 +164,15 @@ function CommentsBlock({
   const filteredMentionCandidates = mentionTrigger
     ? mentionCandidates.filter((candidate) => candidate.name.toLowerCase().includes(mentionTrigger.query.toLowerCase()))
     : [];
+  const roots = comments.filter((item) => !item.parentId);
+  const repliesByRoot = comments.reduce<Record<string, LocalComment[]>>((groups, item) => {
+    if (item.parentId) (groups[item.parentId] ??= []).push(item);
+    return groups;
+  }, {});
+
+  useEffect(() => {
+    if (focusRequestKey > 0) window.requestAnimationFrame(() => inputRef.current?.focus());
+  }, [focusRequestKey]);
 
   const updateMentionTrigger = (value: string, cursor: number | null) => {
     setMentionTrigger(getMentionTrigger(value, cursor));
@@ -164,14 +192,32 @@ function CommentsBlock({
     });
   };
 
+  const renderComment = (item: LocalComment, isReply = false) => {
+    const canDelete = Boolean(currentAuthor && (item.authorId === currentAuthor.id || planAuthorId === currentAuthor.id));
+    const resolvedAuthor = item.authorId ? profileById[item.authorId] : null;
+    const authorName = resolvedAuthor?.name ?? item.author;
+    const authorAvatarUrl = normalizeAvatarUrl(resolvedAuthor?.avatarUrl ?? item.avatarUrl);
+    const likes = likesByComment[item.id] ?? [];
+    const likedByMe = Boolean(currentAuthor && likes.includes(currentAuthor.id));
+    return <div key={item.id} className={`flex gap-3 ${isReply ? "ml-11" : ""}`}>
+      <button onClick={() => item.authorId && onProfileOpen?.(item.authorId)} className="h-9 w-9 flex-shrink-0 rounded-full active:opacity-80" aria-label="Открыть профиль"><AuthorAvatar name={authorName} avatarUrl={authorAvatarUrl} size={36} /></button>
+      <div className="min-w-0 flex-1"><div className="flex items-baseline gap-2"><p className="truncate text-[12px] font-medium uppercase tracking-wide" style={{ color: PLAN_DARK.textSecondary }}>{authorName}</p><span className="text-[11px]" style={{ color: PLAN_DARK.textSecondary }}>{item.time}</span></div><CommentText text={item.text} onProfileOpen={onProfileOpen} />{item.photoUrl && <img loading="lazy" decoding="async" src={item.photoUrl} alt="" className="mt-2 max-h-48 rounded-xl object-cover" />}<div className="mt-2 flex items-center gap-3"><button onClick={() => onReply(item)} disabled={!item.persisted} className="text-[14px] disabled:opacity-40" style={{ color: PLAN_DARK.textSecondary }}>Ответить</button>{canDelete && <button onClick={() => onDelete(item)} className="text-[12px]" style={{ color: PLAN_DARK.textSecondary }}>Удалить</button>}</div></div>
+      <button onClick={() => onLike(item)} disabled={!item.persisted || !currentAuthor} className="flex w-7 flex-shrink-0 flex-col items-center gap-0.5 disabled:opacity-40" style={{ color: likedByMe ? PLAN_DARK.accent : PLAN_DARK.textSecondary }} aria-label={likedByMe ? "Убрать лайк" : "Поставить лайк"}><Heart size={18} fill={likedByMe ? PLAN_DARK.accent : "none"} />{likes.length > 0 && <span className="text-[11px]">{likes.length}</span>}</button>
+    </div>;
+  };
+
   return (
-    <div
-      className="border-t border-border bg-surface px-4 pt-[18px] pb-6"
-    >
-      <h3 className="mb-3.5 flex items-center gap-2 text-[15px] font-semibold text-foreground">
-        Комментарии <span className="text-[15px] font-normal text-muted-foreground">{comments.length}</span>
-      </h3>
-      <div className="relative mb-[18px]">
+    <section className="px-4 pb-8 pt-6">
+      <h3 className="mb-3 text-[12px] font-medium uppercase tracking-[0.08em]" style={{ color: PLAN_DARK.textSecondary }}>{comments.length} комментариев</h3>
+      <div className="rounded-xl" style={{ background: PLAN_DARK.card }}>
+        <div className="max-h-[60vh] space-y-5 overflow-y-auto p-4">
+          {roots.map((item) => {
+            const replies = repliesByRoot[item.id] ?? [];
+            const expanded = expandedReplies.has(item.id);
+            return <div key={item.id} className="space-y-4">{renderComment(item)}{replies.length > 0 && <button onClick={() => onToggleReplies(item.id)} className="ml-11 flex items-center gap-2 text-[13px]" style={{ color: PLAN_DARK.textSecondary }}><span className="h-px w-5" style={{ background: PLAN_DARK.textSecondary }} />{expanded ? "Скрыть ответы" : `Открыть ${replies.length} ${replies.length === 1 ? "ответ" : replies.length < 5 ? "ответа" : "ответов"}`}</button>}{expanded && <div className="space-y-4">{replies.map((reply) => renderComment(reply, true))}</div>}</div>;
+          })}
+        </div>
+        <div className="relative border-t p-3" style={{ borderColor: PLAN_DARK.divider }}>
         {photoPreviewUrl && (
           <div className="relative mb-2 ml-[42px] h-16 w-16 overflow-hidden rounded-xl">
             <img src={photoPreviewUrl} alt="" className="h-full w-full object-cover" />
@@ -186,7 +232,7 @@ function CommentsBlock({
           </div>
         )}
         {mentionTrigger && filteredMentionCandidates.length > 0 && (
-          <div className="absolute bottom-full left-10 right-0 z-20 mb-2 max-h-56 overflow-y-auto rounded-xl border border-border bg-card py-1 shadow-lg">
+          <div className="absolute bottom-full left-10 right-3 z-20 mb-2 max-h-56 overflow-y-auto rounded-xl border py-1 shadow-lg" style={{ borderColor: PLAN_DARK.divider, background: "#1C1C1F" }}>
             {filteredMentionCandidates.map((candidate) => (
               <button
                 key={candidate.id}
@@ -198,18 +244,14 @@ function CommentsBlock({
                 className="flex w-full items-center gap-2.5 px-3 py-2 text-left active:opacity-80"
               >
                 <AuthorAvatar name={candidate.name} avatarUrl={candidate.avatarUrl} size={28} />
-                <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-foreground">{candidate.name}</span>
+                <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-white">{candidate.name}</span>
               </button>
             ))}
           </div>
         )}
         <div className="flex items-center gap-2.5">
-          <AuthorAvatar name={currentAuthor?.name ?? "Вы"} avatarUrl={currentAuthor?.avatarUrl ?? null} size={32} />
-          <div className="flex-1 bg-input rounded-full px-3.5 py-[9px] flex items-center gap-2">
-          <label className="flex h-6 w-6 flex-shrink-0 cursor-pointer items-center justify-center">
-            <ImageIcon size={17} color="var(--muted-foreground)" />
-            <input type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) onPhotoSelected(file); }} />
-          </label>
+          <AuthorAvatar name={currentAuthor?.name ?? "Вы"} avatarUrl={currentAuthor?.avatarUrl ?? null} size={36} />
+          <div className="flex flex-1 items-center gap-2 rounded-full px-3 py-1.5" style={{ background: "rgba(255,255,255,0.10)" }}>
           <input
             ref={inputRef}
             value={comment}
@@ -222,60 +264,26 @@ function CommentsBlock({
             }}
             onClick={(event) => updateMentionTrigger(comment, event.currentTarget.selectionStart)}
             onBlur={() => window.setTimeout(() => setMentionTrigger(null), 120)}
-            placeholder="Напишите комментарий..."
-            className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground outline-none"
+            placeholder="Написать"
+            className="min-w-0 flex-1 bg-transparent text-[14px] text-white placeholder:text-white/50 outline-none"
           />
+          <label className="flex h-7 w-7 flex-shrink-0 cursor-pointer items-center justify-center text-white/60"><Paperclip size={18} /><input type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) onPhotoSelected(file); }} /></label>
           <button
             onClick={onSend}
             disabled={!canSend}
-            className="w-7 h-7 rounded-full flex items-center justify-center transition-opacity"
+            className="flex h-8 w-8 items-center justify-center rounded-full transition-opacity"
             style={{
-              backgroundColor: canSend ? GREEN : "var(--muted)",
+              backgroundColor: "#FFFFFF",
               opacity: canSend ? 1 : 0.7,
             }}
           >
-            <ChevronRight size={16} strokeWidth={2.3} color={canSend ? "#fff" : "var(--muted-foreground)"} />
+            <ArrowUp size={17} strokeWidth={2.3} color={PLAN_DARK.bg} />
           </button>
           </div>
         </div>
-      </div>
-      {comments.length > 0 ? (
-        <div className="space-y-4">
-          {comments.map((item) => {
-            const canDelete = currentAuthor && (item.authorId === currentAuthor.id || planAuthorId === currentAuthor.id);
-            const resolvedAuthor = item.authorId ? profileById[item.authorId] : null;
-            const authorName = resolvedAuthor?.name ?? item.author;
-            const authorAvatarUrl = normalizeAvatarUrl(resolvedAuthor?.avatarUrl ?? item.avatarUrl);
-            return (
-            <div key={item.id} className="flex gap-2.5">
-              <button
-                onClick={() => {
-                  if (item.authorId) onProfileOpen?.(item.authorId);
-                }}
-                className="h-8 w-8 flex-shrink-0 rounded-full active:opacity-80"
-                aria-label="Открыть профиль"
-              >
-                <AuthorAvatar name={authorName} avatarUrl={authorAvatarUrl} size={32} />
-              </button>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-2">
-                  <p className="truncate text-[14px] font-medium text-foreground">{authorName}</p>
-                  <span className="text-[12px] text-muted-foreground">{item.time}</span>
-                </div>
-                <CommentText text={item.text} onProfileOpen={onProfileOpen} />
-                {item.photoUrl && <img loading="lazy" decoding="async" src={item.photoUrl} alt="" className="mt-1.5 max-h-48 rounded-xl object-cover" />}
-              </div>
-              {canDelete && (
-                <button onClick={() => onDelete(item)} className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground active:opacity-80" aria-label="Удалить комментарий">
-                  <Trash2 size={15} strokeWidth={2} />
-                </button>
-              )}
-            </div>
-            );
-          })}
         </div>
-      ) : null}
-    </div>
+      </div>
+    </section>
   );
 }
 
@@ -297,11 +305,23 @@ function AuthorAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl:
   );
 }
 
+function SectionTitle({ children }: { children: string }) {
+  return <h2 className="mb-3 mt-6 text-[12px] font-medium uppercase tracking-[0.08em]" style={{ color: PLAN_DARK.textSecondary }}>{children}</h2>;
+}
+
+function SmallLabel({ children }: { children: ReactNode }) {
+  return <span className="text-[13px]" style={{ color: PLAN_DARK.textSecondary }}>{children}</span>;
+}
+
+function DetailCard({ children }: { children: ReactNode }) {
+  return <div className="rounded-xl p-4 text-left" style={{ background: PLAN_DARK.card }}>{children}</div>;
+}
+
 // ─── Unified EventDetailScreen ────────────────────────────────────────────────
 
 export function EventDetailScreen({
   title, coverSrc, backgroundGradient, authorName, authorAvatarUrl, authorVerified,
-  readTime, badgeDate, paragraphs, meta, format = "offline", duration, tag, schedule, shareUrl,
+  readTime, badgeDate, paragraphs, meta, format = "offline", duration, level, distanceLabel, photos = [], authorSubtitle, participantCount, isDemo, isSaved = false, onToggleSaved, tag, schedule, shareUrl,
   participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, planId, onJoin, onLeave, onProfile,
   externalJoinUrl, authorId, onMessageAuthor, isAuthorFollowedByMe = false, onToggleAuthorFollow, participantItems, onMessageParticipant,
   currentAuthor, canDelete = false, onDelete, canEdit = false, onEdit, canHide = false, onHide, refreshKey, onProfileOpen, profileById = {},
@@ -309,9 +329,11 @@ export function EventDetailScreen({
   void authorVerified;
   void readTime;
   void badgeDate;
+  void externalJoinUrl;
+  void backgroundGradient;
   const [joined, setJoined] = useState(Boolean(initiallyJoined));
   const [toast, setToast] = useState("");
-  const [sheet, setSheet] = useState<"participants" | "profile" | "share" | null>(null);
+  const [sheet, setSheet] = useState<"participants" | "profile" | "share" | "photos" | null>(null);
   const [subscribed, setSubscribed] = useState(isAuthorFollowedByMe);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [comment, setComment] = useState("");
@@ -321,6 +343,10 @@ export function EventDetailScreen({
   const commentPhotoUploadToken = useRef(0);
   const [draftMentions, setDraftMentions] = useState<DraftMention[]>([]);
   const [comments, setComments] = useState<LocalComment[]>([]);
+  const [likesByComment, setLikesByComment] = useState<Record<string, string[]>>({});
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
+  const [replyRootId, setReplyRootId] = useState<string | null>(null);
+  const [commentFocusKey, setCommentFocusKey] = useState(0);
   const [commentAuthorProfiles, setCommentAuthorProfiles] = useState<Record<string, { name: string; avatarUrl: string | null }>>({});
   const [copied, setCopied] = useState(false);
   const description = paragraphs.join("\n\n");
@@ -349,9 +375,23 @@ export function EventDetailScreen({
   const needsDescriptionClamp = description.length > 260;
   const formatLabel = format === "online" ? "Онлайн" : "Офлайн";
   const tagLabel = tag ? PLAN_TAG_LABELS[normalizePlanTag(tag)] : "План";
-  const participantCountLabel = participantsLabel ?? `${participants.length} чел.`;
+  const resolvedParticipantCount = participantCount ?? meta.participants ?? participants.length;
+  const participantCountLabel = participantsLabel ?? `${resolvedParticipantCount} чел.`;
   const overflowLabel = meta.plusN.startsWith("+") ? meta.plusN : "";
   const isOwnPlan = Boolean(currentAuthor?.id && authorId === currentAuthor.id);
+  const isRepeating = Boolean(schedule?.repeat && schedule.repeat.type !== "none");
+  const startDate = schedule?.start ? new Date(schedule.start) : null;
+  const shortWeekday = startDate && !Number.isNaN(startDate.getTime())
+    ? startDate.toLocaleDateString("ru-RU", { weekday: "short" }).replace(".", "").toUpperCase()
+    : "";
+  const partOfDayLabel = schedule?.partOfDay ? PART_OF_DAY_RANGES[schedule.partOfDay].label : "";
+  const startTimeOnly = schedule?.time || (startDate && !Number.isNaN(startDate.getTime()) ? startDate.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : meta.time);
+  const addressParts = meta.location.split(",").map((part) => part.trim()).filter(Boolean);
+  const levelConfig = level ? {
+    well: { title: "Well", subtitle: "Без подготовки", color: PLAN_DARK.levelWell, bars: 1 },
+    veryWell: { title: "Very well", subtitle: "Базовая подготовка", color: PLAN_DARK.levelVeryWell, bars: 2 },
+    tooWell: { title: "Too well", subtitle: "Уверенная подготовка", color: PLAN_DARK.levelTooWell, bars: 3 },
+  }[level] : null;
 
   useEffect(() => () => {
     if (commentPhotoPreviewUrl) URL.revokeObjectURL(commentPhotoPreviewUrl);
@@ -391,6 +431,7 @@ export function EventDetailScreen({
       .map((day) => ALL_DAYS[WEEKDAY_VALUES.indexOf(day)])
       .filter(Boolean)
       .join(", ");
+  const weeklyDays = weekdayLabel(schedule?.weekdays ?? []).toUpperCase();
 
   const exactDateLabel = (value?: string) => {
     if (!value) return meta.date;
@@ -452,15 +493,6 @@ export function EventDetailScreen({
   };
 
   const joinPlan = () => {
-    if (externalJoinUrl) {
-      const telegramOpenLink = window.Telegram?.WebApp?.openLink;
-      if (telegramOpenLink) {
-        telegramOpenLink(externalJoinUrl);
-      } else {
-        window.open(externalJoinUrl, "_blank");
-      }
-      return;
-    }
     setJoined(true);
     if (planId !== undefined) onJoin?.(planId);
     showJoinToast();
@@ -496,12 +528,13 @@ export function EventDetailScreen({
 
     const loadComments = async () => {
       try {
-        const rows = await fetchComments(String(planId));
+        const [rows, likes] = await Promise.all([fetchComments(String(planId)), fetchCommentLikes(String(planId))]);
         if (!cancelled) {
           setComments((localItems) => [
             ...localItems.filter((item) => !item.persisted),
             ...rows.map(mapCommentRow),
           ]);
+          setLikesByComment(Object.fromEntries(Array.from(new Set(likes.map((like) => like.comment_id))).map((commentId) => [commentId, likes.filter((like) => like.comment_id === commentId).map((like) => like.user_id)])));
         }
       } catch (error) {
         console.error("Supabase comments fetch failed", error);
@@ -548,6 +581,7 @@ export function EventDetailScreen({
       time: "сейчас",
       text,
       photoUrl,
+      parentId: replyRootId,
       mentionedUserIds,
       persisted: false,
     };
@@ -557,9 +591,10 @@ export function EventDetailScreen({
     ]);
     setComment("");
     setDraftMentions([]);
+    setReplyRootId(null);
     removeCommentPhoto();
     if (planId === undefined) return;
-    track("comment_sent", { plan_id: String(planId), mentions_count: mentionedUserIds.length, has_photo: Boolean(photoUrl) });
+    track("comment_sent", { plan_id: String(planId), mentions_count: mentionedUserIds.length, has_photo: Boolean(photoUrl), is_reply: Boolean(replyRootId) });
     void addComment({
       planId: String(planId),
       authorId: author.id,
@@ -568,6 +603,7 @@ export function EventDetailScreen({
       text,
       mentionedUserIds,
       photoUrl,
+      parentId: replyRootId,
     }).then((savedComment) => {
       if (!savedComment) return;
       setComments((items) => items.map((item) => item.id === localComment.id ? mapCommentRow(savedComment) : item));
@@ -577,11 +613,34 @@ export function EventDetailScreen({
   };
 
   const removeComment = (item: LocalComment) => {
-    setComments((items) => items.filter((commentItem) => commentItem.id !== item.id));
+    setComments((items) => items.filter((commentItem) => commentItem.id !== item.id && commentItem.parentId !== item.id));
     if (!item.persisted) return;
     void deleteComment(item.id).catch((error) => {
       console.error("Supabase comment delete failed", error);
     });
+  };
+
+  const toggleCommentLike = (item: LocalComment) => {
+    if (!currentAuthor || !item.persisted) return;
+    const previous = likesByComment[item.id] ?? [];
+    const liked = previous.includes(currentAuthor.id);
+    if (planId !== undefined) track("comment_like_toggled", { plan_id: String(planId), comment_id: item.id, liked: !liked });
+    setLikesByComment((items) => ({ ...items, [item.id]: liked ? previous.filter((id) => id !== currentAuthor.id) : [...previous, currentAuthor.id] }));
+    void (liked ? unlikeComment(item.id, currentAuthor.id) : likeComment(item.id, currentAuthor.id)).catch((error) => {
+      console.error("Supabase comment like update failed", error);
+      setLikesByComment((items) => ({ ...items, [item.id]: previous }));
+    });
+  };
+
+  const beginReply = (item: LocalComment) => {
+    const rootId = item.parentId ?? item.id;
+    const resolvedAuthor = item.authorId ? profileById[item.authorId] ?? commentAuthorProfiles[item.authorId] : null;
+    const name = resolvedAuthor?.name ?? item.author;
+    const id = item.authorId ?? name;
+    setReplyRootId(rootId);
+    setComment(`@${name} `);
+    setDraftMentions([{ id, name }]);
+    setCommentFocusKey((value) => value + 1);
   };
 
   const copyText = async (value: string) => {
@@ -641,57 +700,53 @@ export function EventDetailScreen({
     openShareFallback();
   };
 
+  const toggleSaved = () => {
+    if (!isSaved && planId !== undefined) track("plan_save_clicked", { plan_id: String(planId) });
+    onToggleSaved?.();
+    if (!isSaved) {
+      setToast("Сохранено в Мои планы");
+      window.setTimeout(() => setToast(""), 1800);
+    }
+  };
+
   return (
-    <div className="relative flex h-full flex-col bg-surface">
+    <div className="relative flex h-full flex-col overflow-hidden" style={{ background: PLAN_DARK.bg, color: PLAN_DARK.text }}>
+      {coverSrc && <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden"><img src={coverSrc} alt="" className="h-full w-full object-cover opacity-70" style={{ filter: "blur(60px)", transform: "scale(1.3)" }} /><div className="absolute inset-0 bg-black/60" /></div>}
       {toast && (
         <div
           className="absolute left-1/2 z-40 -translate-x-1/2 rounded-full px-4 py-2 text-[14px] font-medium text-white shadow-lg"
-          style={{ top: "calc(env(safe-area-inset-top) + 14px)", backgroundColor: GREEN }}
+          style={{ top: "calc(env(safe-area-inset-top) + 14px)", backgroundColor: PLAN_DARK.accent }}
         >
           {toast}
         </div>
       )}
 
-      <div className="flex h-14 flex-shrink-0 items-center px-4">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-[15px] font-medium text-foreground active:opacity-80">
-          <ArrowLeft size={20} strokeWidth={2} />
-          <span>Назад</span>
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto pb-[calc(88px+env(safe-area-inset-bottom))]">
-        <div className="px-4 pb-4">
-          <div className="relative aspect-[4/5] overflow-hidden rounded-xl" style={{ background: backgroundGradient ?? PLAN_TAG_GRADIENTS.other }}>
-            {coverSrc && (
-              <img loading="lazy" decoding="async" src={coverSrc} alt={title} className="absolute inset-0 h-full w-full object-cover" />
-            )}
-            <div
-              className="absolute inset-0"
-              style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.04) 0%, rgba(0,0,0,0.10) 46%, rgba(0,0,0,0.55) 100%)" }}
-            />
-            <div className="absolute left-4 top-4 rounded-full bg-black/50 px-3 py-1.5 text-[13px] font-medium leading-4 text-white">
-              {tagLabel}
+      <div className="relative z-10 flex-1 overflow-y-auto pb-6">
+          <div className="relative aspect-[4/5] w-full">
+            <div className="absolute inset-0 overflow-hidden" style={{ maskImage: COVER_MASK, WebkitMaskImage: COVER_MASK }}>
+              {coverSrc && <img loading="lazy" decoding="async" src={coverSrc} alt={title} className="h-full w-full object-cover" />}
             </div>
-            <div className="absolute right-4 top-4 flex items-center gap-2">
+            <button onClick={onBack} className="absolute left-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur-sm active:opacity-80" style={{ top: "calc(env(safe-area-inset-top) + 16px)" }} aria-label="Назад"><ArrowLeft size={20} /></button>
+            <div className="absolute right-4 flex items-center gap-2" style={{ top: "calc(env(safe-area-inset-top) + 16px)" }}>
               {canDelete && (
                 <button
                   onClick={() => {
                     const confirmed = window.confirm("Удалить план полностью? Он исчезнет из ленты и у всех, кто к нему присоединился");
                     if (confirmed) onDelete?.();
                   }}
-                  className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-black/50 active:opacity-85"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-black/35 backdrop-blur-sm active:opacity-85"
                   aria-label="Удалить план"
                 >
-                  <Trash2 size={16} strokeWidth={2} color="#fff" />
+                  <Trash2 size={18} strokeWidth={2} color="#fff" />
                 </button>
               )}
               {canEdit && (
                 <button
                   onClick={onEdit}
-                  className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-black/50 active:opacity-85"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-black/35 backdrop-blur-sm active:opacity-85"
                   aria-label="Редактировать план"
                 >
-                  <Edit3 size={16} strokeWidth={2} color="#fff" />
+                  <Edit3 size={18} strokeWidth={2} color="#fff" />
                 </button>
               )}
               {canHide && (
@@ -700,225 +755,53 @@ export function EventDetailScreen({
                     const confirmed = window.confirm("Скрыть план из ленты?");
                     if (confirmed) onHide?.();
                   }}
-                  className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-black/50 active:opacity-85"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-black/35 backdrop-blur-sm active:opacity-85"
                   aria-label="Скрыть из ленты"
                 >
-                  <Eye size={16} strokeWidth={2} color="#fff" />
+                  <Eye size={18} strokeWidth={2} color="#fff" />
                 </button>
               )}
-              {shareUrl && (
-                <button
-                  onClick={() => {
-                    setCopied(false);
-                    setSheet("share");
-                  }}
-                  className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-black/50 active:opacity-85"
-                  aria-label="Поделиться"
-                >
-                  <Share2 size={16} strokeWidth={2} color="#fff" />
-                </button>
-              )}
+              {!isOwnPlan && <button onClick={organizerAction} className="h-10 w-10 overflow-hidden rounded-full bg-black/35 active:opacity-85" aria-label="Открыть профиль"><AuthorAvatar name={authorName} avatarUrl={authorAvatarUrl} size={40} /></button>}
             </div>
-            <div className="absolute inset-x-4 bottom-[18px] flex flex-col items-center text-center">
-              <div className="flex -space-x-2">
-                {participants.slice(0, 4).map((participant, i) => (
-                  participant.avatarUrl ? (
-                    <button
-                      key={participant.id ?? i}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onProfileOpen?.(participant.id);
-                      }}
-                      className="h-[30px] w-[30px] rounded-full active:opacity-80"
-                      aria-label="Открыть профиль"
-                    >
-                      <img loading="lazy" decoding="async" src={participant.avatarUrl} alt="" className="h-[30px] w-[30px] rounded-full border-2 border-white object-cover" />
-                    </button>
-                  ) : (
-                    <span key={participant.id ?? i} className="h-[30px] w-[30px] rounded-full border-2 border-white bg-white/30" />
-                  )
-                ))}
+            <div className="absolute inset-x-4 bottom-5 flex flex-col items-center text-center">
+              <span className="rounded-full px-3 py-1.5 text-[13px] font-medium text-white backdrop-blur-md" style={{ background: "rgba(255,255,255,0.18)" }}>{tagLabel}</span>
+              <h1 className="mt-3 max-w-full text-[32px] font-bold leading-[1.08] text-white" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{title}</h1>
+              <div className="mt-4 flex items-center justify-center gap-5 text-[14px]" style={{ color: PLAN_DARK.textSecondary }}>
+                <span className="flex items-center gap-1.5"><MessageCircle size={18} />{comments.length}</span>
+                <span className="flex items-center gap-1.5"><Users size={18} />{resolvedParticipantCount}</span>
+                {shareUrl && <button onClick={() => { setCopied(false); setSheet("share"); }} className="ml-2 active:opacity-75" aria-label="Поделиться"><Share2 size={20} /></button>}
               </div>
-              <p className="mt-1.5 text-[12px] leading-4 text-white/85">{participantCountLabel}</p>
-              <h1
-                className="mt-2 max-w-full text-[28px] font-bold leading-[34px] text-white"
-                style={{
-                  display: "-webkit-box",
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: "vertical",
-                  overflow: "hidden",
-                }}
-              >
-                {title}
-              </h1>
             </div>
           </div>
+          <div className="px-4">
+            <div className={`grid ${isOwnPlan ? "grid-cols-2" : "grid-cols-3"} py-5 text-center`}>
+              {!isOwnPlan && <button onClick={toggleJoin} className="flex flex-col items-center gap-1.5 rounded-xl py-3 text-[13px]" style={joined ? { color: PLAN_DARK.accent, background: "rgba(47,191,175,0.15)" } : undefined}>{joined ? <CheckSquare size={22} /> : <Plus size={22} />}<span>{joined ? "Участвую" : "Участвовать"}</span></button>}
+              <button onClick={inviteFriends} className={`flex flex-col items-center gap-1.5 py-3 text-[13px] ${isOwnPlan ? "" : "border-l"}`} style={{ borderColor: PLAN_DARK.divider }}><UserPlus size={22} /><span>Пригласить</span></button>
+              <button onClick={toggleSaved} className="flex flex-col items-center gap-1.5 border-l py-3 text-[13px]" style={{ borderColor: PLAN_DARK.divider, color: isSaved ? PLAN_DARK.accent : undefined }}><Bookmark size={22} fill={isSaved ? PLAN_DARK.accent : "none"} /><span>{isSaved ? "Сохранено" : "Сохранить"}</span></button>
+            </div>
 
-          <div className="mt-4 border-t border-border pt-4">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <button onClick={organizerAction} className="flex min-w-0 items-center gap-2.5 text-left active:opacity-80">
-                <AuthorAvatar name={authorName} avatarUrl={authorAvatarUrl} />
-                <span className="truncate text-[15px] font-medium text-foreground">{authorName}</span>
+            <SectionTitle>Детали</SectionTitle>
+            <div className="grid grid-cols-2 gap-2.5">
+              <DetailCard><SmallLabel>{isWeeklyExactSchedule ? "Каждую неделю" : exactDateLabel(schedule?.start)}</SmallLabel><div className="mt-2 flex items-center gap-2 text-[28px] font-bold">{shortWeekday || weeklyDays}{isRepeating && <Repeat2 size={20} style={{ color: PLAN_DARK.textSecondary }} />}</div></DetailCard>
+              <DetailCard><SmallLabel>Старт</SmallLabel><div className={`${partOfDayLabel ? "text-[17px]" : "text-[28px]"} mt-2 font-bold`}>{partOfDayLabel || startTimeOnly}</div></DetailCard>
+              <button onClick={() => setSheet("participants")} className={`rounded-xl p-4 text-left active:opacity-85 ${format === "offline" && !meta.location ? "col-span-2" : ""}`} style={{ background: PLAN_DARK.card }}>
+                <div className="flex items-center justify-between"><SmallLabel>{pluralizeParticipants(resolvedParticipantCount)}</SmallLabel><ChevronRight size={18} style={{ color: PLAN_DARK.textSecondary }} /></div>
+                <div className="mt-3 flex items-center -space-x-2">{participants.slice(0, 5).map((participant, index) => <AuthorAvatar key={participant.id} name={participant.name} avatarUrl={participant.avatarUrl} size={index === Math.min(2, participants.length - 1) ? 44 : 28} />)}{overflowLabel && <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-[10px] font-bold">{overflowLabel}</span>}</div>
               </button>
-              <div className="flex flex-shrink-0 items-center gap-2">
-                {onMessageAuthor && !isOwnPlan && (
-                  <button
-                    onClick={() => onMessageAuthor({ id: authorId ?? authorName, name: authorName, avatarUrl: authorAvatarUrl })}
-                    className="rounded-full border px-3 py-1.5 text-[12px] font-semibold"
-                    style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
-                  >
-                    Написать
-                  </button>
-                )}
-                {!isOwnPlan && (
-                  <button
-                    onClick={toggleAuthorFollow}
-                    className="rounded-full border px-3 py-1.5 text-[12px] font-semibold"
-                    style={subscribed ? { borderColor: "var(--border)", color: "var(--foreground)" } : { borderColor: GREEN, backgroundColor: GREEN, color: "#fff" }}
-                  >
-                    {subscribed ? "В подписках" : "Подписаться"}
-                  </button>
-                )}
-              </div>
+              {format === "offline" && meta.location ? <DetailCard><SmallLabel>Где</SmallLabel><p className="mt-2 font-bold">{addressParts[0]}</p><p className="mt-1 text-[13px]" style={{ color: PLAN_DARK.textSecondary }}>{addressParts.slice(1).join(", ")}</p></DetailCard> : format === "online" ? <DetailCard><SmallLabel>Формат</SmallLabel><p className="mt-2 text-[24px] font-bold">Онлайн</p></DetailCard> : null}
             </div>
 
-            <div className="mb-4 text-[14px] leading-[1.5] text-muted-foreground">
-              <p
-                style={!descriptionExpanded && needsDescriptionClamp ? {
-                  display: "-webkit-box",
-                  WebkitLineClamp: 4,
-                  WebkitBoxOrient: "vertical",
-                  overflow: "hidden",
-                  whiteSpace: "pre-line",
-                } : { whiteSpace: "pre-line" }}
-              >
-                {description}
-              </p>
-              {needsDescriptionClamp && (
-                <button
-                  onClick={() => setDescriptionExpanded((value) => !value)}
-                  className="inline text-[14px] font-medium"
-                  style={{ color: GREEN }}
-                >
-                  {descriptionExpanded ? "Свернуть" : "Подробнее"}
-                </button>
-              )}
-            </div>
+            {(levelConfig || distanceLabel || duration) && <><SectionTitle>Уровень</SectionTitle><div className="grid grid-cols-2 gap-2.5">{levelConfig && <DetailCard><SmallLabel>{levelConfig.subtitle}</SmallLabel><div className="mt-2 flex items-center justify-between text-[24px] font-bold"><span>{levelConfig.title}</span><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">{[0,1,2].map((bar) => <rect key={bar} x={2 + bar * 6} y={13 - bar * 4} width="4" height={5 + bar * 4} rx="1" fill={bar < levelConfig.bars ? levelConfig.color : "rgba(255,255,255,0.25)"} />)}</svg></div></DetailCard>}{(distanceLabel || duration) && <DetailCard><SmallLabel>{distanceLabel ? "Дистанция" : "Время"}</SmallLabel><p className="mt-2 text-[24px] font-bold">{distanceLabel || duration}</p></DetailCard>}</div></>}
 
-            <div className="pb-5">
-              <h2 className="mb-3 text-[16px] font-semibold text-foreground">Детали плана</h2>
-              <div className="overflow-hidden rounded-xl bg-card">
-                <div className="flex items-start gap-3 border-b border-border px-4 py-3">
-                  <Tag size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[14px] leading-5 text-foreground">{tagLabel}</p>
-                    <p className="text-[13px] leading-4 text-muted-foreground">Категория</p>
-                  </div>
-                </div>
+            {description && <><SectionTitle>Описание</SectionTitle><div className="rounded-xl p-4 text-[15px] leading-[1.45]" style={{ background: PLAN_DARK.card }}><p style={!descriptionExpanded && needsDescriptionClamp ? { display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden", whiteSpace: "pre-line" } : { whiteSpace: "pre-line" }}><DescriptionText text={description} /></p>{needsDescriptionClamp && <button onClick={() => setDescriptionExpanded((value) => !value)} className="mt-1 font-medium" style={{ color: PLAN_DARK.accent }}>{descriptionExpanded ? "Свернуть" : "Подробнее"}</button>}</div></>}
 
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSheet("participants")}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") setSheet("participants");
-                  }}
-                  className="flex w-full items-center justify-between gap-3 border-b border-border px-4 py-3 text-left active:opacity-85"
-                >
-                  <div className="flex min-w-0 items-start gap-3">
-                    <Users size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
-                    <div className="min-w-0">
-                      <p className="text-[14px] leading-5 text-foreground">{pluralizeParticipants(participants.length)}</p>
-                      <p className="text-[13px] leading-4 text-muted-foreground">Участники</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-shrink-0 items-center">
-                    <div className="flex -space-x-2">
-                      {participants.slice(0, 3).map((participant, i) => (
-                        participant.avatarUrl ? (
-                          <button
-                            key={participant.id ?? i}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onProfileOpen?.(participant.id);
-                            }}
-                            className="h-7 w-7 rounded-full active:opacity-80"
-                            aria-label="Открыть профиль"
-                          >
-                            <img loading="lazy" decoding="async" src={participant.avatarUrl} alt="" className="h-7 w-7 rounded-full border object-cover" style={{ borderColor: "var(--surface)" }} />
-                          </button>
-                        ) : (
-                          <span key={participant.id ?? i} className="h-7 w-7 rounded-full border bg-secondary" style={{ borderColor: "var(--surface)" }} />
-                        )
-                      ))}
-                    </div>
-                    {overflowLabel && (
-                      <div className="-ml-2 flex h-7 w-7 items-center justify-center rounded-full bg-muted">
-                        <span className="text-[10px] font-bold text-foreground">{overflowLabel}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
+            {photos.length > 0 && <button onClick={() => setSheet("photos")} className="mt-5 w-full rounded-xl p-4 text-left" style={{ background: PLAN_DARK.card }}><div className="mb-3 flex items-center justify-between text-[15px] font-semibold"><span>{photos.length} фото</span><ChevronRight size={18} /></div><div className="grid grid-cols-3 gap-2">{photos.slice(0,3).map((photo, index) => <img key={`${photo}-${index}`} src={photo} alt="" className="aspect-[4/3] w-full rounded-[10px] object-cover" />)}</div></button>}
 
-                <div className="flex items-start gap-3 border-b border-border px-4 py-3">
-                  <Calendar size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[14px] leading-5 text-foreground">{schedulePrimary}</p>
-                    {scheduleDetailsSecondary && <p className="text-[13px] leading-4 text-muted-foreground">{scheduleDetailsSecondary}</p>}
-                  </div>
-                </div>
-
-                {format === "offline" && meta.location && (
-                  <div className="flex items-start gap-3 border-b border-border px-4 py-3">
-                    <MapPin size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[14px] leading-5 text-foreground">{meta.location}</p>
-                      <p className="text-[13px] leading-4 text-muted-foreground">{meta.locationSub || "Место"}</p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-start gap-3 px-4 py-3">
-                  <Video size={20} strokeWidth={1.8} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[14px] leading-5 text-foreground">{formatLabel}</p>
-                    <p className="text-[13px] leading-4 text-muted-foreground">Формат</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <div className="flex items-center gap-3 py-7"><button onClick={organizerAction}><AuthorAvatar name={authorName} avatarUrl={authorAvatarUrl} size={44} /></button><button onClick={organizerAction} className="min-w-0 flex-1 text-left"><p className="truncate text-[16px] font-semibold">{authorName}</p>{authorSubtitle && <p className="text-[13px]" style={{ color: PLAN_DARK.textSecondary }}>{authorSubtitle}</p>}</button>{onMessageAuthor && !isOwnPlan && isDemo !== true && <button onClick={() => onMessageAuthor({ id: authorId ?? authorName, name: authorName, avatarUrl: authorAvatarUrl })} className="text-[13px] font-medium" style={{ color: PLAN_DARK.accent }}>Написать</button>}{!isOwnPlan && onToggleAuthorFollow && <button onClick={toggleAuthorFollow} className="text-[13px] font-medium" style={{ color: subscribed ? PLAN_DARK.textSecondary : PLAN_DARK.accent }}>{subscribed ? "В подписках" : "+ Подписаться"}</button>}</div>
           </div>
-        </div>
 
-        <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} currentAuthor={currentAuthor} planAuthorId={authorId} onDelete={removeComment} onProfileOpen={onProfileOpen} mentionCandidates={mentionCandidates} onMentionSelected={(mention) => setDraftMentions((items) => [...items.filter((item) => item.id !== mention.id), mention])} profileById={{ ...commentAuthorProfiles, ...profileById }} photoPreviewUrl={commentPhotoPreviewUrl} photoUploadProgress={commentPhotoUploadProgress} photoUrl={commentPhotoUrl} onPhotoSelected={(file) => { void selectCommentPhoto(file); }} onPhotoRemoved={removeCommentPhoto} />
+        <CommentsBlock comment={comment} setComment={setComment} comments={comments} onSend={sendComment} currentAuthor={currentAuthor} planAuthorId={authorId} onDelete={removeComment} onProfileOpen={onProfileOpen} mentionCandidates={mentionCandidates} onMentionSelected={(mention) => setDraftMentions((items) => [...items.filter((item) => item.id !== mention.id), mention])} profileById={{ ...commentAuthorProfiles, ...profileById }} photoPreviewUrl={commentPhotoPreviewUrl} photoUploadProgress={commentPhotoUploadProgress} photoUrl={commentPhotoUrl} onPhotoSelected={(file) => { void selectCommentPhoto(file); }} onPhotoRemoved={removeCommentPhoto} likesByComment={likesByComment} expandedReplies={expandedReplies} onToggleReplies={(id) => setExpandedReplies((items) => { const next = new Set(items); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onLike={toggleCommentLike} onReply={beginReply} focusRequestKey={commentFocusKey} />
       </div>
-
-      {(shareUrl || !isOwnPlan) && (
-        <div className="sticky bottom-0 z-30 flex flex-shrink-0 gap-2.5 border-t border-border bg-surface px-4 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
-          {shareUrl && (
-            <button
-              type="button"
-              onClick={inviteFriends}
-              className="flex h-12 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl border bg-transparent px-2 text-[14px] font-semibold active:opacity-90"
-              style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
-            >
-              <Share2 size={18} strokeWidth={2.2} />
-              <span className="min-w-0 whitespace-nowrap">{isOwnPlan ? "Пригласить друзей" : "Пригласить"}</span>
-            </button>
-          )}
-          {!isOwnPlan && (
-            <button
-              type="button"
-              onClick={toggleJoin}
-              className="flex h-12 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl border px-2 text-[14px] active:opacity-90"
-              style={joined ? { backgroundColor: "var(--surface)", borderColor: "var(--border)", color: "var(--foreground)", fontWeight: 500 } : { backgroundColor: GREEN, borderColor: GREEN, color: "#fff", fontWeight: 600 }}
-            >
-              {joined ? <Check size={18} strokeWidth={2.4} color={GREEN} /> : <Plus size={18} strokeWidth={2.3} color="#fff" />}
-              <span className="min-w-0 whitespace-nowrap">{joined ? "Вы участвуете" : "Присоединиться"}</span>
-            </button>
-          )}
-        </div>
-      )}
 
       {sheet === "participants" && (
         <HomeSheet title="Участники" onClose={() => setSheet(null)}>
@@ -978,6 +861,14 @@ export function EventDetailScreen({
             <Copy size={17} strokeWidth={2.2} />
             {copied ? "Ссылка скопирована" : "Скопировать ссылку"}
           </button>
+        </HomeSheet>
+      )}
+
+      {sheet === "photos" && (
+        <HomeSheet title="Фото" onClose={() => setSheet(null)}>
+          <div className="grid grid-cols-3 gap-1">
+            {photos.map((photo, index) => <img key={`${photo}-${index}`} src={photo} alt="" className="aspect-square w-full rounded-lg object-cover" />)}
+          </div>
         </HomeSheet>
       )}
 
