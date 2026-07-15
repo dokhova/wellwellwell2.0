@@ -526,12 +526,12 @@ export function CreateScreen({
         <p className="mb-3 text-[15px] font-medium">Уровень</p>
         <div className="grid grid-cols-3 gap-1.5">
           {([
-            ["well", "Well", "без подготовки"],
-            ["veryWell", "Very well", "базовая подготовка"],
-            ["tooWell", "Too well", "уверенная подготовка"],
-          ] as const).map(([value, label, subtitle]) => {
+            ["well", "Well"],
+            ["veryWell", "Very well"],
+            ["tooWell", "Too well"],
+          ] as const).map(([value, label]) => {
             const active = selectedLevel === value;
-            return <button key={label} type="button" onClick={() => setSelectedLevel(active ? undefined : value)} className="min-w-0 rounded-xl border px-1.5 py-2 text-center" style={active ? { borderColor: GREEN, backgroundColor: GREEN_LIGHT, color: GREEN } : { borderColor: "var(--border)" }}><span className="block truncate text-[14px] font-semibold">{label}</span><span className="mt-0.5 block whitespace-nowrap text-[10px] text-muted-foreground">{subtitle}</span></button>;
+            return <button key={label} type="button" onClick={() => setSelectedLevel(active ? undefined : value)} className="flex h-11 min-w-0 items-center justify-center overflow-hidden rounded-xl border px-1 text-center" style={active ? { borderColor: GREEN, backgroundColor: GREEN_LIGHT, color: GREEN } : { borderColor: "var(--border)" }}><span className="block max-w-full truncate text-[13px] font-semibold">{label}</span></button>;
           })}
         </div>
       </div>

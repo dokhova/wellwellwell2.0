@@ -11,6 +11,7 @@ import { uploadPhoto } from "@/app/lib/api/storage";
 import { pluralizeParticipants } from "@/app/lib/pluralize";
 import { renderFormattedText } from "@/app/lib/formattedText";
 import { openExternalUrl } from "@/app/lib/telegram";
+import { formatWeekdayRanges } from "@/app/lib/weekdayRanges";
 
 type MentionCandidate = { id: string; name: string; avatarUrl: string | null };
 type LocalComment = { id: string; authorId: string | null; author: string; avatarUrl: string | null; time: string; text: string; photoUrl: string | null; parentId: string | null; mentionedUserIds: string[]; persisted: boolean };
@@ -310,8 +311,8 @@ function SmallLabel({ children }: { children: ReactNode }) {
   return <span className="text-[13px]" style={{ color: PLAN_DARK.textSecondary }}>{children}</span>;
 }
 
-function DetailCard({ children }: { children: ReactNode }) {
-  return <div className="rounded-xl p-4 text-left" style={{ background: PLAN_DARK.card }}>{children}</div>;
+function DetailCard({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`rounded-xl p-4 text-left ${className}`} style={{ background: PLAN_DARK.card }}>{children}</div>;
 }
 
 // ─── Unified EventDetailScreen ────────────────────────────────────────────────
@@ -387,7 +388,8 @@ export function EventDetailScreen({
     ? startDate.toLocaleDateString("ru-RU", { weekday: "short" }).replace(".", "").toUpperCase()
     : "";
   const partOfDayLabel = schedule?.partOfDay ? PART_OF_DAY_RANGES[schedule.partOfDay].label : "";
-  const startTimeOnly = schedule?.time || (startDate && !Number.isNaN(startDate.getTime()) ? startDate.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : meta.time);
+  const exactStartTime = startDate && !Number.isNaN(startDate.getTime()) ? startDate.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : "";
+  const startCardValue = schedule?.time || exactStartTime || partOfDayLabel || meta.time;
   const levelConfig = level ? {
     well: { title: "Well", subtitle: "Без подготовки", color: PLAN_DARK.levelWell, bars: 1 },
     veryWell: { title: "Very well", subtitle: "Базовая подготовка", color: PLAN_DARK.levelVeryWell, bars: 2 },
@@ -444,7 +446,28 @@ export function EventDetailScreen({
       .map((day) => ALL_DAYS[WEEKDAY_VALUES.indexOf(day)])
       .filter(Boolean)
       .join(", ");
-  const weeklyDays = weekdayLabel(schedule?.weekdays ?? []).toUpperCase();
+  const isWeekdayOnlySchedule = Boolean(schedule?.weekdays.length && !schedule.start);
+  const weeklyDays = formatWeekdayRanges(schedule?.weekdays ?? []).toUpperCase();
+  const scheduleCardValue = isWeekdayOnlySchedule ? weeklyDays : shortWeekday || weeklyDays;
+  const scheduleValueContainerRef = useRef<HTMLDivElement | null>(null);
+  const scheduleValueMeasureRef = useRef<HTMLSpanElement | null>(null);
+  const [useCompactScheduleFont, setUseCompactScheduleFont] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!isWeekdayOnlySchedule) {
+      setUseCompactScheduleFont(false);
+      return;
+    }
+    const updateFontSize = () => {
+      const containerWidth = scheduleValueContainerRef.current?.clientWidth ?? 0;
+      const measuredWidth = scheduleValueMeasureRef.current?.scrollWidth ?? 0;
+      const repeatIconWidth = isRepeating ? 28 : 0;
+      setUseCompactScheduleFont(measuredWidth > containerWidth - repeatIconWidth);
+    };
+    updateFontSize();
+    window.addEventListener("resize", updateFontSize);
+    return () => window.removeEventListener("resize", updateFontSize);
+  }, [isRepeating, isWeekdayOnlySchedule, scheduleCardValue]);
 
   const exactDateLabel = (value?: string) => {
     if (!value) return meta.date;
@@ -838,8 +861,8 @@ export function EventDetailScreen({
 
             <SectionTitle>Детали</SectionTitle>
             <div className="grid grid-cols-2 gap-2.5">
-              <DetailCard><SmallLabel>{isWeeklyExactSchedule ? "Каждую неделю" : exactDateLabel(schedule?.start)}</SmallLabel><div className="mt-2 flex items-center gap-2 text-[28px] font-bold">{shortWeekday || weeklyDays}{isRepeating && <Repeat2 size={20} style={{ color: PLAN_DARK.textSecondary }} />}</div></DetailCard>
-              <DetailCard><SmallLabel>Старт</SmallLabel><div className={`${partOfDayLabel ? "text-[17px]" : "text-[28px]"} mt-2 font-bold`}>{partOfDayLabel || startTimeOnly}</div></DetailCard>
+              <DetailCard className="h-[106px] overflow-hidden"><SmallLabel>{isWeekdayOnlySchedule || isWeeklyExactSchedule ? "Каждую неделю" : exactDateLabel(schedule?.start)}</SmallLabel><div ref={scheduleValueContainerRef} className="relative mt-2 flex min-w-0 items-center justify-between gap-2 font-bold leading-[1.15]"><span ref={scheduleValueMeasureRef} aria-hidden="true" className="pointer-events-none absolute invisible whitespace-nowrap text-[24px]">{scheduleCardValue}</span><span className={`min-w-0 ${isWeekdayOnlySchedule ? useCompactScheduleFont ? "line-clamp-2 text-[18px]" : "whitespace-nowrap text-[24px]" : "text-[28px]"}`}>{scheduleCardValue}</span>{isRepeating && <Repeat2 size={20} className="flex-shrink-0" style={{ color: PLAN_DARK.textSecondary }} />}</div></DetailCard>
+              <DetailCard className="h-[106px] overflow-hidden"><SmallLabel>Старт</SmallLabel><div className="mt-2 text-[28px] font-bold">{startCardValue}</div></DetailCard>
               <button onClick={() => setSheet("participants")} className={`rounded-xl p-4 text-left active:opacity-85 ${format === "offline" && !meta.location ? "col-span-2" : ""}`} style={{ background: PLAN_DARK.card }}>
                 <div className="flex items-center justify-between"><SmallLabel>{pluralizeParticipants(resolvedParticipantCount)}</SmallLabel><ChevronRight size={18} style={{ color: PLAN_DARK.textSecondary }} /></div>
                 <div className="mt-3 flex items-center -space-x-2">{participants.slice(0, 5).map((participant, index) => <AuthorAvatar key={participant.id} name={participant.name} avatarUrl={participant.avatarUrl} size={index === Math.min(2, participants.length - 1) ? 44 : 28} />)}{overflowLabel && <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-[10px] font-bold">{overflowLabel}</span>}</div>
