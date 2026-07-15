@@ -57,7 +57,7 @@ export interface ChatThread {
 export type PlanRepeat =
   | { type: "none" }
   | { type: "days"; days: number }
-  | { type: "weekly" }
+  | { type: "weekly"; until?: string }
   | { type: "untilWeek"; week: number }
   | { type: "forever" };
 export type ScheduleEnd =

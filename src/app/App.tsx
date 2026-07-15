@@ -9,6 +9,7 @@ import { activeDemoClubPlans, demoClubs, getDemoClubParticipantPeers } from "@/a
 import { demoCommunityPlanIds, demoCommunityPlans, getDemoCommunityParticipantPeers } from "@/app/data/demoCommunity";
 import { acceptProfileTerms, deleteProfile, fetchProfile, fetchProfilesByIds, upsertProfile } from "@/app/lib/api/profiles";
 import { deleteUserFollows, fetchFollowers, fetchFollowing, follow, unfollow } from "@/app/lib/api/follows";
+import { isSchedulePastRepeatEnd, normalizeSchedule } from "@/app/lib/schedule";
 import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { deleteUserMessages, fetchUserThreadMessages, makeThreadId, sendMessage, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
 import { createPlanRemote, deletePlanParticipant, deletePlanParticipantsForPlans, deletePlanRemote, deletePlansByAuthor, deleteUserPlanParticipants, fetchJoinedCounts, fetchParticipants, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, updatePlanRemote, upsertPlanParticipant } from "@/app/lib/api/plans";
@@ -155,6 +156,7 @@ const normalizeProfile = (profile: ExpertProfile): ExpertProfile => {
 const sanitizePlan = (plan: HomeFeedPlan): HomeFeedPlan => ({
   ...plan,
   duration: plan.duration?.trim() === "План" ? undefined : plan.duration,
+  schedule: normalizeSchedule(plan.schedule),
   coverUrl: sanitizeImageUrl(plan.coverUrl) ?? undefined,
   photos: plan.photos?.map(sanitizeImageUrl).filter((url): url is string => Boolean(url)),
   participants: plan.participants.map(sanitizeImageUrl).filter((url): url is string => Boolean(url)),
@@ -695,7 +697,8 @@ export default function App() {
     const sortedPlans = [...catalogPublicPlans, ...justCreatedPublicPlans]
       .filter((plan) => !moderatorHiddenPlanIdSet.has(planKey(plan.id)))
       .sort((a, b) => getParticipantsCount(b) - getParticipantsCount(a));
-    return [...orderedClubPlans, ...orderedTopDemoPlans, ...remainingDemoPlans, ...sortedPlans];
+    return [...orderedClubPlans, ...orderedTopDemoPlans, ...remainingDemoPlans, ...sortedPlans]
+      .filter((plan) => !isSchedulePastRepeatEnd(plan.schedule));
   }, [catalogPublicPlans, deletedPlanIdSet, demoPlansWithParticipants, homeClubPlanOrder, homeDemoPlanOrder, justCreatedPublicPlans, moderatorHiddenPlanIdSet]);
   const participantChatPeers: ChatPeer[] = useMemo(() => EVENT_PARTICIPANTS.map((participant) => ({
     id: participant.id,
@@ -1986,6 +1989,8 @@ export default function App() {
           ? items.filter((item) => item.id !== profile.id)
           : items.some((item) => item.id === profile.id) ? items : [connection, ...items]);
         adjustProfileFollowersCount(profile, nextFollowed ? -1 : 1);
+        setAppToast(nextFollowed ? "Не удалось подписаться" : "Не удалось отписаться");
+        window.setTimeout(() => setAppToast(""), 2400);
       }).finally(() => {
         void Promise.all([
           loadConnectionSets(currentUserId),
@@ -2010,6 +2015,14 @@ export default function App() {
     setOptimisticFollowState(profile, nextFollowed);
     void (nextFollowed ? follow(currentUserId, profile.id) : unfollow(currentUserId, profile.id)).catch((error) => {
       console.error("Supabase demo follow update failed", error);
+      setMyFollowing((items) => {
+        if (nextFollowed) return items.filter((item) => item.id !== profile.id);
+        if (items.some((item) => item.id === profile.id)) return items;
+        return [connection, ...items];
+      });
+      setOptimisticFollowState(profile, !nextFollowed);
+      setAppToast(nextFollowed ? "Не удалось подписаться" : "Не удалось отписаться");
+      window.setTimeout(() => setAppToast(""), 2400);
     });
   };
 
@@ -2208,63 +2221,14 @@ export default function App() {
             followingItems={connectionSets.following}
             onToggleFollowing={(id) => {
               const targetConnection = connectionSets.following.find((item) => item.id === id);
-              if (isDemoProfileId(id)) {
-                setMyFollowing((items) => items.filter((item) => item.id !== id));
-                setConnectionSetsByUser((items) => {
-                  const current = items[currentUserId];
-                  if (!current) return items;
-                  return {
-                    ...items,
-                    [currentUserId]: {
-                      ...current,
-                      following: current.following.filter((item) => item.id !== id),
-                    },
-                  };
-                });
-                return;
-              }
-              setConnectionSetsByUser((items) => {
-                const current = items[currentUserId];
-                const target = items[id];
-                return {
-                  ...items,
-                  ...(current ? {
-                    [currentUserId]: {
-                      ...current,
-                      following: current.following.filter((item) => item.id !== id),
-                    },
-                  } : {}),
-                  ...(target ? {
-                    [id]: {
-                      ...target,
-                      followers: target.followers.filter((item) => item.id !== currentUserId),
-                    },
-                  } : {}),
-                };
-              });
-              setDbFollowing((items) => items.filter((item) => item.id !== id));
-              void unfollow(currentUserId, id).catch((error) => {
-                console.error("Supabase unfollow from list failed", error);
-                if (targetConnection) {
-                  setConnectionSetsByUser((items) => {
-                    const current = items[currentUserId] ?? { followers: localDemoFollowersFor(currentUserId), following: localDemoFollowingFor(currentUserId) };
-                    return {
-                      ...items,
-                      [currentUserId]: {
-                        ...current,
-                        following: dedupeConnections([targetConnection, ...current.following]),
-                      },
-                    };
-                  });
-                }
-              }).finally(() => {
-                void Promise.all([
-                  loadConnectionSets(currentUserId),
-                  loadConnectionSets(id),
-                ]).catch((error) => {
-                  console.error("Supabase follows reload failed", error);
-                });
-              });
+              const targetProfile = remoteProfiles[id]
+                ?? experts.find((profile) => profile.id === id && profile.isDemo === true)
+                ?? buildUnknownProfile(id);
+              toggleFollowing({
+                ...targetProfile,
+                name: targetConnection?.name ?? targetProfile.name,
+                photoUrl: targetConnection?.avatarUrl ?? targetProfile.photoUrl,
+              }, false);
             }}
           />
         );

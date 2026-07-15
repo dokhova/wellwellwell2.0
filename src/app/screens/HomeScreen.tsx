@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Filter, MoreVertical, Plus, Search, Share2, Trash2, Users } from "lucide-react";
 import type { ChatPeer, HomeFeedPlan, PlanId, Screen, TagFilter } from "@/app/types";
 import { CATEGORY_CHIPS, normalizePlanTag, PLAN_TAG_LABELS } from "@/app/data/plans";
-import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
+import { GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES } from "@/app/data/constants";
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { buildPlanStartAppUrl } from "@/app/lib/telegram";
 import { track } from "@/app/lib/analytics";
+import { formatWeekdayRanges } from "@/app/lib/weekdayRanges";
 
 const planKey = (id: PlanId) => String(id);
 
@@ -20,7 +21,7 @@ function ParticipantAvatarLine({ avatars }: { avatars: string[] }) {
             key={`${url}-${index}`}
             src={url}
             alt=""
-            className="h-7 w-7 rounded-full border-2 border-white object-cover shadow-[0_4px_10px_rgba(0,0,0,0.22)]"
+            className="h-7 w-7 rounded-full border-2 border-white object-cover"
           />
         ))
       ) : (
@@ -59,7 +60,7 @@ function AuthorAvatar({ name, avatarUrl }: { name: string; avatarUrl: string | n
   );
 }
 
-export function FeedEventCard({
+export const FeedEventCard = memo(function FeedEventCard({
   plan,
   onOpen,
   onAuthor,
@@ -69,25 +70,36 @@ export function FeedEventCard({
   onDelete,
 }: {
   plan: HomeFeedPlan;
-  onOpen: () => void;
-  onAuthor: () => void;
-  onShare: () => void;
-  onAuthorMenu: () => void;
+  onOpen: (plan: HomeFeedPlan) => void;
+  onAuthor: (plan: HomeFeedPlan) => void;
+  onShare: (plan: HomeFeedPlan) => void;
+  onAuthorMenu: (plan: HomeFeedPlan) => void;
   canDelete?: boolean;
-  onDelete?: () => void;
+  onDelete?: (plan: HomeFeedPlan) => void;
 }) {
   const tag = normalizePlanTag(plan.tag);
+  const formattedDays = formatWeekdayRanges(plan.schedule.weekdays);
+  const weeklyDays = formattedDays === "Каждый день" ? formattedDays : formattedDays.toUpperCase();
+  const exactStart = plan.schedule.start ? new Date(plan.schedule.start) : null;
+  const scheduleTime = exactStart && !Number.isNaN(exactStart.getTime())
+    ? exactStart.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+    : plan.schedule.partOfDay
+      ? PART_OF_DAY_RANGES[plan.schedule.partOfDay].label
+      : "";
+  const scheduleLabel = plan.schedule.repeat?.type === "weekly" && weeklyDays
+    ? [weeklyDays, scheduleTime].filter(Boolean).join(" · ")
+    : plan.timeDate;
 
   return (
-    <article>
+    <article className="[content-visibility:auto] [contain-intrinsic-size:auto_560px]">
       <div
         role="button"
         tabIndex={0}
-        onClick={onOpen}
+        onClick={() => onOpen(plan)}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            onOpen();
+            onOpen(plan);
           }
         }}
         className="relative w-full aspect-[4/5] overflow-hidden rounded-[28px] text-left active:opacity-95"
@@ -113,7 +125,7 @@ export function FeedEventCard({
                 onClick={(e) => {
                   e.stopPropagation();
                   const confirmed = window.confirm("Удалить план полностью? Он исчезнет из ленты и у всех, кто к нему присоединился");
-                  if (confirmed) onDelete?.();
+                  if (confirmed) onDelete?.(plan);
                 }}
                 className="flex h-[42px] w-[42px] items-center justify-center rounded-full bg-black/45"
                 aria-label="Удалить план"
@@ -124,7 +136,7 @@ export function FeedEventCard({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onShare();
+                onShare(plan);
               }}
               className="flex h-[42px] w-[42px] items-center justify-center rounded-full bg-black/45"
               aria-label="Поделиться"
@@ -147,7 +159,7 @@ export function FeedEventCard({
           >
             {plan.isChallenge ? `Челлендж: ${plan.title}` : plan.title}
           </h2>
-          <p className="mt-2 max-w-full truncate text-[16px] leading-6 text-white/75">{plan.timeDate}</p>
+          <p className="mt-2 max-w-full truncate text-[16px] leading-6 text-white/75">{scheduleLabel}</p>
           {plan.address && (
             <p className="mt-0.5 max-w-full truncate text-[14px] text-white/65">{plan.address}</p>
           )}
@@ -156,19 +168,19 @@ export function FeedEventCard({
 
       <div className="mt-3 flex h-12 items-center px-1">
         <button
-          onClick={onAuthor}
+          onClick={() => onAuthor(plan)}
           className="flex min-w-0 flex-1 items-center text-left"
         >
           <AuthorAvatar name={plan.author.name} avatarUrl={plan.author.avatarUrl} />
           <span className="ml-2.5 truncate text-[15px] font-medium text-gray-900">{plan.author.name}</span>
         </button>
-        <button onClick={onAuthorMenu} className="w-8 h-8 flex items-center justify-end text-gray-400">
+        <button onClick={() => onAuthorMenu(plan)} className="w-8 h-8 flex items-center justify-end text-gray-400">
           <MoreVertical size={20} strokeWidth={1.9} />
         </button>
       </div>
     </article>
   );
-}
+});
 
 export function HomeScreen({
   onNavigate,
@@ -198,21 +210,21 @@ export function HomeScreen({
   const [sheet, setSheet] = useState<"share" | "author" | null>(null);
   const [activePlan, setActivePlan] = useState<HomeFeedPlan | null>(null);
   const [copied, setCopied] = useState(false);
-  const plansWithTag = plans.map((plan) => ({
+  const plansWithTag = useMemo(() => plans.map((plan) => ({
     ...plan,
     tag: normalizePlanTag(plan.tag),
-  }));
+  })), [plans]);
 
-  const visiblePlans = plansWithTag.filter((plan) => {
+  const visiblePlans = useMemo(() => plansWithTag.filter((plan) => {
     if (tagFilter === "all") return true;
     return plan.tag === tagFilter;
-  });
+  }), [plansWithTag, tagFilter]);
 
-  const openShare = (plan: HomeFeedPlan) => {
+  const openShare = useCallback((plan: HomeFeedPlan) => {
     setActivePlan(plan);
     setCopied(false);
     setSheet("share");
-  };
+  }, []);
 
   const copyActivePlan = async () => {
     if (!activePlan) return;
@@ -221,16 +233,32 @@ export function HomeScreen({
     setCopied(true);
   };
 
-  const openAuthorMenu = (plan: HomeFeedPlan) => {
+  const openAuthorMenu = useCallback((plan: HomeFeedPlan) => {
     setActivePlan(plan);
     setSheet("author");
-  };
+  }, []);
+
+  const openPlan = useCallback((plan: HomeFeedPlan) => {
+    onPlanOpen(plan.id, "home");
+  }, [onPlanOpen]);
+
+  const openAuthor = useCallback((plan: HomeFeedPlan) => {
+    if (plan.author.id) onAuthorOpen(plan.author.id);
+  }, [onAuthorOpen]);
 
   useEffect(() => {
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;
     scrollElement.scrollTop = initialScrollTop;
   }, [initialScrollTop]);
+
+  useEffect(() => {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement || !onScrollTopChange) return;
+    const handleScroll = () => onScrollTopChange(scrollElement.scrollTop);
+    scrollElement.addEventListener("scroll", handleScroll, { passive: true });
+    return () => scrollElement.removeEventListener("scroll", handleScroll);
+  }, [onScrollTopChange]);
 
   return (
     <div className="relative flex flex-col h-full bg-surface">
@@ -248,7 +276,6 @@ export function HomeScreen({
       {/* Feed */}
       <div
         ref={scrollRef}
-        onScroll={(event) => onScrollTopChange?.(event.currentTarget.scrollTop)}
         className="flex-1 overflow-y-auto px-4 pt-2 pb-6 space-y-6"
       >
         <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -274,12 +301,10 @@ export function HomeScreen({
             <FeedEventCard
               key={plan.id}
               plan={plan}
-              onOpen={() => onPlanOpen(plan.id, "home")}
-              onAuthor={() => {
-                if (plan.author.id) onAuthorOpen(plan.author.id);
-              }}
-              onShare={() => openShare(plan)}
-              onAuthorMenu={() => openAuthorMenu(plan)}
+              onOpen={openPlan}
+              onAuthor={openAuthor}
+              onShare={openShare}
+              onAuthorMenu={openAuthorMenu}
             />
           ))
         ) : (

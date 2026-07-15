@@ -1,8 +1,8 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
 import { ArrowLeft, ArrowUp, Bookmark, CheckSquare, ChevronRight, Copy, Edit3, Eye, Heart, MessageCircle, Paperclip, Plus, Repeat2, Share2, Trash2, UserPlus, Users, X } from "lucide-react";
 import type { EventDetailProps } from "@/app/types";
 import { normalizePlanTag, PLAN_TAG_LABELS } from "@/app/data/plans";
-import { ALL_DAYS, GREEN, PART_OF_DAY_RANGES, PLAN_DARK, UNSPLASH, WEEKDAY_VALUES } from "@/app/data/constants";
+import { GREEN, PART_OF_DAY_RANGES, PLAN_DARK, UNSPLASH } from "@/app/data/constants";
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { addComment, deleteComment, fetchCommentLikes, fetchComments, likeComment, unlikeComment, type CommentRow } from "@/app/lib/api/comments";
 import { fetchProfilesByIds } from "@/app/lib/api/profiles";
@@ -12,6 +12,7 @@ import { pluralizeParticipants } from "@/app/lib/pluralize";
 import { renderFormattedText } from "@/app/lib/formattedText";
 import { openExternalUrl } from "@/app/lib/telegram";
 import { formatWeekdayRanges } from "@/app/lib/weekdayRanges";
+import { getRepeatUntil } from "@/app/lib/schedule";
 
 type MentionCandidate = { id: string; name: string; avatarUrl: string | null };
 type LocalComment = { id: string; authorId: string | null; author: string; avatarUrl: string | null; time: string; text: string; photoUrl: string | null; parentId: string | null; mentionedUserIds: string[]; persisted: boolean };
@@ -19,6 +20,19 @@ type LocalComment = { id: string; authorId: string | null; author: string; avata
 const MENTION_REGEX = /@\[([^\]]+)\]\(([^)]+)\)/g;
 const COVER_MASK = "linear-gradient(180deg, #000 0%, #000 45%, transparent 100%)";
 type DraftMention = { id: string; name: string };
+type ViewerGesture = {
+  startX: number;
+  startY: number;
+  startTime: number;
+  lastTime: number;
+  dy: number;
+  velocityY: number;
+  direction: "vertical" | "horizontal" | null;
+};
+
+const VIEWER_DIRECTION_LOCK_PX = 10;
+const VIEWER_DISMISS_DISTANCE_PX = 120;
+const VIEWER_DISMISS_VELOCITY_PX_MS = 0.65;
 
 const formatCommentTime = (value: string) => {
   const date = new Date(value);
@@ -330,14 +344,18 @@ export function EventDetailScreen({
   void backgroundGradient;
   const [joined, setJoined] = useState(Boolean(initiallyJoined));
   const [toast, setToast] = useState("");
-  const [sheet, setSheet] = useState<"participants" | "profile" | "share" | "photos" | null>(null);
+  const [sheet, setSheet] = useState<"participants" | "profile" | "share" | "photos" | "unfollow" | null>(null);
   const [subscribed, setSubscribed] = useState(isAuthorFollowedByMe);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [locationExpanded, setLocationExpanded] = useState(false);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [visiblePhotoIndex, setVisiblePhotoIndex] = useState(0);
+  const viewerOverlayRef = useRef<HTMLDivElement | null>(null);
   const viewerTrackRef = useRef<HTMLDivElement | null>(null);
   const viewerSlideRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const viewerGestureRef = useRef<ViewerGesture | null>(null);
+  const viewerCloseTimeoutRef = useRef<number | null>(null);
+  const ignoreViewerClickUntilRef = useRef(0);
   const [comment, setComment] = useState("");
   const [commentPhotoUrl, setCommentPhotoUrl] = useState<string | null>(null);
   const [commentPhotoPreviewUrl, setCommentPhotoPreviewUrl] = useState<string | null>(null);
@@ -405,11 +423,126 @@ export function EventDetailScreen({
     if (viewerIndex === null) return;
     setVisiblePhotoIndex(viewerIndex);
     viewerSlideRefs.current[viewerIndex]?.scrollIntoView({ behavior: "instant" as ScrollBehavior });
+    const overlay = viewerOverlayRef.current;
+    if (overlay) {
+      overlay.style.transition = "none";
+      overlay.style.transform = "translateY(0)";
+      overlay.style.background = "rgba(0,0,0,0.92)";
+    }
   }, [viewerIndex]);
+
+  useEffect(() => () => {
+    if (viewerCloseTimeoutRef.current !== null) window.clearTimeout(viewerCloseTimeoutRef.current);
+  }, []);
 
   const openViewer = (index: number) => {
     setVisiblePhotoIndex(index);
     setViewerIndex(index);
+  };
+
+  const restoreViewerTrack = () => {
+    const track = viewerTrackRef.current;
+    if (!track) return;
+    track.style.overflowX = "auto";
+    track.style.scrollSnapType = "x mandatory";
+  };
+
+  const resetViewerPosition = () => {
+    const overlay = viewerOverlayRef.current;
+    if (!overlay) return;
+    overlay.style.transition = "transform 200ms ease, background-color 200ms ease";
+    overlay.style.transform = "translateY(0)";
+    overlay.style.background = "rgba(0,0,0,0.92)";
+    restoreViewerTrack();
+  };
+
+  const closeViewer = () => {
+    if (viewerCloseTimeoutRef.current !== null) window.clearTimeout(viewerCloseTimeoutRef.current);
+    viewerCloseTimeoutRef.current = null;
+    viewerGestureRef.current = null;
+    setViewerIndex(null);
+  };
+
+  const handleViewerTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    viewerGestureRef.current = {
+      startX: touch.clientX,
+      startY: touch.clientY,
+      startTime: performance.now(),
+      lastTime: performance.now(),
+      dy: 0,
+      velocityY: 0,
+      direction: null,
+    };
+    const overlay = viewerOverlayRef.current;
+    if (overlay) overlay.style.transition = "none";
+  };
+
+  const handleViewerTouchMove = (event: ReactTouchEvent<HTMLDivElement>) => {
+    const gesture = viewerGestureRef.current;
+    if (!gesture || event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    const dx = touch.clientX - gesture.startX;
+    const dy = touch.clientY - gesture.startY;
+
+    if (!gesture.direction) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < VIEWER_DIRECTION_LOCK_PX) return;
+      gesture.direction = Math.abs(dy) > Math.abs(dx) ? "vertical" : "horizontal";
+      if (gesture.direction === "vertical" && viewerTrackRef.current) {
+        viewerTrackRef.current.style.overflowX = "hidden";
+        viewerTrackRef.current.style.scrollSnapType = "none";
+      }
+    }
+    if (gesture.direction !== "vertical") return;
+
+    if (event.cancelable) event.preventDefault();
+    const now = performance.now();
+    gesture.velocityY = (dy - gesture.dy) / Math.max(now - gesture.lastTime, 1);
+    gesture.lastTime = now;
+    gesture.dy = dy;
+    const overlay = viewerOverlayRef.current;
+    if (!overlay) return;
+    const fadeProgress = Math.min(Math.abs(dy) / 360, 0.78);
+    overlay.style.transform = `translateY(${dy}px)`;
+    overlay.style.background = `rgba(0,0,0,${0.92 * (1 - fadeProgress)})`;
+  };
+
+  const finishViewerGesture = (cancelled = false) => {
+    const gesture = viewerGestureRef.current;
+    viewerGestureRef.current = null;
+    if (!gesture) return;
+    if (gesture.direction) ignoreViewerClickUntilRef.current = Date.now() + 250;
+    if (gesture.direction !== "vertical" || cancelled) {
+      if (gesture.direction === "vertical") resetViewerPosition();
+      return;
+    }
+
+    const elapsed = Math.max(performance.now() - gesture.startTime, 1);
+    const averageVelocity = Math.abs(gesture.dy) / elapsed;
+    const velocity = Math.max(Math.abs(gesture.velocityY), averageVelocity);
+    const shouldClose = Math.abs(gesture.dy) >= VIEWER_DISMISS_DISTANCE_PX
+      || velocity >= VIEWER_DISMISS_VELOCITY_PX_MS;
+    if (!shouldClose) {
+      resetViewerPosition();
+      return;
+    }
+
+    const overlay = viewerOverlayRef.current;
+    if (!overlay) {
+      closeViewer();
+      return;
+    }
+    const direction = gesture.dy < 0 ? -1 : 1;
+    overlay.style.transition = "transform 180ms ease-out, background-color 180ms ease-out";
+    overlay.style.transform = `translateY(${direction * window.innerHeight}px)`;
+    overlay.style.background = "rgba(0,0,0,0)";
+    viewerCloseTimeoutRef.current = window.setTimeout(closeViewer, 180);
+  };
+
+  const handleViewerBackgroundClick = () => {
+    if (Date.now() < ignoreViewerClickUntilRef.current) return;
+    closeViewer();
   };
 
   const removeCommentPhoto = () => {
@@ -441,20 +574,18 @@ export function EventDetailScreen({
     setCommentPhotoUploadProgress(null);
   };
 
-  const weekdayLabel = (days: number[]) =>
-    days
-      .map((day) => ALL_DAYS[WEEKDAY_VALUES.indexOf(day)])
-      .filter(Boolean)
-      .join(", ");
   const isWeekdayOnlySchedule = Boolean(schedule?.weekdays.length && !schedule.start);
-  const weeklyDays = formatWeekdayRanges(schedule?.weekdays ?? []).toUpperCase();
-  const scheduleCardValue = isWeekdayOnlySchedule ? weeklyDays : shortWeekday || weeklyDays;
+  const isWeeklyExactSchedule = (schedule?.mode === "exact" || schedule?.timeMode === "exact") && schedule?.repeat?.type === "weekly";
+  const formattedWeeklyDays = formatWeekdayRanges(schedule?.weekdays ?? []);
+  const weeklyDays = formattedWeeklyDays === "Каждый день" ? formattedWeeklyDays : formattedWeeklyDays.toUpperCase();
+  const showsWeeklyDays = isWeekdayOnlySchedule || isWeeklyExactSchedule;
+  const scheduleCardValue = showsWeeklyDays ? weeklyDays : shortWeekday || weeklyDays;
   const scheduleValueContainerRef = useRef<HTMLDivElement | null>(null);
   const scheduleValueMeasureRef = useRef<HTMLSpanElement | null>(null);
   const [useCompactScheduleFont, setUseCompactScheduleFont] = useState(false);
 
   useLayoutEffect(() => {
-    if (!isWeekdayOnlySchedule) {
+    if (!showsWeeklyDays) {
       setUseCompactScheduleFont(false);
       return;
     }
@@ -467,7 +598,7 @@ export function EventDetailScreen({
     updateFontSize();
     window.addEventListener("resize", updateFontSize);
     return () => window.removeEventListener("resize", updateFontSize);
-  }, [isRepeating, isWeekdayOnlySchedule, scheduleCardValue]);
+  }, [isRepeating, scheduleCardValue, showsWeeklyDays]);
 
   const exactDateLabel = (value?: string) => {
     if (!value) return meta.date;
@@ -478,50 +609,13 @@ export function EventDetailScreen({
   };
 
   const repeatEndDateLabel = () => {
-    if (schedule?.repeat?.type !== "days" || !schedule.start) return "";
-    const startDate = new Date(schedule.start);
-    if (Number.isNaN(startDate.getTime())) return "";
-    const endDate = new Date(startDate);
-    endDate.setDate(startDate.getDate() + Math.max(1, schedule.repeat.days) - 1);
+    if (!schedule) return "";
+    const until = getRepeatUntil(schedule);
+    if (!until) return "";
+    const endDate = new Date(`${until}T12:00:00`);
+    if (Number.isNaN(endDate.getTime())) return "";
     return endDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
   };
-
-  const exactTimeLabel = (start?: string, end?: string) => {
-    if (!start) return meta.time;
-    const startDate = new Date(start);
-    const endDate = end ? new Date(end) : null;
-    const startTime = Number.isNaN(startDate.getTime())
-      ? ""
-      : startDate.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-    const endTime = endDate && !Number.isNaN(endDate.getTime())
-      ? endDate.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
-      : "";
-    return endTime ? `${startTime} — ${endTime}` : startTime || meta.time;
-  };
-
-  const isWeeklyExactSchedule = (schedule?.mode === "exact" || schedule?.timeMode === "exact") && schedule?.repeat?.type === "weekly";
-  const schedulePrimary =
-    isWeeklyExactSchedule
-      ? weekdayLabel(schedule.weekdays) || exactDateLabel(schedule.start)
-      : schedule?.mode === "partOfDay" || schedule?.timeMode === "partOfDay"
-      ? `${weekdayLabel(schedule.weekdays) || "Дни не выбраны"} · ${schedule.partOfDay ? PART_OF_DAY_RANGES[schedule.partOfDay].label : "Время суток"}`
-      : schedule?.mode === "exact" || schedule?.timeMode === "exact"
-        ? exactDateLabel(schedule.start)
-        : meta.date;
-  const scheduleSecondary =
-    isWeeklyExactSchedule
-      ? exactTimeLabel(schedule.start)
-      : schedule?.mode === "exact" || schedule?.timeMode === "exact"
-      ? [exactTimeLabel(schedule.start, typeof schedule.end === "string" ? schedule.end : undefined), repeatEndDateLabel() ? `до ${repeatEndDateLabel()}` : ""].filter(Boolean).join(" · ")
-      : "";
-  const exactScheduleWeekday = (() => {
-    if (isWeeklyExactSchedule || !(schedule?.mode === "exact" || schedule?.timeMode === "exact") || !schedule.start) return "";
-    const date = new Date(schedule.start);
-    if (Number.isNaN(date.getTime())) return "";
-    const label = date.toLocaleDateString("ru-RU", { weekday: "long" });
-    return label ? `${label[0].toUpperCase()}${label.slice(1)}` : "";
-  })();
-  const scheduleDetailsSecondary = [exactScheduleWeekday, scheduleSecondary || validDuration].filter(Boolean).join(" · ");
 
   const showJoinToast = () => {
     setToast("Добавлено в Мои планы");
@@ -553,10 +647,17 @@ export function EventDetailScreen({
     setSubscribed(isAuthorFollowedByMe);
   }, [isAuthorFollowedByMe]);
 
-  const toggleAuthorFollow = () => {
-    const nextFollowed = !subscribed;
+  const applyAuthorFollow = (nextFollowed: boolean) => {
     setSubscribed(nextFollowed);
     onToggleAuthorFollow?.(nextFollowed);
+  };
+
+  const toggleAuthorFollow = () => {
+    if (subscribed) {
+      setSheet("unfollow");
+      return;
+    }
+    applyAuthorFollow(true);
   };
 
   useEffect(() => {
@@ -861,7 +962,7 @@ export function EventDetailScreen({
 
             <SectionTitle>Детали</SectionTitle>
             <div className="grid grid-cols-2 gap-2.5">
-              <DetailCard className="h-[106px] overflow-hidden"><SmallLabel>{isWeekdayOnlySchedule || isWeeklyExactSchedule ? "Каждую неделю" : exactDateLabel(schedule?.start)}</SmallLabel><div ref={scheduleValueContainerRef} className="relative mt-2 flex min-w-0 items-center justify-between gap-2 font-bold leading-[1.15]"><span ref={scheduleValueMeasureRef} aria-hidden="true" className="pointer-events-none absolute invisible whitespace-nowrap text-[24px]">{scheduleCardValue}</span><span className={`min-w-0 ${isWeekdayOnlySchedule ? useCompactScheduleFont ? "line-clamp-2 text-[18px]" : "whitespace-nowrap text-[24px]" : "text-[28px]"}`}>{scheduleCardValue}</span>{isRepeating && <Repeat2 size={20} className="flex-shrink-0" style={{ color: PLAN_DARK.textSecondary }} />}</div></DetailCard>
+              <DetailCard className="h-[106px] overflow-hidden"><SmallLabel>{showsWeeklyDays ? repeatEndDateLabel() ? `До ${repeatEndDateLabel()}` : "Каждую неделю" : exactDateLabel(schedule?.start)}</SmallLabel><div ref={scheduleValueContainerRef} className="relative mt-2 flex min-w-0 items-center justify-between gap-2 font-bold leading-[1.15]"><span ref={scheduleValueMeasureRef} aria-hidden="true" className="pointer-events-none absolute invisible whitespace-nowrap text-[24px]">{scheduleCardValue}</span><span className={`min-w-0 ${showsWeeklyDays ? useCompactScheduleFont ? "line-clamp-2 text-[18px]" : "whitespace-nowrap text-[24px]" : "text-[28px]"}`}>{scheduleCardValue}</span>{isRepeating && <Repeat2 size={20} className="flex-shrink-0" style={{ color: PLAN_DARK.textSecondary }} />}</div></DetailCard>
               <DetailCard className="h-[106px] overflow-hidden"><SmallLabel>Старт</SmallLabel><div className="mt-2 text-[28px] font-bold">{startCardValue}</div></DetailCard>
               <button onClick={() => setSheet("participants")} className={`rounded-xl p-4 text-left active:opacity-85 ${format === "offline" && !meta.location ? "col-span-2" : ""}`} style={{ background: PLAN_DARK.card }}>
                 <div className="flex items-center justify-between"><SmallLabel>{pluralizeParticipants(resolvedParticipantCount)}</SmallLabel><ChevronRight size={18} style={{ color: PLAN_DARK.textSecondary }} /></div>
@@ -961,11 +1062,28 @@ export function EventDetailScreen({
         </HomeSheet>
       )}
 
+      {sheet === "unfollow" && (
+        <HomeSheet title={`Отписаться от ${authorName}?`} onClose={() => setSheet(null)}>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setSheet(null)} className="h-12 rounded-xl bg-gray-100 text-[15px] font-semibold text-gray-700">Отмена</button>
+            <button type="button" onClick={() => { setSheet(null); applyAuthorFollow(false); }} className="h-12 rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Отписаться</button>
+          </div>
+        </HomeSheet>
+      )}
+
       {viewerIndex !== null && (
-        <div className="fixed inset-0 z-50" style={{ background: "rgba(0,0,0,0.92)" }}>
+        <div
+          ref={viewerOverlayRef}
+          className="fixed inset-0 z-50"
+          style={{ background: "rgba(0,0,0,0.92)", touchAction: "pan-x" }}
+          onTouchStart={handleViewerTouchStart}
+          onTouchMove={handleViewerTouchMove}
+          onTouchEnd={() => finishViewerGesture()}
+          onTouchCancel={() => finishViewerGesture(true)}
+        >
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 12px)" }}>
             <span className="text-[15px] font-medium text-white">{visiblePhotoIndex + 1} / {photos.length}</span>
-            <button type="button" onClick={() => setViewerIndex(null)} className="pointer-events-auto absolute right-4 flex h-10 w-10 items-center justify-center rounded-full text-white" style={{ top: "calc(env(safe-area-inset-top) + 8px)", background: "rgba(255,255,255,0.15)" }} aria-label="Закрыть просмотр фото"><X size={22} /></button>
+            <button type="button" onClick={closeViewer} className="pointer-events-auto absolute right-4 flex h-10 w-10 items-center justify-center rounded-full text-white" style={{ top: "calc(env(safe-area-inset-top) + 8px)", background: "rgba(255,255,255,0.15)" }} aria-label="Закрыть просмотр фото"><X size={22} /></button>
           </div>
           <div
             ref={viewerTrackRef}
@@ -982,9 +1100,9 @@ export function EventDetailScreen({
                 ref={(node) => { viewerSlideRefs.current[index] = node; }}
                 className="flex h-full items-center justify-center"
                 style={{ flex: "0 0 100%", scrollSnapAlign: "center" }}
-                onClick={() => setViewerIndex(null)}
+                onClick={handleViewerBackgroundClick}
               >
-                <img src={photo} alt="" className="max-h-full max-w-full object-contain" onClick={(event) => event.stopPropagation()} />
+                <img loading="lazy" decoding="async" src={photo} alt="" className="max-h-full max-w-full object-contain" onClick={(event) => event.stopPropagation()} />
               </div>
             ))}
           </div>

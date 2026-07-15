@@ -1,4 +1,5 @@
 import type { Period, Schedule } from "@/app/types";
+import { isScheduleActiveOn, normalizePlanRepeat } from "@/app/lib/schedule";
 
 const today = new Date();
 today.setHours(0, 0, 0, 0);
@@ -36,26 +37,41 @@ const MONTH_SHORT = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн",
 export function getNextOccurrence(schedule: Schedule, from: Date = new Date()): Date {
   const todayDate = new Date(from);
   todayDate.setHours(0, 0, 0, 0);
+  const repeat = normalizePlanRepeat(schedule.repeat, schedule.start);
+  const start = schedule.start ? new Date(schedule.start) : null;
 
-  if (schedule.start) {
-    const start = new Date(schedule.start);
-    if (start >= todayDate) return start;
+  if (repeat.type === "none") {
+    return start && !Number.isNaN(start.getTime()) ? start : todayDate;
   }
 
   const weekdays = schedule.weekdays?.length ? schedule.weekdays : [1, 2, 3, 4, 5, 6, 7];
-  if (weekdays.length === 7) return todayDate;
+  const firstCandidate = start && !Number.isNaN(start.getTime()) && start > todayDate
+    ? new Date(start)
+    : new Date(todayDate);
+  firstCandidate.setHours(0, 0, 0, 0);
 
-  const todayWeekday = todayDate.getDay() === 0 ? 7 : todayDate.getDay();
+  const todayWeekday = firstCandidate.getDay() === 0 ? 7 : firstCandidate.getDay();
   for (let offset = 0; offset < 7; offset += 1) {
     const candidateWeekday = ((todayWeekday - 1 + offset) % 7) + 1;
     if (weekdays.includes(candidateWeekday)) {
-      const date = new Date(todayDate);
-      date.setDate(todayDate.getDate() + offset);
+      const date = new Date(firstCandidate);
+      date.setDate(firstCandidate.getDate() + offset);
       return date;
     }
   }
 
-  return todayDate;
+  return firstCandidate;
+}
+
+export function hasUpcomingOccurrence(schedule: Schedule, from: Date = new Date()) {
+  const todayDate = new Date(from);
+  todayDate.setHours(0, 0, 0, 0);
+  const repeat = normalizePlanRepeat(schedule.repeat, schedule.start);
+  if (repeat.type === "none") {
+    const start = schedule.start ? new Date(schedule.start) : null;
+    return !start || Number.isNaN(start.getTime()) || start >= todayDate;
+  }
+  return isScheduleActiveOn(schedule, getNextOccurrence(schedule, todayDate));
 }
 
 export function formatNearestDate(schedule: Schedule) {

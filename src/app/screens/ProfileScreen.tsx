@@ -6,6 +6,8 @@ import { formatNearestDate, getNextOccurrence, weekDateMonths } from "@/app/data
 import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
 import { DEFAULT_COVER_URLS, profileFollowers, profileFollowing, resolveCoverUrl, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { PlanListCard } from "@/app/screens/PlansScreen";
+import { HomeSheet } from "@/app/components/HomeSheet";
+import { isSchedulePastRepeatEnd } from "@/app/lib/schedule";
 
 export type ConnectionType = "followers" | "following";
 
@@ -112,6 +114,7 @@ export function ProfileConnectionsScreen({
 }) {
   const [followers, setFollowers] = useState(profileFollowers);
   const [following, setFollowing] = useState(profileFollowing);
+  const [pendingUnfollow, setPendingUnfollow] = useState<ExpertConnection | null>(null);
   const isFollowers = type === "followers";
   const title = isFollowers ? "Подписчики" : "Подписки";
   const people = isFollowers ? followerItems ?? followers : followingItems ?? following;
@@ -132,7 +135,7 @@ export function ProfileConnectionsScreen({
   };
 
   return (
-    <div className="flex h-full flex-col bg-surface">
+    <div className="relative flex h-full flex-col bg-surface">
       <div className="flex h-14 flex-shrink-0 items-center px-4">
         <button onClick={onBack} className="flex items-center gap-1.5 text-[15px] font-medium text-foreground active:opacity-80">
           <ArrowLeft size={20} strokeWidth={2} />
@@ -149,7 +152,13 @@ export function ProfileConnectionsScreen({
                 key={user.id}
                 user={user}
                 onProfile={() => onProfileOpen(user)}
-                onToggle={canEditConnections ? () => toggle(user.id) : undefined}
+                onToggle={canEditConnections ? () => {
+                  if (user.isFollowedByMe) {
+                    setPendingUnfollow(user);
+                  } else {
+                    toggle(user.id);
+                  }
+                } : undefined}
               />
             ))}
           </div>
@@ -159,6 +168,14 @@ export function ProfileConnectionsScreen({
           </div>
         )}
       </div>
+      {pendingUnfollow && (
+        <HomeSheet title={`Отписаться от ${pendingUnfollow.name}?`} onClose={() => setPendingUnfollow(null)}>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setPendingUnfollow(null)} className="h-12 rounded-xl bg-gray-100 text-[15px] font-semibold text-gray-700">Отмена</button>
+            <button type="button" onClick={() => { const id = pendingUnfollow.id; setPendingUnfollow(null); toggle(id); }} className="h-12 rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Отписаться</button>
+          </div>
+        </HomeSheet>
+      )}
     </div>
   );
 }
@@ -182,6 +199,7 @@ export function ProfileScreen(props: {
   void props.onArticle;
   void props.onNavigate;
   const [isFollowed, setIsFollowed] = useState(props.profile.isFollowedByMe);
+  const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false);
   const [isBioExpanded, setIsBioExpanded] = useState(false);
   const [isBioClamped, setIsBioClamped] = useState(false);
   const [showAllPlans, setShowAllPlans] = useState(false);
@@ -189,7 +207,9 @@ export function ProfileScreen(props: {
   const bioRef = useRef<HTMLParagraphElement | null>(null);
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false });
   const visiblePlans = showAllPlans ? props.plans : props.plans.slice(0, 3);
-  const nearestPlans = [...props.plans].sort((a, b) => getNextOccurrence(a.schedule).getTime() - getNextOccurrence(b.schedule).getTime());
+  const nearestPlans = props.plans
+    .filter((plan) => !isSchedulePastRepeatEnd(plan.schedule))
+    .sort((a, b) => getNextOccurrence(a.schedule).getTime() - getNextOccurrence(b.schedule).getTime());
   const visibleNearestPlans = showAllPlans ? nearestPlans : nearestPlans.slice(0, 2);
   const hasMorePlans = props.plans.length > visiblePlans.length;
   const hasMoreNearestPlans = nearestPlans.length > visibleNearestPlans.length;
@@ -285,7 +305,7 @@ export function ProfileScreen(props: {
   }, [measureBioClamp]);
 
   return (
-    <div className="h-full overflow-y-auto bg-card">
+    <div className="relative h-full overflow-y-auto bg-card">
       <div className="relative flex min-h-full flex-col">
         <div className="relative aspect-[3/4] w-full max-h-[45dvh] overflow-hidden bg-gray-300">
           {resolvedCoverUrls.length > 0 ? (
@@ -353,10 +373,14 @@ export function ProfileScreen(props: {
             </div>
             {!props.isMe && (
               <button
-                onClick={() => setIsFollowed((value) => {
-                  props.onToggleFollow?.(props.profile, !value);
-                  return !value;
-                })}
+                onClick={() => {
+                  if (isFollowed) {
+                    setShowUnfollowConfirm(true);
+                    return;
+                  }
+                  setIsFollowed(true);
+                  props.onToggleFollow?.(props.profile, true);
+                }}
                 className="mt-4 flex h-10 flex-shrink-0 items-center justify-center gap-1.5 rounded-full border px-5 text-[14px] font-semibold active:opacity-90"
                 style={isFollowed ? { backgroundColor: "var(--muted)", borderColor: "var(--border)", color: "var(--foreground)" } : { backgroundImage: "linear-gradient(90deg, #00887F, #00A99D, #4DD0C4)", borderColor: GREEN, color: "#fff" }}
               >
@@ -504,6 +528,14 @@ export function ProfileScreen(props: {
             </div>
           )}
         </section>
+        {showUnfollowConfirm && (
+          <HomeSheet title={`Отписаться от ${props.profile.name}?`} onClose={() => setShowUnfollowConfirm(false)}>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setShowUnfollowConfirm(false)} className="h-12 rounded-xl bg-gray-100 text-[15px] font-semibold text-gray-700">Отмена</button>
+              <button type="button" onClick={() => { setShowUnfollowConfirm(false); setIsFollowed(false); props.onToggleFollow?.(props.profile, false); }} className="h-12 rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Отписаться</button>
+            </div>
+          </HomeSheet>
+        )}
       </div>
     </div>
   );

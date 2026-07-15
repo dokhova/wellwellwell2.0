@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 import confetti from "canvas-confetti";
-import { ArrowLeft, Check, ChevronDown, Eye, Image as ImageIcon, Link2, Lock, MapPin, Plus, Repeat2, Search, Sparkles, Users, X } from "lucide-react";
+import { ArrowLeft, Check, Eye, Image as ImageIcon, Link2, Lock, MapPin, Plus, Repeat2, Search, Sparkles, Users, X } from "lucide-react";
 import type { HomeFeedPlan, PartOfDay, PlanRepeat, Schedule, Screen, TimeMode, Visibility } from "@/app/types";
 import { ALL_DAYS, GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES, WEEKDAY_VALUES } from "@/app/data/constants";
 import { DEFAULT_PLAN_AUTHOR, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
@@ -8,6 +8,8 @@ import { HomeSheet } from "@/app/components/HomeSheet";
 import { sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { fetchRecentProfiles, searchProfiles } from "@/app/lib/api/profiles";
 import { track } from "@/app/lib/analytics";
+import { getRepeatUntil, normalizeSchedule } from "@/app/lib/schedule";
+import { formatWeekdayRanges } from "@/app/lib/weekdayRanges";
 
 type CreateStep = "welcome" | "name" | "description" | "image" | "schedule" | "finalOptions" | "success";
 type PlanDraft = { title: string; description: string; coverImage: string | null; schedule: Schedule };
@@ -74,7 +76,7 @@ const defaultSchedule = (): Schedule => ({
   time: null,
   partOfDay: null,
   weekdays: [],
-  repeat: { type: "days", days: 21 },
+  repeat: { type: "none" },
 });
 
 const defaultPlan = (): PlanDraft => ({ title: "", description: "", coverImage: null, schedule: defaultSchedule() });
@@ -104,10 +106,8 @@ export function CreateScreen({
     title: editingPlan.title.slice(0, TITLE_LIMIT),
     description: editingPlan.description.slice(0, DESCRIPTION_LIMIT),
     coverImage: editingPlan.coverUrl ?? null,
-    schedule: editingPlan.schedule,
+    schedule: normalizeSchedule(editingPlan.schedule),
   } : defaultPlan());
-  const [showRepeatPicker, setShowRepeatPicker] = useState(false);
-  const [untilWeek, setUntilWeek] = useState(4);
   const [titleError, setTitleError] = useState("");
   const [scheduleError, setScheduleError] = useState("");
   const [visibility, setVisibility] = useState<Visibility>(editingPlan?.visibility ?? "all");
@@ -135,7 +135,7 @@ export function CreateScreen({
   const selectedDays = currentSchedule.weekdays;
   const exactStart = currentSchedule.start ?? initialDateTime;
   const exactEnd = typeof currentSchedule.end === "string" ? currentSchedule.end : exactStart;
-  const repeat = currentSchedule.repeat ?? { type: "days", days: 21 };
+  const repeat = currentSchedule.repeat ?? { type: "none" };
   const startParts = splitDateTime(exactStart);
   const endParts = splitDateTime(exactEnd);
   const selectedParticipantItems = selectedPeople.filter((person) => selectedParticipants.includes(person.id));
@@ -266,12 +266,8 @@ export function CreateScreen({
 
   const getRepeatEnd = (schedule: Schedule) => {
     if (schedule.repeat?.type === "none") return schedule.start;
-    if (schedule.repeat?.type !== "days" || !schedule.start) return typeof schedule.end === "string" ? schedule.end : undefined;
-    const startDate = new Date(schedule.start);
-    if (Number.isNaN(startDate.getTime())) return typeof schedule.end === "string" ? schedule.end : undefined;
-    const endDate = new Date(startDate);
-    endDate.setDate(startDate.getDate() + Math.max(1, schedule.repeat.days) - 1);
-    return endDate.toISOString();
+    if (schedule.repeat?.type === "weekly") return getRepeatUntil(schedule);
+    return typeof schedule.end === "string" ? schedule.end : undefined;
   };
 
   const validateSchedule = (schedule: Schedule) => {
@@ -281,6 +277,7 @@ export function CreateScreen({
       if (schedule.weekdays.length === 0) return "Выберите хотя бы один день недели";
     }
     if (mode === "exact" && !schedule.start) return "Выберите дату и время начала";
+    if (schedule.repeat?.type === "weekly" && schedule.weekdays.length === 0) return "Выберите хотя бы один день недели";
     return "";
   };
 
@@ -294,9 +291,17 @@ export function CreateScreen({
       const endLabel = endDate && !Number.isNaN(endDate.getTime())
         ? endDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })
         : "";
-      return schedule.repeat?.type === "days" && endLabel ? `${startLabel} — до ${endLabel}` : startLabel;
+      if (schedule.repeat?.type === "weekly") {
+        const daysLabel = formatWeekdayRanges(schedule.weekdays);
+        const timeLabel = date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+        return `${daysLabel} · ${timeLabel}${endLabel ? ` · до ${endLabel}` : ""}`;
+      }
+      return startLabel;
     }
-    return schedule.partOfDay ? PART_OF_DAY_RANGES[schedule.partOfDay].label : "Расписание";
+    const partLabel = schedule.partOfDay ? PART_OF_DAY_RANGES[schedule.partOfDay].label : "Расписание";
+    return schedule.repeat?.type === "weekly"
+      ? `${formatWeekdayRanges(schedule.weekdays)} · ${partLabel}`
+      : partLabel;
   };
 
   const handleCreate = () => {
@@ -402,7 +407,14 @@ export function CreateScreen({
     }
   };
 
-  const repeatLabel = repeat.type === "none" ? "Не повторять" : repeat.type === "days" ? `${repeat.days} день` : repeat.type === "weekly" ? "Каждую неделю" : repeat.type === "untilWeek" ? `До недели ${repeat.week}` : "Бессрочно";
+  const repeatUntil = repeat.type === "weekly" ? repeat.until : undefined;
+  const repeatUntilLabel = repeatUntil
+    ? new Date(`${repeatUntil}T12:00:00`).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })
+    : "";
+  const selectedDaysLabel = formatWeekdayRanges(selectedDays).toUpperCase();
+  const repeatSummary = repeat.type === "weekly"
+    ? `${selectedDays.length === 7 ? "Каждый день" : `Каждые ${selectedDaysLabel || "выбранные дни"}`}${repeatUntilLabel ? ` до ${repeatUntilLabel}` : ""}`
+    : "";
   const titleLeft = TITLE_LIMIT - draft.title.length;
   const descriptionLeft = DESCRIPTION_LIMIT - draft.description.length;
   const progressSteps = 6;
@@ -495,25 +507,60 @@ export function CreateScreen({
         </div>
       )}
 
-      <button onClick={() => setShowRepeatPicker((show) => !show)} className="mt-5 flex w-full items-center justify-between rounded-lg bg-muted px-3.5 py-3 text-left">
-        <span className="flex items-center gap-2 text-[14px]"><Repeat2 size={18} />Повторять</span>
-        <span className="flex items-center gap-1.5 text-[14px] text-muted-foreground">{repeatLabel}<ChevronDown size={16} /></span>
-      </button>
-      {showRepeatPicker && (
-        <div className="mt-2 rounded-lg bg-muted p-2">
+      <div className="mt-5">
+        <div className="mb-2 flex items-center gap-2 text-[14px] font-medium"><Repeat2 size={18} />Повторять</div>
+        <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
           {[
-            { label: "Не повторять", action: () => updateSchedule({ repeat: { type: "none" }, start: currentSchedule.start ?? exactStart }), active: repeat.type === "none" },
-            { label: "21 день", action: () => updateSchedule({ repeat: { type: "days", days: 21 } }), active: repeat.type === "days" },
-            { label: "Каждую неделю", action: () => updateSchedule({ repeat: { type: "weekly" } }), active: repeat.type === "weekly" },
-            { label: "До недели N", action: () => updateSchedule({ repeat: { type: "untilWeek", week: untilWeek } }), active: repeat.type === "untilWeek" },
-            { label: "Бессрочно", action: () => updateSchedule({ repeat: { type: "forever" } }), active: repeat.type === "forever" },
-          ].map((option) => (
-            <button key={option.label} onClick={option.action} className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-[14px] font-medium" style={option.active ? { backgroundColor: GREEN_LIGHT, color: GREEN } : undefined}>
-              {option.label}
-              {option.active && <Check size={16} strokeWidth={2.4} />}
-            </button>
-          ))}
-          {repeat.type === "untilWeek" && <input type="number" min={1} value={repeat.week} onChange={(e) => { const week = Math.max(1, Number(e.target.value) || 1); setUntilWeek(week); updateSchedule({ repeat: { type: "untilWeek", week } }); }} className="mt-2 h-10 w-full rounded-md bg-card px-3 text-[14px] outline-none" />}
+            { label: "Не повторять", weekly: false },
+            { label: "Каждую неделю", weekly: true },
+          ].map((option) => {
+            const active = option.weekly ? repeat.type === "weekly" : repeat.type === "none";
+            return (
+              <button
+                key={option.label}
+                type="button"
+                onClick={() => {
+                  if (active) return;
+                  if (!option.weekly) {
+                    updateSchedule({ repeat: { type: "none" } });
+                    return;
+                  }
+                  const startDate = new Date(exactStart);
+                  const startWeekday = Number.isNaN(startDate.getTime()) ? 1 : startDate.getDay() || 7;
+                  updateSchedule({
+                    repeat: { type: "weekly" },
+                    weekdays: selectedDays.length > 0 ? selectedDays : [startWeekday],
+                  });
+                }}
+                className="h-10 rounded-lg text-[14px] font-semibold"
+                style={active ? { backgroundColor: GREEN, color: "#fff" } : { color: "var(--foreground)" }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {repeat.type === "weekly" && (
+        <div className="mt-3 rounded-xl border border-border px-3.5 py-3">
+          <div className="flex items-center gap-3">
+            <label className="min-w-0 flex-1">
+              <span className="mb-1 block text-[13px] font-medium text-foreground">Повторять до</span>
+              <input
+                type="date"
+                min={startParts.date || undefined}
+                value={repeat.until ?? ""}
+                onChange={(event) => updateSchedule({ repeat: event.target.value ? { type: "weekly", until: event.target.value } : { type: "weekly" } })}
+                className="w-full bg-transparent text-[14px] outline-none"
+              />
+            </label>
+            {repeat.until && (
+              <button type="button" onClick={() => updateSchedule({ repeat: { type: "weekly" } })} className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted" aria-label="Сбросить дату окончания повтора">
+                <X size={15} />
+              </button>
+            )}
+          </div>
+          <p className="mt-3 text-[13px] text-muted-foreground">{repeatSummary}</p>
         </div>
       )}
       {scheduleError && <p className="mt-3 text-[12px] font-medium text-destructive">{scheduleError}</p>}

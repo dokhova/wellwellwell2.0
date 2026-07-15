@@ -1,5 +1,6 @@
 import type { HomeFeedPlan } from "@/app/types";
 import { supabase } from "@/app/lib/supabase";
+import { normalizeSchedule } from "@/app/lib/schedule";
 
 type PlanRow = {
   id: string;
@@ -27,6 +28,7 @@ const getStartsAt = (plan: HomeFeedPlan) => {
 const normalizePlanDuration = (plan: HomeFeedPlan): HomeFeedPlan => ({
   ...plan,
   duration: plan.duration?.trim() === "План" ? undefined : plan.duration,
+  schedule: normalizeSchedule(plan.schedule),
   items: plan.items?.map(normalizePlanDuration),
 });
 
