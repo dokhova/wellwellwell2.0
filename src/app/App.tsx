@@ -1393,6 +1393,7 @@ export default function App() {
         }
         return;
       }
+      setEditableProfile(telegramProfile);
       let profileToCreate = telegramProfile;
       try {
         profileToCreate = await mirrorTelegramPhotoToStorage(telegramProfile);
@@ -1415,7 +1416,7 @@ export default function App() {
       cancelled = true;
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
-  }, [telegramUser]);
+  }, [telegramUser, refreshTick]);
 
   useEffect(() => {
     writeJson(profileStorageKey, normalizeProfile(editableProfile));
