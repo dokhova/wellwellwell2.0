@@ -153,7 +153,6 @@ export interface EventDetailProps {
   initiallyJoined?: boolean;
   planId?: PlanId;
   onJoin?: (planId: PlanId) => void;
-  externalJoinUrl?: string;
   onLeave?: (planId: PlanId) => void;
   onProfile?: () => void;
   authorId?: string;

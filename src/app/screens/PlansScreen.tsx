@@ -89,6 +89,8 @@ export function PlansScreen({
   checkedItemKeys,
   onToggleCheck,
   onRemoveParticipant,
+  onDeletePlan,
+  currentUserId,
   highlightedPlanId,
 }: {
   onNavigate: (s: Screen, from?: Screen) => void;
@@ -98,6 +100,8 @@ export function PlansScreen({
   checkedItemKeys: string[];
   onToggleCheck: (key: string) => void;
   onRemoveParticipant: (id: PlanId, scope?: "single" | "program") => void;
+  onDeletePlan: (id: PlanId, scope?: "single" | "program") => void;
+  currentUserId: string;
   highlightedPlanId?: PlanId | null;
 }) {
   const isEmpty = participantPlans.length === 0;
@@ -300,36 +304,53 @@ export function PlansScreen({
             <div className="space-y-2">
               <button
                 onClick={() => {
-                  onRemoveParticipant(removingPlan.id, "single");
+                  if (removingPlan.author.id === currentUserId) {
+                    onDeletePlan(removingPlan.id, "single");
+                  } else {
+                    onRemoveParticipant(removingPlan.id, "single");
+                  }
                   setRemovingPlan(null);
                 }}
                 className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900"
               >
-                Удалить только это событие
+                {removingPlan.author.id === currentUserId
+                  ? "Удалить только это событие"
+                  : "Убрать только это событие из моих планов"}
               </button>
               <button
                 onClick={() => {
-                  onRemoveParticipant(removingPlan.id, "program");
+                  if (removingPlan.author.id === currentUserId) {
+                    onDeletePlan(removingPlan.id, "program");
+                  } else {
+                    onRemoveParticipant(removingPlan.id, "program");
+                  }
                   setRemovingPlan(null);
                 }}
                 className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900"
               >
-                Удалить всю программу
+                {removingPlan.author.id === currentUserId
+                  ? "Удалить всю программу"
+                  : "Убрать всю программу из моих планов"}
               </button>
             </div>
           ) : (
             <button
               onClick={() => {
-                const confirmed = window.confirm("Удалить план?");
+                const isAuthor = removingPlan.author.id === currentUserId;
+                const confirmed = window.confirm(isAuthor ? "Удалить план?" : "Убрать план из моих планов?");
                 if (confirmed) {
-                  onRemoveParticipant(removingPlan.id, "single");
+                  if (isAuthor) {
+                    onDeletePlan(removingPlan.id);
+                  } else {
+                    onRemoveParticipant(removingPlan.id, "single");
+                  }
                   setRemovingPlan(null);
                 }
               }}
               className="h-12 w-full rounded-2xl text-[15px] font-semibold text-white"
               style={{ backgroundColor: GREEN }}
             >
-              Удалить план
+              {removingPlan.author.id === currentUserId ? "Удалить план" : "Убрать из моих планов"}
             </button>
           )}
         </HomeSheet>

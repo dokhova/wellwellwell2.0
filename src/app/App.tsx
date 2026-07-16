@@ -1770,33 +1770,40 @@ export default function App() {
     });
   };
 
-  const deletePlan = (id: PlanId) => {
+  const deletePlan = (id: PlanId, scope: "single" | "program" = "single") => {
     const plan = allPlans.find((item) => planKey(item.id) === planKey(id));
     if (plan?.author.id && plan.author.id !== currentUserId) return;
-    const idKey = planKey(id);
-    setDeletedPlanIds((ids) => ids.some((item) => planKey(item) === planKey(id)) ? ids : [id, ...ids]);
-    setCreatedPlans((plans) => plans.filter((plan) => planKey(plan.id) !== idKey));
-    setRemotePublicPlans((plans) => plans.filter((plan) => planKey(plan.id) !== idKey));
+    const idsToRemove = scope === "program" && plan?.items?.length
+      ? new Set([planKey(id), ...plan.items.map((item) => planKey(item.id))])
+      : new Set([planKey(id)]);
+    setDeletedPlanIds((ids) => [
+      ...Array.from(idsToRemove).filter((idKey) => !ids.some((item) => planKey(item) === idKey)),
+      ...ids,
+    ]);
+    setCreatedPlans((plans) => plans.filter((plan) => !idsToRemove.has(planKey(plan.id))));
+    setRemotePublicPlans((plans) => plans.filter((plan) => !idsToRemove.has(planKey(plan.id))));
     setProfileRemotePlans((items) => Object.fromEntries(Object.entries(items).map(([authorId, plans]) => [
       authorId,
-      plans.filter((plan) => planKey(plan.id) !== idKey),
+      plans.filter((plan) => !idsToRemove.has(planKey(plan.id))),
     ])));
-    setMyParticipantIds((ids) => ids.filter((item) => planKey(item.id) !== idKey));
-    setCheckedItemKeys((keys) => keys.filter((key) => !key.endsWith(`:${idKey}`)));
+    setMyParticipantIds((ids) => ids.filter((item) => !idsToRemove.has(planKey(item.id))));
+    setCheckedItemKeys((keys) => keys.filter((key) => !Array.from(idsToRemove).some((planId) => key.endsWith(`:${planId}`))));
     setJoinedCounts((items) => {
       const next = { ...items };
-      delete next[idKey];
+      idsToRemove.forEach((idKey) => delete next[idKey]);
       return next;
     });
     setJoinedParticipantPeers((items) => {
       const next = { ...items };
-      delete next[idKey];
+      idsToRemove.forEach((idKey) => delete next[idKey]);
       return next;
     });
-    void deletePlanRemote(idKey).catch((error) => {
-      console.error("Supabase plan delete failed", error);
+    idsToRemove.forEach((idKey) => {
+      void deletePlanRemote(idKey).catch((error) => {
+        console.error("Supabase plan delete failed", error);
+      });
     });
-    setScreen("plans");
+    if (screen === "planEvent" || screen === "detail") setScreen("plans");
   };
 
   const editPlan = (plan: HomeFeedPlan) => {
@@ -2086,6 +2093,8 @@ export default function App() {
             checkedItemKeys={checkedItemKeys}
             onToggleCheck={toggleCheckedItem}
             onRemoveParticipant={removePlanFromMine}
+            onDeletePlan={deletePlan}
+            currentUserId={currentUserId}
             highlightedPlanId={highlightedPlanId}
           />
         );
@@ -2325,7 +2334,6 @@ export default function App() {
               authorSubtitle={pluralizeFollowers(authorFollowersCount)}
               onBack={() => goBackInStack(planEventOrigin)}
               planId={feedPlan.id}
-              externalJoinUrl={feedPlan.externalJoinUrl}
               initiallyJoined={feedPlan.author.id === currentUserId || myParticipantIds.some((item) => planKey(item.id) === planKey(feedPlan.id))}
               onJoin={(id) => addCatalogPlanToRoutine(id, planSourceFromScreen(planEventOrigin))}
               onLeave={(id) => removePlanFromMine(id, "single", planEventSource)}

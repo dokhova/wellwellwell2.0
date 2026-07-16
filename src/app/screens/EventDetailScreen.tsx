@@ -335,7 +335,7 @@ export function EventDetailScreen({
   title, coverSrc, backgroundGradient, authorName, authorAvatarUrl, authorVerified,
   readTime, badgeDate, paragraphs, meta, format = "offline", duration, level, distanceLabel, photos = [], authorSubtitle, participantCount, isDemo, isSaved = false, onToggleSaved, tag, schedule, shareUrl,
   participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, planId, onJoin, onLeave, onProfile,
-  externalJoinUrl, authorId, onMessageAuthor, isAuthorFollowedByMe = false, onToggleAuthorFollow, participantItems, onMessageParticipant,
+  authorId, onMessageAuthor, isAuthorFollowedByMe = false, onToggleAuthorFollow, participantItems, onMessageParticipant,
   currentAuthor, canDelete = false, onDelete, canEdit = false, onEdit, canHide = false, onHide, refreshKey, onProfileOpen, profileById = {},
 }: EventDetailProps) {
   void authorVerified;
@@ -623,7 +623,6 @@ export function EventDetailScreen({
   };
 
   const joinPlan = () => {
-    if (externalJoinUrl) openExternalUrl(externalJoinUrl);
     setJoined(true);
     if (planId !== undefined) onJoin?.(planId);
     showJoinToast();
