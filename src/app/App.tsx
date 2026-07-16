@@ -677,20 +677,32 @@ export default function App() {
       }
       return occurrence.getTime();
     };
+    const isVisibleInFeed = (plan: HomeFeedPlan) =>
+      !deletedPlanIdSet.has(planKey(plan.id))
+      && !moderatorHiddenPlanIdSet.has(planKey(plan.id))
+      && !isSchedulePastRepeatEnd(plan.schedule)
+      && hasUpcomingOccurrence(plan.schedule);
+    const sortByOccurrence = (a: HomeFeedPlan, b: HomeFeedPlan) =>
+      occurrenceTime(a) - occurrenceTime(b);
 
-    return [...demoPlansWithParticipants, ...catalogPublicPlans, ...justCreatedPublicPlans]
+    const clubPlans = demoPlansWithParticipants
+      .filter((plan) => activeDemoClubPlanIds.has(planKey(plan.id)))
+      .filter(isVisibleInFeed)
+      .sort(sortByOccurrence);
+    const communityPlans = demoPlansWithParticipants
+      .filter((plan) => demoCommunityPlanIds.has(planKey(plan.id)))
+      .filter(isVisibleInFeed)
+      .sort(sortByOccurrence);
+    const realPlans = [...catalogPublicPlans, ...justCreatedPublicPlans]
       .filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index)
-      .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)))
-      .filter((plan) => !moderatorHiddenPlanIdSet.has(planKey(plan.id)))
-      .filter((plan) => !isSchedulePastRepeatEnd(plan.schedule))
-      .filter((plan) => hasUpcomingOccurrence(plan.schedule))
+      .filter(isVisibleInFeed)
       .sort((a, b) => {
         const timeDifference = occurrenceTime(a) - occurrenceTime(b);
         if (timeDifference !== 0) return timeDifference;
-        const demoDifference = Number(isDemoCommunityPlanId(a.id)) - Number(isDemoCommunityPlanId(b.id));
-        if (demoDifference !== 0) return demoDifference;
         return getParticipantsCount(b) - getParticipantsCount(a);
       });
+
+    return [...clubPlans, ...communityPlans, ...realPlans];
   }, [catalogPublicPlans, deletedPlanIdSet, demoPlansWithParticipants, justCreatedPublicPlans, moderatorHiddenPlanIdSet]);
   const participantChatPeers: ChatPeer[] = useMemo(() => EVENT_PARTICIPANTS.map((participant) => ({
     id: participant.id,
