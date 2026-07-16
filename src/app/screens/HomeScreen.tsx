@@ -91,7 +91,7 @@ export const FeedEventCard = memo(function FeedEventCard({
     : plan.timeDate;
 
   return (
-    <article className="[content-visibility:auto] [contain-intrinsic-size:auto_560px]">
+    <article>
       <div
         role="button"
         tabIndex={0}
@@ -206,6 +206,7 @@ export function HomeScreen({
   plans: HomeFeedPlan[];
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const initialScrollTopRef = useRef(initialScrollTop);
   const [tagFilter, setTagFilter] = useState<TagFilter>("all");
   const [sheet, setSheet] = useState<"share" | "author" | null>(null);
   const [activePlan, setActivePlan] = useState<HomeFeedPlan | null>(null);
@@ -249,8 +250,8 @@ export function HomeScreen({
   useEffect(() => {
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;
-    scrollElement.scrollTop = initialScrollTop;
-  }, [initialScrollTop]);
+    scrollElement.scrollTop = initialScrollTopRef.current;
+  }, []);
 
   useEffect(() => {
     const scrollElement = scrollRef.current;

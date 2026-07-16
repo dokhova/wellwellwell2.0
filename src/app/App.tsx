@@ -588,10 +588,13 @@ export default function App() {
     setNavStack((items) => items.slice(0, -1));
     restoreNavSnapshot(snapshot);
   };
-  const deletedPlanIdSet = new Set(deletedPlanIds.map(planKey));
-  const moderatorHiddenPlanIdSet = new Set(moderatorHiddenPlanIds.map(planKey));
+  const deletedPlanIdSet = useMemo(() => new Set(deletedPlanIds.map(planKey)), [deletedPlanIds]);
+  const moderatorHiddenPlanIdSet = useMemo(
+    () => new Set(moderatorHiddenPlanIds.map(planKey)),
+    [moderatorHiddenPlanIds],
+  );
   const isJoinedPlan = (id: PlanId) => myParticipantIds.some((item) => planKey(item.id) === planKey(id));
-  const getPlanParticipantItems = (plan: HomeFeedPlan): ChatPeer[] => {
+  const getPlanParticipantItems = useCallback((plan: HomeFeedPlan): ChatPeer[] => {
     const id = planKey(plan.id);
     const joinedPeers = joinedParticipantPeers[id] ?? [];
     const authorParticipant: ChatPeer = {
@@ -608,8 +611,8 @@ export default function App() {
       ...joinedPeers.filter((peer) => peer.id !== authorParticipant.id),
       ...demoPeers.filter((peer) => peer.id !== authorParticipant.id),
     ].filter((peer, index, peers) => peers.findIndex((item) => item.id === peer.id) === index);
-  };
-  const getPlanParticipantPresentation = (plan: HomeFeedPlan) => {
+  }, [joinedParticipantPeers]);
+  const getPlanParticipantPresentation = useCallback((plan: HomeFeedPlan) => {
     const id = planKey(plan.id);
     const items = getPlanParticipantItems(plan);
     const avatars = items.map((peer) => peer.avatarUrl).filter((url): url is string => Boolean(url));
@@ -619,59 +622,75 @@ export default function App() {
       label: `${count} чел.`,
       count,
     };
-  };
-  const createdPlansWithCounts = createdPlans.map((plan) => {
+  }, [getPlanParticipantItems, joinedCounts]);
+  const createdPlansWithCounts = useMemo(() => createdPlans.map((plan) => {
     const participantPresentation = getPlanParticipantPresentation(plan);
     return {
       ...plan,
       participants: participantPresentation.avatars,
       participantsLabel: participantPresentation.label,
     };
-  });
-  const demoPlansWithParticipants = demoPlans.map((plan) => {
+  }), [createdPlans, getPlanParticipantPresentation]);
+  const demoPlansWithParticipants = useMemo(() => demoPlans.map((plan) => {
     const participantPresentation = getPlanParticipantPresentation(plan);
     return {
       ...plan,
       participants: participantPresentation.avatars,
       participantsLabel: participantPresentation.label,
     };
-  });
-  const remotePlansWithCounts = remotePublicPlans.map((plan) => {
+  }), [getPlanParticipantPresentation]);
+  const remotePlansWithCounts = useMemo(() => remotePublicPlans.map((plan) => {
     const participantPresentation = getPlanParticipantPresentation(plan);
     return {
       ...plan,
       participants: participantPresentation.avatars,
       participantsLabel: participantPresentation.label,
     };
-  });
-  const allPlans = [...demoPlansWithParticipants, ...createdPlansWithCounts, ...remotePlansWithCounts, ...homeFeedPlans]
-    .filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index)
-    .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && plan.hidden !== true && !moderatorHiddenPlanIdSet.has(planKey(plan.id)));
-  const allPlanDetails = [
-    ...demoPlansWithParticipants,
-    ...createdPlansWithCounts.flatMap((plan) => plan.items?.length ? plan.items : []),
-    ...createdPlansWithCounts,
-    ...remotePlansWithCounts,
-    ...homeFeedPlans,
-  ].filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index)
-    .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && plan.hidden !== true && !moderatorHiddenPlanIdSet.has(planKey(plan.id)));
+  }), [getPlanParticipantPresentation, remotePublicPlans]);
+  const allPlans = useMemo(
+    () => [...demoPlansWithParticipants, ...createdPlansWithCounts, ...remotePlansWithCounts, ...homeFeedPlans]
+      .filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index)
+      .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && plan.hidden !== true && !moderatorHiddenPlanIdSet.has(planKey(plan.id))),
+    [createdPlansWithCounts, deletedPlanIdSet, demoPlansWithParticipants, moderatorHiddenPlanIdSet, remotePlansWithCounts],
+  );
+  const allPlanDetails = useMemo(
+    () => [
+      ...demoPlansWithParticipants,
+      ...createdPlansWithCounts.flatMap((plan) => plan.items?.length ? plan.items : []),
+      ...createdPlansWithCounts,
+      ...remotePlansWithCounts,
+      ...homeFeedPlans,
+    ].filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index)
+      .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && plan.hidden !== true && !moderatorHiddenPlanIdSet.has(planKey(plan.id))),
+    [createdPlansWithCounts, deletedPlanIdSet, demoPlansWithParticipants, moderatorHiddenPlanIdSet, remotePlansWithCounts],
+  );
   const participantKey = (ref: ParticipantPlanRef) => `${ref.kind}:${ref.id}`;
   allPlanDetailsRef.current = allPlanDetails;
   myParticipantIdsRef.current = myParticipantIds;
   currentUserIdRef.current = currentUserId;
-  const myParticipantKeys = new Set(myParticipantIds.map(participantKey));
-  const myPlans = allPlans.filter((plan) =>
-    myParticipantKeys.has(participantKey({ kind: plan.kind ?? "plan", id: plan.id }))
-    || plan.author.id === currentUserId
+  const myPlans = useMemo(() => {
+    const myParticipantKeys = new Set(myParticipantIds.map(participantKey));
+    return allPlans.filter((plan) =>
+      myParticipantKeys.has(participantKey({ kind: plan.kind ?? "plan", id: plan.id }))
+      || plan.author.id === currentUserId
+    );
+  }, [allPlans, currentUserId, myParticipantIds]);
+  const savedPlans = useMemo(() => {
+    const savedPlanIdSet = new Set(savedPlanIds.map(planKey));
+    return allPlans.filter((plan) => savedPlanIdSet.has(planKey(plan.id)));
+  }, [allPlans, savedPlanIds]);
+  const catalogPublicPlans = useMemo(
+    () => homeFeedPlans
+      .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && (plan.visibility ?? "all") === "all")
+      .sort((a, b) => getNextOccurrence(a.schedule).getTime() - getNextOccurrence(b.schedule).getTime()),
+    [deletedPlanIdSet],
   );
-  const savedPlanIdSet = new Set(savedPlanIds.map(planKey));
-  const savedPlans = allPlans.filter((plan) => savedPlanIdSet.has(planKey(plan.id)));
-  const catalogPublicPlans = homeFeedPlans
-    .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && (plan.visibility ?? "all") === "all")
-    .sort((a, b) => getNextOccurrence(a.schedule).getTime() - getNextOccurrence(b.schedule).getTime());
-  const justCreatedPublicPlans = [...createdPlansWithCounts, ...remotePlansWithCounts]
-    .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && (plan.visibility ?? "all") === "all")
-    .filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index);
+  const justCreatedPublicPlans = useMemo(
+    () => [...createdPlansWithCounts, ...remotePlansWithCounts]
+      .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && (plan.visibility ?? "all") === "all")
+      .filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index),
+    [createdPlansWithCounts, deletedPlanIdSet, remotePlansWithCounts],
+  );
   const FEED_PRIORITY_TAG = "running";
   const publicPlans = useMemo(() => {
     const occurrenceTime = (plan: HomeFeedPlan) => {
