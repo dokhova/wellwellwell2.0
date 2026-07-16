@@ -12,7 +12,7 @@ import { deleteUserFollows, fetchFollowers, fetchFollowing, follow, unfollow } f
 import { isSchedulePastRepeatEnd, normalizeSchedule } from "@/app/lib/schedule";
 import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { deleteUserMessages, fetchUserThreadMessages, makeThreadId, sendMessage, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
-import { createPlanRemote, deletePlanParticipant, deletePlanParticipantsForPlans, deletePlanRemote, deletePlansByAuthor, deleteUserPlanParticipants, fetchJoinedCounts, fetchParticipants, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, updatePlanRemote, upsertPlanParticipant } from "@/app/lib/api/plans";
+import { createPlanRemote, deletePlanParticipant, deletePlanParticipantsForPlans, deletePlanRemote, deletePlansByAuthor, deleteUserPlanParticipants, fetchJoinedCounts, fetchParticipants, fetchParticipantsForPlans, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, updatePlanRemote, upsertPlanParticipant } from "@/app/lib/api/plans";
 import { deleteCommentsByAuthor } from "@/app/lib/api/comments";
 import { deleteUserPlanProgress, fetchPlanProgressKeys, upsertPlanProgress } from "@/app/lib/api/planProgress";
 import { applyTelegramChrome, buildPlanStartAppUrl, getTelegramAuthDate, getTelegramStartParam, getTelegramUser, initTelegram, parsePlanStartParam } from "@/app/lib/telegram";
@@ -519,6 +519,11 @@ export default function App() {
   const allPlanDetailsRef = useRef<HomeFeedPlan[]>([]);
   const myParticipantIdsRef = useRef<ParticipantPlanRef[]>([]);
   const currentUserIdRef = useRef("");
+  const lastVisibilityRefreshAtRef = useRef(0);
+  const screenRef = useRef<Screen>("home");
+  const activeChatPeerRef = useRef<ChatPeer | null>(null);
+  const remoteProfilesRef = useRef<Record<string, ExpertProfile>>({});
+  const localPeerByIdRef = useRef<Map<string, ChatPeer>>(new Map());
   const syncedDemoFollowingUserIdsRef = useRef(new Set<string>());
   const currentUserId = editableProfile.id;
   const isModerator = MODERATOR_IDS.includes(currentUserId);
@@ -738,6 +743,10 @@ export default function App() {
   const chatSearchPeers: ChatPeer[] = useMemo(() => [], []);
   const localPeerById = useMemo(() => new Map(chatSearchPeers.map((peer) => [peer.id, peer])), [chatSearchPeers]);
   const dbFollowingIds = useMemo(() => new Set(dbFollowing.map((item) => item.id)), [dbFollowing]);
+  screenRef.current = screen;
+  activeChatPeerRef.current = activeChatPeer;
+  remoteProfilesRef.current = remoteProfiles;
+  localPeerByIdRef.current = localPeerById;
 
   const profilesToConnections = useCallback((profiles: ExpertProfile[], followed = false): ExpertConnection[] =>
     profiles.map((profile) => ({
@@ -883,8 +892,8 @@ export default function App() {
         const sortedRows = [...threadRows].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
         const latestRow = sortedRows[sortedRows.length - 1];
         if (!latestRow) return;
-        const profile = profileById.get(peerId) ?? remoteProfiles[peerId];
-        const localPeer = localPeerById.get(peerId);
+        const profile = profileById.get(peerId) ?? remoteProfilesRef.current[peerId];
+        const localPeer = localPeerByIdRef.current.get(peerId);
         const peer = asRealPeer({
           id: peerId,
           name: profile?.name ?? localPeer?.name ?? `Пользователь ${peerId}`,
@@ -911,7 +920,7 @@ export default function App() {
       });
       return nextThreads;
     });
-  }, [currentUserId, localPeerById, remoteProfiles]);
+  }, [currentUserId]);
 
   useEffect(() => initTelegram(), []);
   useEffect(() => {
@@ -966,9 +975,11 @@ export default function App() {
 
   useEffect(() => {
     const refreshVisibleScreen = () => {
-      if (document.visibilityState === "visible") {
-        setRefreshTick((value) => value + 1);
-      }
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastVisibilityRefreshAtRef.current < 30_000) return;
+      lastVisibilityRefreshAtRef.current = now;
+      setRefreshTick((value) => value + 1);
     };
     document.addEventListener("visibilitychange", refreshVisibleScreen);
     return () => document.removeEventListener("visibilitychange", refreshVisibleScreen);
@@ -1004,16 +1015,17 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [refreshTick, screen]);
+  }, [refreshTick]);
 
   useEffect(() => {
     let cancelled = false;
     const loadDemoPlanParticipants = async () => {
       try {
-        const entries = await Promise.all(demoPlans.map(async (plan) => {
-          const rows = await fetchParticipants(planKey(plan.id));
-          return [planKey(plan.id), rows] as const;
-        }));
+        const rowsByPlanId = await fetchParticipantsForPlans(demoPlans.map((plan) => planKey(plan.id)));
+        const entries = demoPlans.map((plan) => {
+          const id = planKey(plan.id);
+          return [id, rowsByPlanId[id] ?? []] as const;
+        });
         if (cancelled) return;
         setJoinedCounts((items) => ({
           ...items,
@@ -1276,7 +1288,7 @@ export default function App() {
         const peerIds = Array.from(new Set(rows
           .map((row) => getPeerIdFromThreadId(row.thread_id, currentUserId))
           .filter((id): id is string => Boolean(id))));
-        const missingProfileIds = peerIds.filter((id) => !remoteProfiles[id] && !localPeerById.has(id));
+        const missingProfileIds = peerIds.filter((id) => !remoteProfilesRef.current[id] && !localPeerByIdRef.current.has(id));
         const profiles = await fetchProfilesByIds(missingProfileIds);
         if (cancelled) return;
         if (profiles.length > 0) {
@@ -1292,11 +1304,18 @@ export default function App() {
     };
 
     void loadRemoteThreads();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, mergeRemoteThreads, refreshTick]);
+
+  useEffect(() => {
+    let cancelled = false;
     const unsubscribe = subscribeToUserMessages(currentUserId, (message) => {
       const peerId = getPeerIdFromThreadId(message.thread_id, currentUserId);
       if (!peerId) return;
-      if (screen === "chat" && activeChatPeer?.id === peerId) return;
-      if (remoteProfiles[peerId] || localPeerById.has(peerId)) {
+      if (screenRef.current === "chat" && activeChatPeerRef.current?.id === peerId) return;
+      if (remoteProfilesRef.current[peerId] || localPeerByIdRef.current.has(peerId)) {
         mergeRemoteThreads([message]);
         return;
       }
@@ -1319,7 +1338,7 @@ export default function App() {
       cancelled = true;
       unsubscribe();
     };
-  }, [activeChatPeer?.id, currentUserId, localPeerById, mergeRemoteThreads, refreshTick, remoteProfiles, screen]);
+  }, [currentUserId]);
 
   useEffect(() => {
     let cancelled = false;

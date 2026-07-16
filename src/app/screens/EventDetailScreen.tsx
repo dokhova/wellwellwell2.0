@@ -576,16 +576,24 @@ export function EventDetailScreen({
 
   const isWeekdayOnlySchedule = Boolean(schedule?.weekdays.length && !schedule.start);
   const isWeeklyExactSchedule = (schedule?.mode === "exact" || schedule?.timeMode === "exact") && schedule?.repeat?.type === "weekly";
+  const isMultipleDayOneOffSchedule = Boolean(
+    schedule?.repeat?.type === "none"
+    && (schedule.mode === "partOfDay" || schedule.timeMode === "partOfDay")
+    && schedule.weekdays.length > 1
+    && schedule.start
+    && schedule.end,
+  );
   const formattedWeeklyDays = formatWeekdayRanges(schedule?.weekdays ?? []);
   const weeklyDays = formattedWeeklyDays === "Каждый день" ? formattedWeeklyDays : formattedWeeklyDays.toUpperCase();
   const showsWeeklyDays = isWeekdayOnlySchedule || isWeeklyExactSchedule;
-  const scheduleCardValue = showsWeeklyDays ? weeklyDays : shortWeekday || weeklyDays;
+  const showsWeekdayRange = showsWeeklyDays || isMultipleDayOneOffSchedule;
+  const scheduleCardValue = showsWeekdayRange ? weeklyDays : shortWeekday || weeklyDays;
   const scheduleValueContainerRef = useRef<HTMLDivElement | null>(null);
   const scheduleValueMeasureRef = useRef<HTMLSpanElement | null>(null);
   const [useCompactScheduleFont, setUseCompactScheduleFont] = useState(false);
 
   useLayoutEffect(() => {
-    if (!showsWeeklyDays) {
+    if (!showsWeekdayRange) {
       setUseCompactScheduleFont(false);
       return;
     }
@@ -598,7 +606,7 @@ export function EventDetailScreen({
     updateFontSize();
     window.addEventListener("resize", updateFontSize);
     return () => window.removeEventListener("resize", updateFontSize);
-  }, [isRepeating, scheduleCardValue, showsWeeklyDays]);
+  }, [isRepeating, scheduleCardValue, showsWeekdayRange]);
 
   const exactDateLabel = (value?: string) => {
     if (!value) return meta.date;
@@ -615,6 +623,20 @@ export function EventDetailScreen({
     const endDate = new Date(`${until}T12:00:00`);
     if (Number.isNaN(endDate.getTime())) return "";
     return endDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+  };
+
+  const oneOffDateRangeLabel = () => {
+    if (!schedule?.start || typeof schedule.end !== "string") return exactDateLabel(schedule?.start);
+    const start = new Date(schedule.start);
+    const end = new Date(schedule.end);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return exactDateLabel(schedule.start);
+    const startDay = start.toLocaleDateString("ru-RU", { day: "numeric" });
+    const endDay = end.toLocaleDateString("ru-RU", { day: "numeric" });
+    const startMonth = start.toLocaleDateString("ru-RU", { month: "long" });
+    const endMonth = end.toLocaleDateString("ru-RU", { month: "long" });
+    return startMonth === endMonth
+      ? `${startDay}–${endDay} ${endMonth}`
+      : `${startDay} ${startMonth} – ${endDay} ${endMonth}`;
   };
 
   const showJoinToast = () => {
@@ -961,7 +983,7 @@ export function EventDetailScreen({
 
             <SectionTitle>Детали</SectionTitle>
             <div className="grid grid-cols-2 gap-2.5">
-              <DetailCard className="h-[106px] overflow-hidden"><SmallLabel>{showsWeeklyDays ? repeatEndDateLabel() ? `До ${repeatEndDateLabel()}` : "Каждую неделю" : exactDateLabel(schedule?.start)}</SmallLabel><div ref={scheduleValueContainerRef} className="relative mt-2 flex min-w-0 items-center justify-between gap-2 font-bold leading-[1.15]"><span ref={scheduleValueMeasureRef} aria-hidden="true" className="pointer-events-none absolute invisible whitespace-nowrap text-[24px]">{scheduleCardValue}</span><span className={`min-w-0 ${showsWeeklyDays ? useCompactScheduleFont ? "line-clamp-2 text-[18px]" : "whitespace-nowrap text-[24px]" : "text-[28px]"}`}>{scheduleCardValue}</span>{isRepeating && <Repeat2 size={20} className="flex-shrink-0" style={{ color: PLAN_DARK.textSecondary }} />}</div></DetailCard>
+              <DetailCard className="h-[106px] overflow-hidden"><SmallLabel>{isMultipleDayOneOffSchedule ? oneOffDateRangeLabel() : showsWeeklyDays ? repeatEndDateLabel() ? `До ${repeatEndDateLabel()}` : "Каждую неделю" : exactDateLabel(schedule?.start)}</SmallLabel><div ref={scheduleValueContainerRef} className="relative mt-2 flex min-w-0 items-center justify-between gap-2 font-bold leading-[1.15]"><span ref={scheduleValueMeasureRef} aria-hidden="true" className="pointer-events-none absolute invisible whitespace-nowrap text-[24px]">{scheduleCardValue}</span><span className={`min-w-0 ${showsWeekdayRange ? useCompactScheduleFont ? "line-clamp-2 text-[18px]" : "whitespace-nowrap text-[24px]" : "text-[28px]"}`}>{scheduleCardValue}</span>{isRepeating && <Repeat2 size={20} className="flex-shrink-0" style={{ color: PLAN_DARK.textSecondary }} />}</div></DetailCard>
               <DetailCard className="h-[106px] overflow-hidden"><SmallLabel>Старт</SmallLabel><div className="mt-2 text-[28px] font-bold">{startCardValue}</div></DetailCard>
               <button onClick={() => setSheet("participants")} className={`rounded-xl p-4 text-left active:opacity-85 ${format === "offline" && !meta.location ? "col-span-2" : ""}`} style={{ background: PLAN_DARK.card }}>
                 <div className="flex items-center justify-between"><SmallLabel>{pluralizeParticipants(resolvedParticipantCount)}</SmallLabel><ChevronRight size={18} style={{ color: PLAN_DARK.textSecondary }} /></div>

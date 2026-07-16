@@ -85,11 +85,20 @@ export const finalizeSchedule = (schedule: Schedule): Schedule => {
   const mode = schedule.timeMode ?? schedule.mode ?? "partOfDay";
   if (schedule.repeat?.type !== "none" || mode !== "partOfDay" || !schedule.partOfDay) return schedule;
 
-  const occurrenceDate = getNearestWeekdayDate(schedule.weekdays);
-  const startTime = PART_OF_DAY_RANGES[schedule.partOfDay].range.split("-")[0];
+  const referenceDate = new Date();
+  const occurrenceDates = schedule.weekdays
+    .filter((weekday) => weekday >= 1 && weekday <= 7)
+    .map((weekday) => getNearestWeekdayDate([weekday], referenceDate));
+  const occurrenceDate = getNearestWeekdayDate(schedule.weekdays, referenceDate);
+  const lastOccurrenceDate = occurrenceDates.reduce(
+    (latest, date) => date.getTime() > latest.getTime() ? date : latest,
+    occurrenceDate,
+  );
+  const [startTime, endTime] = PART_OF_DAY_RANGES[schedule.partOfDay].range.split("-");
   return {
     ...schedule,
     start: `${toLocalIsoDate(occurrenceDate)}T${startTime}`,
+    end: `${toLocalIsoDate(lastOccurrenceDate)}T${endTime}`,
   };
 };
 
@@ -249,6 +258,19 @@ export function CreateScreen({
     if (schedule.repeat?.type === "none" && schedule.start) {
       const date = new Date(schedule.start);
       if (!Number.isNaN(date.getTime())) {
+        if (schedule.weekdays.length > 1 && typeof schedule.end === "string") {
+          const endDate = new Date(schedule.end);
+          if (!Number.isNaN(endDate.getTime())) {
+            const startDay = date.toLocaleDateString("ru-RU", { day: "numeric" });
+            const endDay = endDate.toLocaleDateString("ru-RU", { day: "numeric" });
+            const startMonth = date.toLocaleDateString("ru-RU", { month: "long" });
+            const endMonth = endDate.toLocaleDateString("ru-RU", { month: "long" });
+            const dateRange = startMonth === endMonth
+              ? `${startDay}–${endDay} ${endMonth}`
+              : `${startDay} ${startMonth} – ${endDay} ${endMonth}`;
+            return `${formatWeekdayRanges(schedule.weekdays)}, ${dateRange} · ${partLabel}`;
+          }
+        }
         const dateLabel = date.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
         return `${dateLabel} · ${partLabel}`;
       }

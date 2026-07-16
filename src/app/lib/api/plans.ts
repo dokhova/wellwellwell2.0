@@ -135,6 +135,26 @@ export const fetchParticipants = async (planId: string): Promise<PlanParticipant
   return data ?? [];
 };
 
+export const fetchParticipantsForPlans = async (
+  planIds: string[],
+): Promise<Record<string, PlanParticipantRow[]>> => {
+  const uniquePlanIds = Array.from(new Set(planIds));
+  if (!supabase || uniquePlanIds.length === 0) return {};
+
+  const { data, error } = await supabase
+    .from("plan_participants")
+    .select("plan_id, user_id, status")
+    .in("plan_id", uniquePlanIds)
+    .returns<PlanParticipantRow[]>();
+
+  if (error) throw error;
+
+  return (data ?? []).reduce<Record<string, PlanParticipantRow[]>>((rowsByPlanId, row) => {
+    rowsByPlanId[row.plan_id] = [...(rowsByPlanId[row.plan_id] ?? []), row];
+    return rowsByPlanId;
+  }, {});
+};
+
 export const fetchJoinedCounts = async (
   plans: { id: string; authorId?: string }[],
 ): Promise<Record<string, number>> => {
