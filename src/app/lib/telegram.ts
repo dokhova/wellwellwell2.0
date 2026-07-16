@@ -9,6 +9,7 @@ declare global {
         openTelegramLink?: (url: string) => void;
         setHeaderColor?: (color: string) => void;
         setBackgroundColor?: (color: string) => void;
+        setBottomBarColor?: (color: string) => void;
         initDataUnsafe: {
           start_param?: string;
           auth_date?: number | string;
@@ -28,6 +29,13 @@ declare global {
 export const BOT_USERNAME = "WellWellWell_New_bot";
 
 const TELEGRAM_URL_PATTERN = /^(?:https?:\/\/)?t\.me\/|^tg:\/\//i;
+
+export const applyTelegramChrome = (color: string) => {
+  const webApp = window.Telegram?.WebApp;
+  webApp?.setHeaderColor?.(color);
+  webApp?.setBackgroundColor?.(color);
+  webApp?.setBottomBarColor?.(color);
+};
 
 export const openExternalUrl = (url: string) => {
   const trimmedUrl = url.trim();

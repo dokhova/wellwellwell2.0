@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
+import { useEffect, useMemo, useState, type TouchEvent } from "react";
 import confetti from "canvas-confetti";
-import { ArrowLeft, Check, Eye, Image as ImageIcon, Link2, Lock, MapPin, Plus, Repeat2, Search, Sparkles, Users, X } from "lucide-react";
+import { ArrowLeft, Check, Eye, Image as ImageIcon, Lock, MapPin, Plus, Repeat2, Search, Sparkles, Users, X } from "lucide-react";
 import type { HomeFeedPlan, PartOfDay, PlanRepeat, Schedule, Screen, TimeMode, Visibility } from "@/app/types";
 import { ALL_DAYS, GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES, WEEKDAY_VALUES } from "@/app/data/constants";
 import { DEFAULT_PLAN_AUTHOR, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
@@ -125,10 +125,6 @@ export function CreateScreen({
   const [distanceValue, setDistanceValue] = useState(() => editingPlan?.distanceLabel?.match(/[\d.,]+/)?.[0]?.replace(",", ".") ?? "");
   const [distanceUnit, setDistanceUnit] = useState<"км" | "м">(editingPlan?.distanceLabel?.trim().endsWith(" км") ? "км" : "м");
   const [durationMinutes, setDurationMinutes] = useState(() => editingPlan?.duration?.match(/[\d.,]+/)?.[0]?.replace(",", ".") ?? "");
-  const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
-  const [linkEditor, setLinkEditor] = useState<{ start: number; end: number; label: string } | null>(null);
-  const [linkUrl, setLinkUrl] = useState("");
-
   const currentSchedule = draft.schedule;
   const timeMode: TimeMode = currentSchedule.timeMode ?? currentSchedule.mode ?? "partOfDay";
   const partOfDay = currentSchedule.partOfDay;
@@ -198,71 +194,6 @@ export function CreateScreen({
     setTitleError("");
   };
   const updateDescription = (value: string) => updatePlan({ description: value.slice(0, DESCRIPTION_LIMIT) });
-
-  const restoreDescriptionSelection = (start: number, end: number) => {
-    window.requestAnimationFrame(() => {
-      descriptionRef.current?.focus();
-      descriptionRef.current?.setSelectionRange(start, end);
-    });
-  };
-
-  const toggleDescriptionWrap = (marker: "**" | "_") => {
-    const textarea = descriptionRef.current;
-    if (!textarea) return;
-    const { selectionStart: start, selectionEnd: end } = textarea;
-    const value = draft.description;
-    const wrappedOutside = value.slice(start - marker.length, start) === marker && value.slice(end, end + marker.length) === marker;
-    const selected = value.slice(start, end);
-    const wrappedInside = selected.startsWith(marker) && selected.endsWith(marker) && selected.length >= marker.length * 2;
-    let next: string;
-    let nextStart: number;
-    let nextEnd: number;
-
-    if (wrappedOutside) {
-      next = `${value.slice(0, start - marker.length)}${selected}${value.slice(end + marker.length)}`;
-      nextStart = start - marker.length;
-      nextEnd = end - marker.length;
-    } else if (wrappedInside) {
-      const content = selected.slice(marker.length, -marker.length);
-      next = `${value.slice(0, start)}${content}${value.slice(end)}`;
-      nextStart = start;
-      nextEnd = start + content.length;
-    } else {
-      next = `${value.slice(0, start)}${marker}${selected}${marker}${value.slice(end)}`;
-      nextStart = start + marker.length;
-      nextEnd = nextStart + selected.length;
-    }
-
-    updateDescription(next);
-    track("plan_description_format_applied", { format: marker === "**" ? "bold" : "italic" });
-    restoreDescriptionSelection(Math.min(nextStart, DESCRIPTION_LIMIT), Math.min(nextEnd, DESCRIPTION_LIMIT));
-  };
-
-  const beginLinkEdit = () => {
-    const textarea = descriptionRef.current;
-    if (!textarea) return;
-    const { selectionStart: start, selectionEnd: end } = textarea;
-    setLinkEditor({ start, end, label: draft.description.slice(start, end) || "текст" });
-    setLinkUrl("");
-  };
-
-  const applyDescriptionLink = () => {
-    if (!linkEditor || !linkUrl.trim()) return;
-    const url = linkUrl.trim();
-    const inserted = `[${linkEditor.label}](${url})`;
-    const next = `${draft.description.slice(0, linkEditor.start)}${inserted}${draft.description.slice(linkEditor.end)}`;
-    updateDescription(next);
-    track("plan_description_format_applied", { format: "link" });
-    const labelStart = linkEditor.start + 1;
-    const cursor = linkEditor.start + inserted.length;
-    const hadSelection = linkEditor.end > linkEditor.start;
-    setLinkEditor(null);
-    setLinkUrl("");
-    restoreDescriptionSelection(
-      Math.min(hadSelection ? cursor : labelStart, DESCRIPTION_LIMIT),
-      Math.min(hadSelection ? cursor : labelStart + linkEditor.label.length, DESCRIPTION_LIMIT),
-    );
-  };
 
   const getRepeatEnd = (schedule: Schedule) => {
     if (schedule.repeat?.type === "none") return schedule.start;
@@ -641,7 +572,7 @@ export function CreateScreen({
       case "name":
         return <div className="pt-6 transition-all duration-200"><p className="mb-2 text-[13px] text-muted-foreground">Шаг 1: собери свой план</p><h2 className="mb-5 text-[28px] font-bold leading-[34px]">Название плана</h2><label><span className="mb-2 block text-[13px] text-muted-foreground">Короткое и ёмкое</span><input value={draft.title} maxLength={TITLE_LIMIT} onChange={(e) => updateTitle(e.target.value)} onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }} onBlur={() => setFieldFocused(false)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} enterKeyHint="done" placeholder="Например, вечерняя пробежка" className="h-14 w-full rounded-xl bg-card px-4 text-[16px] outline-none" /></label>{titleLeft < TITLE_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{titleLeft}</p>}{titleError && <p className="mt-2 text-[12px] font-medium text-destructive">{titleError}</p>}</div>;
       case "description":
-        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Описание</h2><div className="mb-2 flex items-center gap-1.5"><button type="button" aria-label="Жирный" onMouseDown={(event) => event.preventDefault()} onClick={() => toggleDescriptionWrap("**")} className="flex h-9 min-w-9 items-center justify-center rounded-lg bg-card px-2 text-[15px] font-bold active:opacity-75">Ж</button><button type="button" aria-label="Курсив" onMouseDown={(event) => event.preventDefault()} onClick={() => toggleDescriptionWrap("_")} className="flex h-9 min-w-9 items-center justify-center rounded-lg bg-card px-2 text-[15px] italic active:opacity-75">К</button><button type="button" aria-label="Добавить ссылку" onMouseDown={(event) => event.preventDefault()} onClick={beginLinkEdit} className="flex h-9 min-w-9 items-center justify-center rounded-lg bg-card px-2 active:opacity-75"><Link2 size={17} /></button></div>{linkEditor && <div className="mb-2 flex items-center gap-2 rounded-xl bg-card p-2"><input autoFocus value={linkUrl} onChange={(event) => setLinkUrl(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); applyDescriptionLink(); } if (event.key === "Escape") { setLinkEditor(null); setLinkUrl(""); restoreDescriptionSelection(linkEditor.start, linkEditor.end); } }} placeholder="https://..." inputMode="url" className="h-9 min-w-0 flex-1 rounded-lg bg-muted px-3 text-[13px] outline-none" /><button type="button" disabled={!linkUrl.trim()} onClick={applyDescriptionLink} className="h-9 rounded-lg px-3 text-[13px] font-semibold text-white disabled:opacity-40" style={{ backgroundColor: GREEN }}>ОК</button><button type="button" onClick={() => { const selection = linkEditor; setLinkEditor(null); setLinkUrl(""); restoreDescriptionSelection(selection.start, selection.end); }} className="h-9 px-2 text-[13px] text-muted-foreground">Отмена</button></div>}<textarea ref={descriptionRef} value={draft.description} maxLength={DESCRIPTION_LIMIT} onChange={(e) => updateDescription(e.target.value)} onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }} onBlur={() => setFieldFocused(false)} placeholder="Что будешь делать, и с какой целью" rows={5} className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none" />{descriptionLeft < DESCRIPTION_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{descriptionLeft}</p>}</div>;
+        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Описание</h2><textarea value={draft.description} maxLength={DESCRIPTION_LIMIT} onChange={(e) => updateDescription(e.target.value)} onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }} onBlur={() => setFieldFocused(false)} placeholder="Что будешь делать, и с какой целью" rows={5} className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none" />{descriptionLeft < DESCRIPTION_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{descriptionLeft}</p>}</div>;
       case "image":
         return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Обложка</h2><label className={`relative flex min-h-[220px] flex-col items-center justify-center overflow-hidden rounded-2xl bg-card px-6 text-center ${uploadProgress === null ? "active:opacity-90" : "cursor-not-allowed"}`}>{draft.coverImage ? <img loading="lazy" decoding="async" src={draft.coverImage} alt="" className="mb-4 h-28 w-28 rounded-xl object-cover" /> : <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary"><ImageIcon size={28} color={GREEN} /></div>}<p className="text-[16px] font-semibold">Добавь обложку</p><span className="mt-4 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Загрузить</span><input type="file" accept="image/*" disabled={uploadProgress !== null} className="hidden" onChange={async (event) => { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; setUploadProgress(0); try { const publicUrl = await uploadPhoto(file, { onProgress: setUploadProgress }); if (publicUrl) updatePlan({ coverImage: publicUrl }); } finally { setUploadProgress(null); } }} />{uploadProgress !== null && <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60"><span className="text-[22px] font-semibold text-white">{uploadProgress}%</span></div>}</label></div>;
       case "schedule":

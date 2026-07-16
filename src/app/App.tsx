@@ -1,7 +1,7 @@
 import { ArrowLeft, Calendar, CheckCircle2, MessageCircle, Newspaper, Plus, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Article, ChatMessage, ChatPeer, ChatThread, HomeFeedPlan, ParticipantPlanRef, PlanId, Screen } from "@/app/types";
-import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
+import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN, PLAN_DARK } from "@/app/data/constants";
 import { formatNearestDate, getNextOccurrence, hasUpcomingOccurrence } from "@/app/data/calendar";
 import { experts, expertProfile, profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
@@ -15,7 +15,7 @@ import { deleteUserMessages, fetchUserThreadMessages, makeThreadId, sendMessage,
 import { createPlanRemote, deletePlanParticipant, deletePlanParticipantsForPlans, deletePlanRemote, deletePlansByAuthor, deleteUserPlanParticipants, fetchJoinedCounts, fetchParticipants, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, updatePlanRemote, upsertPlanParticipant } from "@/app/lib/api/plans";
 import { deleteCommentsByAuthor } from "@/app/lib/api/comments";
 import { deleteUserPlanProgress, fetchPlanProgressKeys, upsertPlanProgress } from "@/app/lib/api/planProgress";
-import { buildPlanStartAppUrl, getTelegramAuthDate, getTelegramStartParam, getTelegramUser, initTelegram, parsePlanStartParam } from "@/app/lib/telegram";
+import { applyTelegramChrome, buildPlanStartAppUrl, getTelegramAuthDate, getTelegramStartParam, getTelegramUser, initTelegram, parsePlanStartParam } from "@/app/lib/telegram";
 import { checkBackendHealth } from "@/app/lib/health";
 import { identifyUser, track, type PlanViewSource } from "@/app/lib/analytics";
 import { HomeScreen } from "@/app/screens/HomeScreen";
@@ -262,6 +262,10 @@ type NavSnapshot =
   | { screen: "planEvent"; activePlanId: PlanId; origin: Screen; source: PlanViewSource }
   | { screen: "chat"; peer: ChatPeer | null };
 const NAV_STACK_LIMIT = 20;
+const DEFAULT_CHROME_COLOR = "#EFEFF5";
+const WELCOME_CHROME_COLOR = "#504843";
+const getScreenChromeColor = (screen: Screen): string =>
+  screen === "planEvent" ? PLAN_DARK.bg : DEFAULT_CHROME_COLOR;
 
 const isTelegramPhotoUrl = (url: string | null | undefined) => {
   if (!url) return false;
@@ -910,6 +914,9 @@ export default function App() {
   }, [currentUserId, localPeerById, remoteProfiles]);
 
   useEffect(() => initTelegram(), []);
+  useEffect(() => {
+    applyTelegramChrome(termsAccepted ? getScreenChromeColor(screen) : WELCOME_CHROME_COLOR);
+  }, [screen, termsAccepted]);
 
   useEffect(() => {
     if (!startParamConsumedKey) return;
