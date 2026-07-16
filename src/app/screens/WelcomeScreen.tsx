@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { track } from "@/app/lib/analytics";
 import { openExternalUrl } from "@/app/lib/telegram";
-import policyImage from "@/imports/policy.png";
+import policyImage from "@/imports/policy.webp";
 
 const links = {
   terms: "https://well-well-well.online/docs/terms-of-service.pdf",
