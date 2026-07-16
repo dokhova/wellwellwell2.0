@@ -321,9 +321,11 @@ export function HomeScreen({
                     ? "Заездов пока нет"
                     : tagFilter === "yoga"
                       ? "Занятий пока нет"
-                      : tagFilter === "recovery"
-                        ? "Событий пока нет"
-                        : "Тут пока пусто"}
+                      : tagFilter === "fitness"
+                        ? "Тренировок пока нет"
+                        : tagFilter === "recovery"
+                          ? "Событий пока нет"
+                          : "Тут пока пусто"}
             </h3>
             <p className="mt-2 text-[14px] leading-relaxed text-gray-400">
               {tagFilter === "all"

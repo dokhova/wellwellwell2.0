@@ -102,6 +102,7 @@ const tagAxis: Record<PlanTag, ExpertProfilePlan["axis"]> = {
   running: "Движение",
   cycling: "Движение",
   yoga: "Развитие",
+  fitness: "Движение",
   recovery: "Восстановление",
   other: "Развитие",
 };

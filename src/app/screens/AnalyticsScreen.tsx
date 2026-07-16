@@ -8,6 +8,7 @@ const tagIcon: Record<string, string> = {
   running: "🏃",
   cycling: "🚴",
   yoga: "🧘",
+  fitness: "🏋️",
   recovery: "🌿",
   other: "✨",
 };

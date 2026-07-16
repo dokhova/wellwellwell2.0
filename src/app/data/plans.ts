@@ -33,6 +33,7 @@ export const PLAN_TAG_LABELS: Record<PlanTag, string> = {
   running: "Бег",
   cycling: "Велоспорт",
   yoga: "Йога",
+  fitness: "Фитнес",
   recovery: "Восстановление",
   other: "Другое",
 };
@@ -55,6 +56,7 @@ export const PLAN_TAG_GRADIENTS: Record<PlanTag, string> = {
   running: "linear-gradient(135deg, var(--accent) 0%, var(--primary) 100%)",
   cycling: "linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)",
   yoga: "linear-gradient(135deg, var(--secondary) 0%, var(--accent) 100%)",
+  fitness: "linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)",
   recovery: "linear-gradient(135deg, var(--muted-foreground) 0%, var(--primary) 100%)",
   other: "linear-gradient(135deg, var(--accent) 0%, var(--muted-foreground) 100%)",
 };
@@ -437,6 +439,8 @@ export const homeFeedPlans: HomeFeedPlan[] = ([
 export const CATEGORY_CHIPS: { label: string; value: TagFilter }[] = [
   { label: "Все", value: "all" },
   { label: "Бег", value: "running" },
+  { label: "Йога", value: "yoga" },
+  { label: "Фитнес", value: "fitness" },
   { label: "Восстановление", value: "recovery" },
   { label: "Другое", value: "other" },
 ];
@@ -445,6 +449,8 @@ export const normalizePlanTag = (tag?: string): PlanTag =>
   PLAN_TAGS.includes(tag as PlanTag) ? (tag as PlanTag) : "other";
 export const PLAN_CATEGORY_GRADIENTS: Record<string, string> = {
   "Бег": "linear-gradient(135deg, var(--brand-bright) 0%, var(--accent) 100%)",
+  "Йога": "linear-gradient(135deg, var(--secondary) 0%, var(--accent) 100%)",
+  "Фитнес": "linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)",
   "Восстановление": "linear-gradient(135deg, var(--primary) 0%, var(--muted-foreground) 100%)",
   "Питание": "linear-gradient(135deg, var(--secondary) 0%, var(--accent) 100%)",
   "Другое": "linear-gradient(135deg, var(--muted-foreground) 0%, var(--border) 100%)",

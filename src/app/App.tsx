@@ -663,6 +663,7 @@ export default function App() {
   const justCreatedPublicPlans = [...createdPlansWithCounts, ...remotePlansWithCounts]
     .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && (plan.visibility ?? "all") === "all")
     .filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index);
+  const FEED_PRIORITY_TAG = "running";
   const publicPlans = useMemo(() => {
     const occurrenceTime = (plan: HomeFeedPlan) => {
       const occurrence = getNextOccurrence(plan.schedule);
@@ -684,11 +685,30 @@ export default function App() {
       && hasUpcomingOccurrence(plan.schedule);
     const sortByOccurrence = (a: HomeFeedPlan, b: HomeFeedPlan) =>
       occurrenceTime(a) - occurrenceTime(b);
+    const spreadClubPlans = (plans: HomeFeedPlan[]) => {
+      const spread = [...plans];
+      for (let index = 2; index < spread.length; index += 1) {
+        const clubId = spread[index].author.id;
+        if (clubId !== spread[index - 1].author.id || clubId !== spread[index - 2].author.id) continue;
+        const swapIndex = spread.findIndex((plan, candidateIndex) =>
+          candidateIndex > index && plan.author.id !== clubId
+        );
+        if (swapIndex < 0) continue;
+        [spread[index], spread[swapIndex]] = [spread[swapIndex], spread[index]];
+      }
+      return spread;
+    };
 
-    const clubPlans = demoPlansWithParticipants
-      .filter((plan) => activeDemoClubPlanIds.has(planKey(plan.id)))
-      .filter(isVisibleInFeed)
-      .sort(sortByOccurrence);
+    const clubPlans = spreadClubPlans(
+      demoPlansWithParticipants
+        .filter((plan) => activeDemoClubPlanIds.has(planKey(plan.id)))
+        .filter(isVisibleInFeed)
+        .sort((a, b) => {
+          const priorityDifference =
+            Number(b.tag === FEED_PRIORITY_TAG) - Number(a.tag === FEED_PRIORITY_TAG);
+          return priorityDifference || sortByOccurrence(a, b);
+        })
+    );
     const communityPlans = demoPlansWithParticipants
       .filter((plan) => demoCommunityPlanIds.has(planKey(plan.id)))
       .filter(isVisibleInFeed)
