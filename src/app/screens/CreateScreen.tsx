@@ -8,7 +8,7 @@ import { HomeSheet } from "@/app/components/HomeSheet";
 import { sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { fetchRecentProfiles, searchProfiles } from "@/app/lib/api/profiles";
 import { track } from "@/app/lib/analytics";
-import { getRepeatUntil, normalizeSchedule } from "@/app/lib/schedule";
+import { getNearestWeekdayDate, getRepeatUntil, normalizeSchedule, toIsoDate, toLocalIsoDate } from "@/app/lib/schedule";
 import { formatWeekdayRanges } from "@/app/lib/weekdayRanges";
 
 type CreateStep = "welcome" | "name" | "description" | "image" | "schedule" | "finalOptions" | "success";
@@ -80,6 +80,18 @@ const defaultSchedule = (): Schedule => ({
 });
 
 const defaultPlan = (): PlanDraft => ({ title: "", description: "", coverImage: null, schedule: defaultSchedule() });
+
+export const finalizeSchedule = (schedule: Schedule): Schedule => {
+  const mode = schedule.timeMode ?? schedule.mode ?? "partOfDay";
+  if (schedule.repeat?.type !== "none" || mode !== "partOfDay" || !schedule.partOfDay) return schedule;
+
+  const occurrenceDate = getNearestWeekdayDate(schedule.weekdays);
+  const startTime = PART_OF_DAY_RANGES[schedule.partOfDay].range.split("-")[0];
+  return {
+    ...schedule,
+    start: `${toLocalIsoDate(occurrenceDate)}T${startTime}`,
+  };
+};
 
 export function CreateScreen({
   onNavigate,
@@ -208,6 +220,10 @@ export function CreateScreen({
       if (schedule.weekdays.length === 0) return "Выберите хотя бы один день недели";
     }
     if (mode === "exact" && !schedule.start) return "Выберите дату и время начала";
+    if (mode === "exact" && schedule.repeat?.type === "none" && schedule.start) {
+      const startDate = toIsoDate(schedule.start);
+      if (startDate && startDate < toLocalIsoDate(new Date())) return "Дата уже прошла";
+    }
     if (schedule.repeat?.type === "weekly" && schedule.weekdays.length === 0) return "Выберите хотя бы один день недели";
     return "";
   };
@@ -230,6 +246,13 @@ export function CreateScreen({
       return startLabel;
     }
     const partLabel = schedule.partOfDay ? PART_OF_DAY_RANGES[schedule.partOfDay].label : "Расписание";
+    if (schedule.repeat?.type === "none" && schedule.start) {
+      const date = new Date(schedule.start);
+      if (!Number.isNaN(date.getTime())) {
+        const dateLabel = date.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+        return `${dateLabel} · ${partLabel}`;
+      }
+    }
     return schedule.repeat?.type === "weekly"
       ? `${formatWeekdayRanges(schedule.weekdays)} · ${partLabel}`
       : partLabel;
@@ -249,6 +272,8 @@ export function CreateScreen({
       return;
     }
 
+    const finalizedSchedule = finalizeSchedule(draft.schedule);
+    const finalizedDraft = { ...draft, schedule: finalizedSchedule };
     const distanceLabel = metricMode === "distance" && Number(distanceValue) > 0 ? `${Number(distanceValue)} ${distanceUnit}` : undefined;
     const duration = metricMode === "time" && Number(durationMinutes) > 0 ? `${Number(durationMinutes)} мин` : undefined;
 
@@ -264,12 +289,12 @@ export function CreateScreen({
         description: draft.description.trim(),
         habit: { ...(editingPlan.habit ?? { durationMin: 15 }), title: draft.title.trim() },
         coverUrl: draft.coverImage ?? undefined,
-        schedule: draft.schedule,
-        timeDate: getTimeDate(draft.schedule),
+        schedule: finalizedSchedule,
+        timeDate: getTimeDate(finalizedSchedule),
         address: locationMode === "offline" && locationAddress.trim() ? locationAddress.trim() : undefined,
       };
       const result: CreatedPlanResult = {
-        plan: { ...draft, title: draft.title.trim(), description: draft.description.trim() },
+        plan: { ...finalizedDraft, title: draft.title.trim(), description: draft.description.trim() },
         visibility,
         participants: selectedParticipants,
         location: locationMode === "online" ? "online" : locationAddress.trim() ? { address: locationAddress.trim() } : null,
@@ -295,15 +320,15 @@ export function CreateScreen({
       habit: { title: draft.title.trim(), durationMin: 15 },
       coverUrl: draft.coverImage ?? undefined,
       gradient: PLAN_TAG_GRADIENTS.other,
-      schedule: draft.schedule,
+      schedule: finalizedSchedule,
       participants: authorParticipants,
       participantsLabel: "1 чел.",
-      timeDate: getTimeDate(draft.schedule),
+      timeDate: getTimeDate(finalizedSchedule),
       address: locationMode === "offline" && locationAddress.trim() ? locationAddress.trim() : undefined,
       author: currentAuthor,
     };
     const result: CreatedPlanResult = {
-      plan: { ...draft, title: draft.title.trim(), description: draft.description.trim() },
+      plan: { ...finalizedDraft, title: draft.title.trim(), description: draft.description.trim() },
       visibility,
       participants: selectedParticipants,
       location: locationMode === "online" ? "online" : locationAddress.trim() ? { address: locationAddress.trim() } : null,

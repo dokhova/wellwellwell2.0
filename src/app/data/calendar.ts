@@ -1,5 +1,5 @@
 import type { Period, Schedule } from "@/app/types";
-import { isScheduleActiveOn, normalizePlanRepeat } from "@/app/lib/schedule";
+import { getNearestWeekdayDate, isScheduleActiveOn, normalizePlanRepeat } from "@/app/lib/schedule";
 
 const today = new Date();
 today.setHours(0, 0, 0, 0);
@@ -41,7 +41,9 @@ export function getNextOccurrence(schedule: Schedule, from: Date = new Date()): 
   const start = schedule.start ? new Date(schedule.start) : null;
 
   if (repeat.type === "none") {
-    return start && !Number.isNaN(start.getTime()) ? start : todayDate;
+    return start && !Number.isNaN(start.getTime())
+      ? start
+      : getNearestWeekdayDate(schedule.weekdays, todayDate);
   }
 
   const weekdays = schedule.weekdays?.length ? schedule.weekdays : [1, 2, 3, 4, 5, 6, 7];

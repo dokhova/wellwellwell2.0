@@ -48,6 +48,25 @@ export const toLocalIsoDate = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+export const getNearestWeekdayDate = (weekdays: number[], from: Date = new Date()) => {
+  const firstCandidate = new Date(from);
+  firstCandidate.setHours(0, 0, 0, 0);
+  const validWeekdays = weekdays.filter((weekday) => weekday >= 1 && weekday <= 7);
+  if (validWeekdays.length === 0) return firstCandidate;
+
+  const firstWeekday = firstCandidate.getDay() || 7;
+  for (let offset = 0; offset < 7; offset += 1) {
+    const candidateWeekday = ((firstWeekday - 1 + offset) % 7) + 1;
+    if (validWeekdays.includes(candidateWeekday)) {
+      const date = new Date(firstCandidate);
+      date.setDate(firstCandidate.getDate() + offset);
+      return date;
+    }
+  }
+
+  return firstCandidate;
+};
+
 export const isScheduleActiveOn = (schedule: Schedule, date: Date) => {
   const until = getRepeatUntil(schedule);
   if (!until) return true;

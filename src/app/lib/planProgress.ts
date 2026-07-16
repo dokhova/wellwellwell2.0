@@ -1,10 +1,11 @@
 import type { HomeFeedPlan } from "@/app/types";
+import { getNearestWeekdayDate, toLocalIsoDate } from "@/app/lib/schedule";
 
 export const PLAN_START_DATE = new Date();
 PLAN_START_DATE.setHours(0, 0, 0, 0);
 export const PAST_DAYS = 30;
 
-export const getDateKey = (date: Date) => date.toISOString().slice(0, 10);
+export const getDateKey = (date: Date) => toLocalIsoDate(date);
 
 export const calendarDays = Array.from({ length: 31 }, (_, index) => {
   const date = new Date(PLAN_START_DATE);
@@ -64,7 +65,8 @@ export const getPlanWeekItems = (plans: HomeFeedPlan[]) => {
       const startKey = getScheduleStartKey(plan.schedule.start);
       const endKey = getScheduleEndKey(plan, startKey);
       if (plan.schedule.repeat?.type === "none") {
-        const day = calendarDays.find((item) => item.dateKey === startKey);
+        const occurrenceKey = startKey ?? getDateKey(getNearestWeekdayDate(plan.schedule.weekdays, PLAN_START_DATE));
+        const day = calendarDays.find((item) => item.dateKey === occurrenceKey);
         return day ? [{
           plan,
           date: day.date,
@@ -122,7 +124,8 @@ export const getPlanPastItems = (plans: HomeFeedPlan[]) => {
       const startKey = getScheduleStartKey(plan.schedule.start);
       const endKey = getScheduleEndKey(plan, startKey);
       if (plan.schedule.repeat?.type === "none") {
-        const day = pastCalendarDays.find((item) => item.dateKey === startKey);
+        const occurrenceKey = startKey ?? getDateKey(getNearestWeekdayDate(plan.schedule.weekdays, PLAN_START_DATE));
+        const day = pastCalendarDays.find((item) => item.dateKey === occurrenceKey);
         return day ? [{
           plan,
           date: day.date,
