@@ -675,10 +675,11 @@ export default function App() {
       || plan.author.id === currentUserId
     );
   }, [allPlans, currentUserId, myParticipantIds]);
-  const savedPlans = useMemo(() => {
-    const savedPlanIdSet = new Set(savedPlanIds.map(planKey));
-    return allPlans.filter((plan) => savedPlanIdSet.has(planKey(plan.id)));
-  }, [allPlans, savedPlanIds]);
+  const savedPlanIdSet = useMemo(() => new Set(savedPlanIds.map(planKey)), [savedPlanIds]);
+  const savedPlans = useMemo(
+    () => allPlans.filter((plan) => savedPlanIdSet.has(planKey(plan.id))),
+    [allPlans, savedPlanIdSet],
+  );
   const catalogPublicPlans = useMemo(
     () => homeFeedPlans
       .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && (plan.visibility ?? "all") === "all")
