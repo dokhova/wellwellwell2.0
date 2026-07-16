@@ -12,7 +12,7 @@ import { deleteUserFollows, fetchFollowers, fetchFollowing, follow, unfollow } f
 import { isSchedulePastRepeatEnd, normalizeSchedule } from "@/app/lib/schedule";
 import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { deleteUserMessages, fetchUserThreadMessages, makeThreadId, sendMessage, subscribeToUserMessages, type MessageRow } from "@/app/lib/api/chat";
-import { createPlanRemote, deletePlanParticipant, deletePlanParticipantsForPlans, deletePlanRemote, deletePlansByAuthor, deleteUserPlanParticipants, fetchJoinedCounts, fetchParticipants, fetchParticipantsForPlans, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, updatePlanRemote, upsertPlanParticipant } from "@/app/lib/api/plans";
+import { createPlanRemote, deletePlanParticipant, deletePlanParticipantsForPlans, deletePlanRemote, deletePlansByAuthor, deleteUserPlanParticipants, fetchJoinedCounts, fetchJoinedPlanIdsForUser, fetchParticipants, fetchParticipantsForPlans, fetchPlan, fetchPlansByAuthor, fetchPublicPlans, setPlanHidden, subscribeToPlanParticipants, updatePlanRemote, upsertPlanParticipant } from "@/app/lib/api/plans";
 import { deleteCommentsByAuthor } from "@/app/lib/api/comments";
 import { deleteUserPlanProgress, fetchPlanProgressKeys, upsertPlanProgress } from "@/app/lib/api/planProgress";
 import { applyTelegramChrome, buildPlanStartAppUrl, getTelegramAuthDate, getTelegramStartParam, getTelegramUser, initTelegram, parsePlanStartParam } from "@/app/lib/telegram";
@@ -1480,7 +1480,10 @@ export default function App() {
     let cancelled = false;
     const pruneLocalPlanCache = async () => {
       try {
-        const ownRemotePlans = await fetchPlansByAuthor(currentUserId);
+        const [ownRemotePlans, joinedPlanIds] = await Promise.all([
+          fetchPlansByAuthor(currentUserId),
+          fetchJoinedPlanIdsForUser(currentUserId),
+        ]);
         if (cancelled) return;
         const existingOwnPlanIds = new Set(ownRemotePlans.filter((plan) => plan.hidden !== true).map((plan) => planKey(plan.id)));
         const localRealCreatedIds = createdPlans
@@ -1499,11 +1502,44 @@ export default function App() {
         });
         setCreatedPlans((plans) => {
           const next = plans.filter((plan) => isDemoCommunityPlanId(plan.id) || plan.author.id !== currentUserId || existingPlanIds.has(planKey(plan.id)));
-          return next.length === plans.length ? plans : next;
+          const remotePlans = ownRemotePlans.filter((plan) => plan.hidden !== true).map(sanitizePlan);
+          const remotePlansById = new Map(remotePlans.map((plan) => [planKey(plan.id), plan]));
+          const hydrated = next.map((plan) =>
+            isDemoCommunityPlanId(plan.id) || plan.author.id !== currentUserId
+              ? plan
+              : remotePlansById.get(planKey(plan.id)) ?? plan
+          );
+          const hydratedIds = new Set(hydrated.map((plan) => planKey(plan.id)));
+          remotePlans.forEach((plan) => {
+            if (!hydratedIds.has(planKey(plan.id))) {
+              hydrated.push(plan);
+              hydratedIds.add(planKey(plan.id));
+            }
+          });
+          return hydrated;
         });
         setMyParticipantIds((items) => {
           const next = items.filter((item) => isDemoCommunityPlanId(item.id) || existingPlanIds.has(planKey(item.id)));
           return next.length === items.length ? items : next;
+        });
+        setMyParticipantIds((items) => {
+          const joinedIdsByKey = new Map(joinedPlanIds.map((id) => [planKey(id), id]));
+          const localJoinedKeys = items
+            .map((item) => planKey(item.id))
+            .filter((id, index, ids) => joinedIdsByKey.has(id) && ids.indexOf(id) === index);
+          const localJoinedKeySet = new Set(localJoinedKeys);
+          const orderedJoinedKeys = [
+            ...localJoinedKeys,
+            ...joinedPlanIds.map(planKey).filter((id) => !localJoinedKeySet.has(id)),
+          ];
+          return orderedJoinedKeys.map((id) => {
+            const localItem = items.find((item) => planKey(item.id) === id);
+            const plan = allPlanDetailsRef.current.find((item) => planKey(item.id) === id);
+            return {
+              kind: localItem?.kind ?? plan?.kind ?? "plan",
+              id: joinedIdsByKey.get(id) ?? id,
+            };
+          });
         });
       } catch (error) {
         console.error("Supabase local plan cache prune failed", error);
