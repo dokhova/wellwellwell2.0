@@ -2,7 +2,7 @@ import { ArrowLeft, Calendar, CheckCircle2, MessageCircle, Newspaper, Plus, User
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Article, ChatMessage, ChatPeer, ChatThread, HomeFeedPlan, ParticipantPlanRef, PlanId, Screen } from "@/app/types";
 import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN } from "@/app/data/constants";
-import { formatNearestDate, getNextOccurrence } from "@/app/data/calendar";
+import { formatNearestDate, getNextOccurrence, hasUpcomingOccurrence } from "@/app/data/calendar";
 import { experts, expertProfile, profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { homeFeedPlans } from "@/app/data/plans";
 import { activeDemoClubPlans, demoClubs, getDemoClubParticipantPeers } from "@/app/data/demoClubs";
@@ -263,15 +263,6 @@ type NavSnapshot =
   | { screen: "chat"; peer: ChatPeer | null };
 const NAV_STACK_LIMIT = 20;
 
-const shuffleIds = (ids: string[]) => {
-  const next = [...ids];
-  for (let index = next.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
-  }
-  return next;
-};
-
 const isTelegramPhotoUrl = (url: string | null | undefined) => {
   if (!url) return false;
   try {
@@ -479,14 +470,6 @@ export default function App() {
   const [appToast, setAppToast] = useState("");
   const [moderatorHiddenPlanIds, setModeratorHiddenPlanIds] = useState<PlanId[]>([]);
   const [remoteProfiles, setRemoteProfiles] = useState<Record<string, ExpertProfile>>({});
-  const [homeDemoPlanOrder] = useState(() => {
-    const currentIds = demoCommunityPlans.slice(0, 12).map((plan) => planKey(plan.id));
-    return shuffleIds(currentIds);
-  });
-  const [homeClubPlanOrder] = useState(() => {
-    const currentIds = activeDemoClubPlans.map((plan) => planKey(plan.id));
-    return shuffleIds(currentIds);
-  });
   const [editableProfile, setEditableProfile] = useState<ExpertProfile>(() =>
     normalizeProfile(readJson(profileStorageKey, buildTelegramProfile(telegramUser)))
   );
@@ -681,25 +664,34 @@ export default function App() {
     .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)) && (plan.visibility ?? "all") === "all")
     .filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index);
   const publicPlans = useMemo(() => {
-    const demoPlanById = new Map(demoPlansWithParticipants.map((plan) => [planKey(plan.id), plan]));
-    const orderedClubPlans = homeClubPlanOrder
-      .map((id) => demoPlanById.get(id))
-      .filter((plan): plan is HomeFeedPlan => Boolean(plan))
-      .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)));
-    const orderedTopDemoPlans = homeDemoPlanOrder
-      .map((id) => demoPlanById.get(id))
-      .filter((plan): plan is HomeFeedPlan => Boolean(plan))
-      .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)));
-    const remainingDemoPlans = demoPlansWithParticipants
-      .filter((plan) => !homeDemoPlanOrder.includes(planKey(plan.id)))
-      .filter((plan) => !homeClubPlanOrder.includes(planKey(plan.id)))
-      .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)));
-    const sortedPlans = [...catalogPublicPlans, ...justCreatedPublicPlans]
+    const occurrenceTime = (plan: HomeFeedPlan) => {
+      const occurrence = getNextOccurrence(plan.schedule);
+      if (
+        occurrence.getHours() === 0
+        && occurrence.getMinutes() === 0
+        && occurrence.getSeconds() === 0
+        && /^\d{2}:\d{2}$/.test(plan.schedule.time ?? "")
+      ) {
+        const [hours, minutes] = plan.schedule.time!.split(":").map(Number);
+        occurrence.setHours(hours, minutes, 0, 0);
+      }
+      return occurrence.getTime();
+    };
+
+    return [...demoPlansWithParticipants, ...catalogPublicPlans, ...justCreatedPublicPlans]
+      .filter((plan, index, plans) => plans.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index)
+      .filter((plan) => !deletedPlanIdSet.has(planKey(plan.id)))
       .filter((plan) => !moderatorHiddenPlanIdSet.has(planKey(plan.id)))
-      .sort((a, b) => getParticipantsCount(b) - getParticipantsCount(a));
-    return [...orderedClubPlans, ...orderedTopDemoPlans, ...remainingDemoPlans, ...sortedPlans]
-      .filter((plan) => !isSchedulePastRepeatEnd(plan.schedule));
-  }, [catalogPublicPlans, deletedPlanIdSet, demoPlansWithParticipants, homeClubPlanOrder, homeDemoPlanOrder, justCreatedPublicPlans, moderatorHiddenPlanIdSet]);
+      .filter((plan) => !isSchedulePastRepeatEnd(plan.schedule))
+      .filter((plan) => hasUpcomingOccurrence(plan.schedule))
+      .sort((a, b) => {
+        const timeDifference = occurrenceTime(a) - occurrenceTime(b);
+        if (timeDifference !== 0) return timeDifference;
+        const demoDifference = Number(isDemoCommunityPlanId(a.id)) - Number(isDemoCommunityPlanId(b.id));
+        if (demoDifference !== 0) return demoDifference;
+        return getParticipantsCount(b) - getParticipantsCount(a);
+      });
+  }, [catalogPublicPlans, deletedPlanIdSet, demoPlansWithParticipants, justCreatedPublicPlans, moderatorHiddenPlanIdSet]);
   const participantChatPeers: ChatPeer[] = useMemo(() => EVENT_PARTICIPANTS.map((participant) => ({
     id: participant.id,
     name: participant.name,
