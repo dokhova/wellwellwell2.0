@@ -258,19 +258,7 @@ export function CreateScreen({
     if (schedule.repeat?.type === "none" && schedule.start) {
       const date = new Date(schedule.start);
       if (!Number.isNaN(date.getTime())) {
-        if (schedule.weekdays.length > 1 && typeof schedule.end === "string") {
-          const endDate = new Date(schedule.end);
-          if (!Number.isNaN(endDate.getTime())) {
-            const startDay = date.toLocaleDateString("ru-RU", { day: "numeric" });
-            const endDay = endDate.toLocaleDateString("ru-RU", { day: "numeric" });
-            const startMonth = date.toLocaleDateString("ru-RU", { month: "long" });
-            const endMonth = endDate.toLocaleDateString("ru-RU", { month: "long" });
-            const dateRange = startMonth === endMonth
-              ? `${startDay}–${endDay} ${endMonth}`
-              : `${startDay} ${startMonth} – ${endDay} ${endMonth}`;
-            return `${formatWeekdayRanges(schedule.weekdays)}, ${dateRange} · ${partLabel}`;
-          }
-        }
+        if (schedule.weekdays.length > 1) return `${formatWeekdayRanges(schedule.weekdays)} · ${partLabel}`;
         const dateLabel = date.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
         return `${dateLabel} · ${partLabel}`;
       }

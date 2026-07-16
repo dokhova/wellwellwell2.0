@@ -2298,15 +2298,17 @@ export default function App() {
           const participantAvatars = participantItems.map((participant) => participant.avatarUrl).filter((url): url is string => Boolean(url));
           const participantCount = getPlanParticipantPresentation(feedPlan).count;
           const authorProfile = feedPlan.author.id
-            ? remoteProfiles[feedPlan.author.id]
-              ?? experts.find((expert) => expert.id === feedPlan.author.id && expert.isDemo === true)
-              ?? buildUnknownProfile(feedPlan.author.id)
+            ? feedPlan.author.id === currentUserId
+              ? { ...editableProfile, name: currentAuthor.name, photoUrl: currentAuthor.avatarUrl }
+              : remoteProfiles[feedPlan.author.id]
+                ?? experts.find((expert) => expert.id === feedPlan.author.id && expert.isDemo === true)
+                ?? buildUnknownProfile(feedPlan.author.id)
             : null;
           const detailProfileById = {
             ...Object.fromEntries(experts.map((profile) => [profile.id, { name: profile.name, avatarUrl: profile.photoUrl }])),
             ...Object.fromEntries(Object.values(remoteProfiles).map((profile) => [profile.id, { name: profile.name, avatarUrl: profile.photoUrl }])),
-            [currentUserId]: { name: currentAuthor.name, avatarUrl: currentAuthor.avatarUrl },
             ...(feedPlan.author.id ? { [feedPlan.author.id]: { name: authorProfile?.name ?? feedPlan.author.name, avatarUrl: authorProfile?.photoUrl ?? feedPlan.author.avatarUrl } } : {}),
+            [currentUserId]: { name: currentAuthor.name, avatarUrl: currentAuthor.avatarUrl },
           };
           const isAuthorFollowedByMe = authorProfile
             ? isDemoProfile(authorProfile)

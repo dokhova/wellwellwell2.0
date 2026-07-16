@@ -65,6 +65,23 @@ export const getPlanWeekItems = (plans: HomeFeedPlan[]) => {
       const startKey = getScheduleStartKey(plan.schedule.start);
       const endKey = getScheduleEndKey(plan, startKey);
       if (plan.schedule.repeat?.type === "none") {
+        if (plan.schedule.weekdays.length > 1) {
+          const matchingDays = calendarDays.filter((day) =>
+            plan.schedule.weekdays.includes(day.weekday)
+            && (!startKey || day.dateKey >= startKey)
+            && (!endKey || day.dateKey <= endKey)
+          );
+          return matchingDays.map((day) => ({
+            plan,
+            date: day.date,
+            dateKey: day.dateKey,
+            dayIndex: day.dayIndex,
+            dayNumber: day.dayNumber,
+            monthName: day.monthName,
+            sortKey: day.dayIndex,
+            progressKey: `${day.dateKey}:${plan.id}`,
+          }));
+        }
         const occurrenceKey = startKey ?? getDateKey(getNearestWeekdayDate(plan.schedule.weekdays, PLAN_START_DATE));
         const day = calendarDays.find((item) => item.dateKey === occurrenceKey);
         return day ? [{
@@ -124,6 +141,23 @@ export const getPlanPastItems = (plans: HomeFeedPlan[]) => {
       const startKey = getScheduleStartKey(plan.schedule.start);
       const endKey = getScheduleEndKey(plan, startKey);
       if (plan.schedule.repeat?.type === "none") {
+        if (plan.schedule.weekdays.length > 1) {
+          const matchingDays = pastCalendarDays.filter((day) =>
+            plan.schedule.weekdays.includes(day.weekday)
+            && (!startKey || day.dateKey >= startKey)
+            && (!endKey || day.dateKey <= endKey)
+          );
+          return matchingDays.map((day) => ({
+            plan,
+            date: day.date,
+            dateKey: day.dateKey,
+            dayIndex: day.dayIndex,
+            dayNumber: day.dayNumber,
+            monthName: day.monthName,
+            sortKey: day.dayIndex,
+            progressKey: `${day.dateKey}:${plan.id}`,
+          }));
+        }
         const occurrenceKey = startKey ?? getDateKey(getNearestWeekdayDate(plan.schedule.weekdays, PLAN_START_DATE));
         const day = pastCalendarDays.find((item) => item.dateKey === occurrenceKey);
         return day ? [{
