@@ -333,7 +333,7 @@ function DetailCard({ children, className = "" }: { children: ReactNode; classNa
 
 export function EventDetailScreen({
   title, coverSrc, backgroundGradient, authorName, authorAvatarUrl, authorVerified,
-  readTime, badgeDate, paragraphs, meta, format = "offline", duration, level, distanceLabel, photos = [], authorSubtitle, participantCount, isDemo, isSaved = false, onToggleSaved, tag, schedule, shareUrl,
+  readTime, badgeDate, paragraphs, meta, format = "offline", duration, level, distanceLabel, photos = [], authorSubtitle, participantCount, maxParticipants, isDemo, isSaved = false, onToggleSaved, tag, schedule, shareUrl,
   participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, planId, onJoin, onLeave, onProfile,
   authorId, onMessageAuthor, isAuthorFollowedByMe = false, onToggleAuthorFollow, participantItems, onMessageParticipant,
   currentAuthor, canDelete = false, onDelete, canEdit = false, onEdit, canHide = false, onHide, refreshKey, onProfileOpen, profileById = {},
@@ -400,6 +400,12 @@ export function EventDetailScreen({
   const participantCountLabel = participantsLabel ?? `${resolvedParticipantCount} чел.`;
   const overflowLabel = meta.plusN.startsWith("+") ? meta.plusN : "";
   const isOwnPlan = Boolean(currentAuthor?.id && authorId === currentAuthor.id);
+  const registrationClosed =
+    typeof maxParticipants === "number"
+    && maxParticipants > 1
+    && resolvedParticipantCount >= maxParticipants
+    && !joined
+    && !isOwnPlan;
   const isRepeating = Boolean(schedule?.repeat && schedule.repeat.type !== "none");
   const startDate = schedule?.start ? new Date(schedule.start) : null;
   const shortWeekday = startDate && !Number.isNaN(startDate.getTime())
@@ -657,6 +663,7 @@ export function EventDetailScreen({
 
   const toggleJoin = () => {
     if (isOwnPlan) return;
+    if (registrationClosed) return;
     if (joined) {
       cancelJoin();
     } else {
@@ -891,7 +898,9 @@ export function EventDetailScreen({
     ...(!isOwnPlan ? [{
       key: "join",
       highlighted: joined,
-      node: <button type="button" onClick={toggleJoin} className="flex flex-1 flex-col items-center gap-1.5 rounded-xl py-3 text-[13px]" style={joined ? { color: PLAN_DARK.accent, background: "rgba(47,191,175,0.15)" } : undefined}>{joined ? <CheckSquare size={22} /> : <Plus size={22} />}<span>{joined ? "Участвую" : "Участвовать"}</span></button>,
+      node: registrationClosed
+        ? <div aria-disabled="true" className="flex flex-1 flex-col items-center gap-1.5 rounded-xl py-3 text-center text-[13px] text-muted-foreground"><Users size={22} /><span>Регистрация завершена</span></div>
+        : <button type="button" onClick={toggleJoin} className="flex flex-1 flex-col items-center gap-1.5 rounded-xl py-3 text-[13px]" style={joined ? { color: PLAN_DARK.accent, background: "rgba(47,191,175,0.15)" } : undefined}>{joined ? <CheckSquare size={22} /> : <Plus size={22} />}<span>{joined ? "Участвую" : "Участвовать"}</span></button>,
     }] : []),
     {
       key: "invite",

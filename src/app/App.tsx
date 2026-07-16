@@ -2387,6 +2387,7 @@ export default function App() {
               distanceLabel={feedPlan.distanceLabel}
               photos={feedPlan.photos}
               participantCount={participantCount}
+              maxParticipants={feedPlan.maxParticipants}
               isDemo={isDemoCommunityPlanId(feedPlan.id) ? true : undefined}
               isSaved={savedPlanIdSet.has(planKey(feedPlan.id))}
               onToggleSaved={() => toggleSavedPlan(feedPlan.id)}

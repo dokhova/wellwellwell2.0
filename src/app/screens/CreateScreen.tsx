@@ -131,8 +131,10 @@ export function CreateScreen({
   } : defaultPlan());
   const [titleError, setTitleError] = useState("");
   const [scheduleError, setScheduleError] = useState("");
+  const [maxParticipantsError, setMaxParticipantsError] = useState("");
   const [visibility, setVisibility] = useState<Visibility>(editingPlan?.visibility ?? "all");
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
+  const [maxParticipants, setMaxParticipants] = useState<string>(() => editingPlan?.maxParticipants ? String(editingPlan.maxParticipants) : "");
   const [selectedPeople, setSelectedPeople] = useState<Person[]>([]);
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const [participantQuery, setParticipantQuery] = useState("");
@@ -286,6 +288,16 @@ export function CreateScreen({
     const finalizedDraft = { ...draft, schedule: finalizedSchedule };
     const distanceLabel = metricMode === "distance" && Number(distanceValue) > 0 ? `${Number(distanceValue)} ${distanceUnit}` : undefined;
     const duration = metricMode === "time" && Number(durationMinutes) > 0 ? `${Number(durationMinutes)} мин` : undefined;
+    const maxParticipantsValue = maxParticipants.trim();
+    const parsedMaxParticipants = maxParticipantsValue ? Number.parseInt(maxParticipantsValue, 10) : undefined;
+    if (
+      maxParticipantsValue
+      && (!Number.isInteger(Number(maxParticipantsValue)) || parsedMaxParticipants === undefined || parsedMaxParticipants < 2)
+    ) {
+      setMaxParticipantsError("Минимум 2 участника");
+      return;
+    }
+    setMaxParticipantsError("");
 
     if (isEditing && editingPlan) {
       const updatedPlan: HomeFeedPlan = {
@@ -300,6 +312,7 @@ export function CreateScreen({
         habit: { ...(editingPlan.habit ?? { durationMin: 15 }), title: draft.title.trim() },
         coverUrl: draft.coverImage ?? undefined,
         schedule: finalizedSchedule,
+        maxParticipants: parsedMaxParticipants,
         timeDate: getTimeDate(finalizedSchedule),
         address: locationMode === "offline" && locationAddress.trim() ? locationAddress.trim() : undefined,
       };
@@ -333,6 +346,7 @@ export function CreateScreen({
       schedule: finalizedSchedule,
       participants: authorParticipants,
       participantsLabel: "1 чел.",
+      maxParticipants: parsedMaxParticipants,
       timeDate: getTimeDate(finalizedSchedule),
       address: locationMode === "offline" && locationAddress.trim() ? locationAddress.trim() : undefined,
       author: currentAuthor,
@@ -568,6 +582,25 @@ export function CreateScreen({
         onClick={() => setParticipantsOpen(true)}
         control={selectedParticipantItems.length > 0 ? <div className="flex -space-x-2">{selectedParticipantItems.slice(0, 4).map((person) => person.avatarUrl ? <img loading="lazy" decoding="async" key={person.id} src={person.avatarUrl} alt={person.name} className="h-7 w-7 rounded-full border-2 border-card object-cover" /> : <span key={person.id} className="h-7 w-7 rounded-full border-2 border-card bg-secondary" />)}</div> : <Plus size={18} color={GREEN} />}
       />
+      <div className="rounded-xl bg-card px-4 py-3.5">
+        <label>
+          <span className="mb-2 block text-[15px] font-medium text-foreground">Лимит участников</span>
+          <input
+            type="number"
+            inputMode="numeric"
+            min="2"
+            step="1"
+            value={maxParticipants}
+            onChange={(event) => {
+              setMaxParticipants(event.target.value);
+              setMaxParticipantsError("");
+            }}
+            placeholder="Без ограничения"
+            className="h-11 w-full rounded-xl bg-muted px-3 text-[14px] outline-none placeholder:text-muted-foreground"
+          />
+        </label>
+        {maxParticipantsError && <p className="mt-2 text-[12px] font-medium text-destructive">{maxParticipantsError}</p>}
+      </div>
       <div className="rounded-xl bg-card px-4 py-3.5">
         <div className="mb-3 flex items-center gap-3">
           <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-secondary">

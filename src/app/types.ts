@@ -101,6 +101,7 @@ export interface HomeFeedPlan {
   schedule: Schedule;
   participants: string[];
   participantsLabel: string;
+  maxParticipants?: number;
   timeDate: string;
   address?: string;
   lat?: number;
@@ -148,6 +149,7 @@ export interface EventDetailProps {
   photos?: string[];
   authorSubtitle?: string;
   participantCount?: number;
+  maxParticipants?: number;
   isDemo?: boolean;
   onBack: () => void;
   initiallyJoined?: boolean;
