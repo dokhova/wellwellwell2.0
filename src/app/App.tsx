@@ -53,13 +53,7 @@ const writeJson = (key: string, value: unknown) => {
 const isRemovedLegacyDemoRecord = (value: unknown) => {
   try {
     const text = JSON.stringify(value).toLowerCase();
-    const removedId = ["ge", "na"].join("");
-    const removedFirstName = "\u0433\u0435\u043d\u0430";
-    const removedLastName = "\u043b\u043e\u0445\u0442\u0438\u043d";
-    return text.includes(removedId)
-      || text.includes(removedFirstName)
-      || text.includes(removedLastName)
-      || text.includes("цифровой детокс");
+    return text.includes("цифровой детокс");
   } catch {
     return false;
   }
@@ -1362,40 +1356,64 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    const syncProfile = async () => {
+    let retryTimer: number | undefined;
+    const syncProfile = async (isRetry = false) => {
       const telegramProfile = normalizeProfile(buildTelegramProfile(telegramUser));
+      let storedProfile: ExpertProfile | null;
       try {
-        const storedProfile = await fetchProfile(telegramProfile.id);
-        if (cancelled) return;
-        if (storedProfile) {
-          const normalizedStoredProfile = normalizeProfile(storedProfile);
-          setEditableProfile(normalizedStoredProfile);
-          const mirroredProfile = await mirrorTelegramPhotoToStorage(normalizedStoredProfile);
-          if (!cancelled && mirroredProfile.photoUrl !== normalizedStoredProfile.photoUrl) {
-            setEditableProfile(mirroredProfile);
-            await upsertProfile(mirroredProfile);
-          }
+        storedProfile = await fetchProfile(telegramProfile.id);
+      } catch (error) {
+        console.error(isRetry ? "Supabase profile sync retry failed" : "Supabase profile sync failed", error);
+        if (!isRetry) {
+          retryTimer = window.setTimeout(() => {
+            if (cancelled) return;
+            void syncProfile(true);
+          }, 3000);
+        }
+        return;
+      }
+      if (cancelled) return;
+      if (storedProfile) {
+        const normalizedStoredProfile = normalizeProfile(storedProfile);
+        setEditableProfile(normalizedStoredProfile);
+        let mirroredProfile: ExpertProfile;
+        try {
+          mirroredProfile = await mirrorTelegramPhotoToStorage(normalizedStoredProfile);
+        } catch (error) {
+          console.error("Telegram profile photo mirror failed", error);
           return;
         }
-        const mirroredProfile = await mirrorTelegramPhotoToStorage(telegramProfile);
-        if (!cancelled && mirroredProfile.photoUrl !== telegramProfile.photoUrl) {
+        if (!cancelled && mirroredProfile.photoUrl !== normalizedStoredProfile.photoUrl) {
           setEditableProfile(mirroredProfile);
+          try {
+            await upsertProfile(mirroredProfile);
+          } catch (error) {
+            console.error("Supabase mirrored profile update failed", error);
+          }
         }
-        await upsertProfile(mirroredProfile);
+        return;
+      }
+      let profileToCreate = telegramProfile;
+      try {
+        profileToCreate = await mirrorTelegramPhotoToStorage(telegramProfile);
+        if (!cancelled && profileToCreate.photoUrl !== telegramProfile.photoUrl) {
+          setEditableProfile(profileToCreate);
+        }
       } catch (error) {
-        console.error("Supabase profile sync failed", error);
-        window.setTimeout(() => {
-          if (cancelled) return;
-          void upsertProfile(telegramProfile).catch((retryError) => {
-            console.error("Supabase profile sync retry failed", retryError);
-          });
-        }, 3000);
+        console.error("Telegram profile photo mirror failed", error);
+      }
+      if (cancelled) return;
+      try {
+        await upsertProfile(profileToCreate);
+      } catch (error) {
+        console.error("Supabase profile create failed", error);
       }
     };
 
     void syncProfile();
     return () => {
       cancelled = true;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
   }, [telegramUser]);
 
