@@ -123,7 +123,7 @@ export const FeedEventCard = memo(function FeedEventCard({
               </span>
             )}
             <span className="inline-flex items-center rounded-full bg-black/45 px-3 py-1.5 text-[13px] font-medium leading-4 text-white">
-              {PLAN_TAG_LABELS[tag]}
+              {PLAN_TAG_LABELS[tag] ?? PLAN_TAG_LABELS.other}
             </span>
           </div>
           <div className="flex flex-shrink-0 items-center gap-2">

@@ -1,6 +1,6 @@
 import { ArrowLeft, Calendar, CheckCircle2, MessageCircle, Newspaper, Plus, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Article, ChatMessage, ChatPeer, ChatThread, HomeFeedPlan, ParticipantPlanRef, PlanId, Screen } from "@/app/types";
+import type { Article, ChatMessage, ChatPeer, ChatThread, HomeFeedPlan, ParticipantPlanRef, PlanId, PlanTag, Screen } from "@/app/types";
 import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN, PLAN_DARK } from "@/app/data/constants";
 import { formatNearestDate, getNextOccurrence, hasUpcomingOccurrence } from "@/app/data/calendar";
 import { experts, expertProfile, profileFollowers, profileFollowing, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
@@ -123,8 +123,15 @@ const SUPPORT_PEER: ChatPeer = {
 
 const SUPPORT_MESSAGE = "Это сервисный чат WellWellWell. Будем присылать сюда важные уведомления и новости приложения. Если у тебя есть обратная связь, предложения или вопросы, пиши нам напрямую или в наше сообщество.";
 const MODERATOR_IDS = ["353298824"];
-const PINNED_PLAN_IDS = new Set(["5b1baeba-5262-4b38-b5c9-fd9b854e1e61"]);
-const RUNNING_TAG_AUTHOR_IDS = new Set(["103230833"]);
+const PINNED_PLAN_IDS = [
+  "5b1baeba-5262-4b38-b5c9-fd9b854e1e61",
+  "00b3ff67-b7bd-45f9-9ccf-0d25f08a7ab2",
+];
+const PINNED_PLAN_ID_SET = new Set(PINNED_PLAN_IDS);
+const PLAN_TAG_OVERRIDES: Record<string, PlanTag> = {
+  "5b1baeba-5262-4b38-b5c9-fd9b854e1e61": "running",
+  "00b3ff67-b7bd-45f9-9ccf-0d25f08a7ab2": "wakesurf",
+};
 const DEMO_PROFILE_IDS = new Set(experts.filter((profile) => profile.isDemo).map((profile) => profile.id));
 const isNumericUserId = (id?: string | null) => Boolean(id && /^\d+$/.test(id));
 const isDemoProfileId = (id?: string | null) => Boolean(id && DEMO_PROFILE_IDS.has(id));
@@ -151,7 +158,7 @@ const normalizeProfile = (profile: ExpertProfile): ExpertProfile => {
 
 const sanitizePlan = (plan: HomeFeedPlan): HomeFeedPlan => ({
   ...plan,
-  tag: RUNNING_TAG_AUTHOR_IDS.has(plan.author.id) && plan.tag === "other" ? "running" : plan.tag,
+  tag: PLAN_TAG_OVERRIDES[planKey(plan.id)] ?? plan.tag,
   duration: plan.duration?.trim() === "План" ? undefined : plan.duration,
   schedule: normalizeSchedule(plan.schedule),
   coverUrl: sanitizeImageUrl(plan.coverUrl) ?? undefined,
@@ -750,9 +757,9 @@ export default function App() {
 
     const plans = [...clubPlans, ...communityPlans, ...realPlans];
     const pinnedPlans = plans
-      .filter((plan) => PINNED_PLAN_IDS.has(planKey(plan.id)))
-      .sort(sortByOccurrence);
-    const unpinnedPlans = plans.filter((plan) => !PINNED_PLAN_IDS.has(planKey(plan.id)));
+      .filter((plan) => PINNED_PLAN_ID_SET.has(planKey(plan.id)))
+      .sort((a, b) => PINNED_PLAN_IDS.indexOf(planKey(a.id)) - PINNED_PLAN_IDS.indexOf(planKey(b.id)));
+    const unpinnedPlans = plans.filter((plan) => !PINNED_PLAN_ID_SET.has(planKey(plan.id)));
     return [...pinnedPlans, ...unpinnedPlans];
   }, [catalogPublicPlans, deletedPlanIdSet, demoPlansWithParticipants, justCreatedPublicPlans, moderatorHiddenPlanIdSet]);
   const participantChatPeers: ChatPeer[] = useMemo(() => EVENT_PARTICIPANTS.map((participant) => ({
@@ -2208,7 +2215,7 @@ export default function App() {
         return (
           <HomeScreen
             plans={publicPlans}
-            pinnedPlanIds={PINNED_PLAN_IDS}
+            pinnedPlanIds={PINNED_PLAN_ID_SET}
             onNavigate={navigate}
             onPlanOpen={(id) => openPlanEvent(id, "home")}
             onAuthorOpen={openExpertProfile}

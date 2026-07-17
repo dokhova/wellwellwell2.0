@@ -12,7 +12,7 @@ export interface Article {
   avatarBrand?: boolean;
 }
 
-export const PLAN_TAGS = ["running", "cycling", "yoga", "fitness", "recovery", "other"] as const;
+export const PLAN_TAGS = ["running", "cycling", "yoga", "fitness", "recovery", "wakesurf", "other"] as const;
 export type PlanTag = typeof PLAN_TAGS[number];
 export type TagFilter = PlanTag | "all";
 

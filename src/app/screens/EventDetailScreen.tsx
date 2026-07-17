@@ -399,7 +399,9 @@ export function EventDetailScreen({
   const organizerAction = onProfile ?? (() => setSheet("profile"));
   const needsDescriptionClamp = description.length > 260;
   const formatLabel = format === "online" ? "Онлайн" : "Офлайн";
-  const tagLabel = tag ? PLAN_TAG_LABELS[normalizePlanTag(tag)] : "Активность";
+  const tagLabel = tag
+    ? PLAN_TAG_LABELS[normalizePlanTag(tag)] ?? PLAN_TAG_LABELS.other
+    : "Активность";
   const resolvedParticipantCount = participantCount ?? meta.participants ?? participants.length;
   const participantCountLabel = participantsLabel ?? `${resolvedParticipantCount} чел.`;
   const overflowLabel = meta.plusN.startsWith("+") ? meta.plusN : "";

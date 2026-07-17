@@ -35,6 +35,7 @@ export const PLAN_TAG_LABELS: Record<PlanTag, string> = {
   yoga: "Йога",
   fitness: "Фитнес",
   recovery: "Восстановление",
+  wakesurf: "Вейк-сёрф",
   other: "Другое",
 };
 
