@@ -371,63 +371,76 @@ export function ChatScreen({
             return (
               <div key={message.id} className={`flex items-end gap-2 ${mine ? "justify-end" : "justify-start"}`}>
                 {!mine && <PeerAvatar peer={peer} size={28} />}
-                <div
-                  className="max-w-[78%] rounded-2xl px-3.5 py-2.5"
-                  style={mine ? { backgroundColor: GREEN, color: "#fff" } : { backgroundColor: "var(--card)", color: "var(--foreground)" }}
-                >
-                  {message.kind === "invite" ? (
-                    <div className="min-w-[210px]">
-                      <p className="text-[14px] font-semibold leading-5">Приглашение</p>
-                      <p className="mt-1 text-[14px] leading-5">{message.text}</p>
-                      {message.inviteStatus ? (
-                        <p className={`mt-2 text-[12px] font-semibold ${mine ? "text-white/80" : "text-muted-foreground"}`}>
-                          {message.inviteStatus === "accepted" ? "Приглашение принято" : "Отклонено"}
-                        </p>
-                      ) : !mine ? (
-                        <div className="mt-3 flex gap-2">
-                          <button onClick={() => respondToInvite(message, true)} className="rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold" style={{ color: GREEN }}>Принять</button>
-                          <button onClick={() => respondToInvite(message, false)} className="rounded-full px-3 py-1.5 text-[12px] font-semibold" style={{ backgroundColor: "var(--muted)", color: "var(--foreground)" }}>Отказаться</button>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <>
+                {message.id === "support-welcome" ? (
+                  <div className="flex max-w-[78%] flex-col">
+                    <div
+                      className="rounded-2xl px-3.5 py-2.5"
+                      style={mine ? { backgroundColor: GREEN, color: "#fff" } : { backgroundColor: "var(--card)", color: "var(--foreground)" }}
+                    >
                       <p className="text-[14px] leading-5">{message.text}</p>
-                      {message.id === "support-welcome" && (
-                        <div className="mt-3 flex flex-col gap-2">
-                          <button
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              track("support_contact_clicked", { target: "support" });
-                              openExternalUrl("https://t.me/wellwellwell_support");
-                            }}
-                            className="w-full rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold"
-                            style={{ color: GREEN }}
-                          >
-                            Написать нам
-                          </button>
-                          <button
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              track("support_contact_clicked", { target: "community" });
-                              openExternalUrl("https://t.me/+qlIKItlCsmUxYzUy");
-                            }}
-                            className="w-full rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold"
-                            style={{ color: GREEN }}
-                          >
-                            Наше сообщество
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${mine ? "text-white/70" : "text-muted-foreground"}`}>
-                    <span>{formatChatTime(message.createdAt)}</span>
-                    {mine && isRealPeer && message.status === "sent" && (
-                      message.readAt ? <CheckCheck size={12} strokeWidth={2.2} /> : <Check size={12} strokeWidth={2.2} />
-                    )}
+                      <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${mine ? "text-white/70" : "text-muted-foreground"}`}>
+                        <span>{formatChatTime(message.createdAt)}</span>
+                        {mine && isRealPeer && message.status === "sent" && (
+                          message.readAt ? <CheckCheck size={12} strokeWidth={2.2} /> : <Check size={12} strokeWidth={2.2} />
+                        )}
+                      </div>
+                    </div>
+                    <div className="mt-2 flex flex-col gap-2">
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          track("support_contact_clicked", { target: "support" });
+                          openExternalUrl("https://t.me/wellwellwell_support");
+                        }}
+                        className="h-11 w-full rounded-[14px] px-3 text-[14px] font-semibold active:opacity-90"
+                        style={{ backgroundColor: "var(--card)", color: GREEN }}
+                      >
+                        Написать нам
+                      </button>
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          track("support_contact_clicked", { target: "community" });
+                          openExternalUrl("https://t.me/+qlIKItlCsmUxYzUy");
+                        }}
+                        className="h-11 w-full rounded-[14px] px-3 text-[14px] font-semibold active:opacity-90"
+                        style={{ backgroundColor: "var(--card)", color: GREEN }}
+                      >
+                        Наше сообщество
+                      </button>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div
+                    className="max-w-[78%] rounded-2xl px-3.5 py-2.5"
+                    style={mine ? { backgroundColor: GREEN, color: "#fff" } : { backgroundColor: "var(--card)", color: "var(--foreground)" }}
+                  >
+                    {message.kind === "invite" ? (
+                      <div className="min-w-[210px]">
+                        <p className="text-[14px] font-semibold leading-5">Приглашение</p>
+                        <p className="mt-1 text-[14px] leading-5">{message.text}</p>
+                        {message.inviteStatus ? (
+                          <p className={`mt-2 text-[12px] font-semibold ${mine ? "text-white/80" : "text-muted-foreground"}`}>
+                            {message.inviteStatus === "accepted" ? "Приглашение принято" : "Отклонено"}
+                          </p>
+                        ) : !mine ? (
+                          <div className="mt-3 flex gap-2">
+                            <button onClick={() => respondToInvite(message, true)} className="rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold" style={{ color: GREEN }}>Принять</button>
+                            <button onClick={() => respondToInvite(message, false)} className="rounded-full px-3 py-1.5 text-[12px] font-semibold" style={{ backgroundColor: "var(--muted)", color: "var(--foreground)" }}>Отказаться</button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="text-[14px] leading-5">{message.text}</p>
+                    )}
+                    <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${mine ? "text-white/70" : "text-muted-foreground"}`}>
+                      <span>{formatChatTime(message.createdAt)}</span>
+                      {mine && isRealPeer && message.status === "sent" && (
+                        message.readAt ? <CheckCheck size={12} strokeWidth={2.2} /> : <Check size={12} strokeWidth={2.2} />
+                      )}
+                    </div>
+                  </div>
+                )}
                 {mine && <PeerAvatar peer={myPeer} size={28} />}
               </div>
             );
