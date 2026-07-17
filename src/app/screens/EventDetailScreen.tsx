@@ -183,7 +183,10 @@ function CommentsBlock({
   }, {});
 
   useEffect(() => {
-    if (focusRequestKey > 0) window.requestAnimationFrame(() => inputRef.current?.focus());
+    if (focusRequestKey > 0) window.requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true });
+      inputRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
   }, [focusRequestKey]);
 
   const updateMentionTrigger = (value: string, cursor: number | null) => {
@@ -199,7 +202,8 @@ function CommentsBlock({
     onMentionSelected({ id: candidate.id, name: candidate.name });
     setMentionTrigger(null);
     window.requestAnimationFrame(() => {
-      inputRef.current?.focus();
+      inputRef.current?.focus({ preventScroll: true });
+      inputRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
       inputRef.current?.setSelectionRange(nextCursor, nextCursor);
     });
   };
@@ -915,7 +919,7 @@ export function EventDetailScreen({
   ];
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden" style={{ background: PLAN_DARK.bg, color: PLAN_DARK.text }}>
+    <div className="relative flex h-full flex-col overflow-x-hidden overflow-y-hidden" style={{ background: PLAN_DARK.bg, color: PLAN_DARK.text }}>
       {coverSrc && <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden"><img src={coverSrc} alt="" className="h-full w-full object-cover opacity-70" style={{ filter: "blur(60px)", transform: "scale(1.3)" }} /><div className="absolute inset-0 bg-black/60" /></div>}
       {toast && (
         <div
