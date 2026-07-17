@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Filter, MoreVertical, Plus, Search, Share2, Trash2, Users } from "lucide-react";
+import { Copy, Filter, MoreVertical, Pin, Plus, Search, Share2, Trash2, Users } from "lucide-react";
 import type { ChatPeer, HomeFeedPlan, PlanId, Screen, TagFilter } from "@/app/types";
 import { CATEGORY_CHIPS, normalizePlanTag, PLAN_TAG_LABELS } from "@/app/data/plans";
 import { GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES } from "@/app/data/constants";
@@ -66,6 +66,7 @@ export const FeedEventCard = memo(function FeedEventCard({
   onAuthor,
   onShare,
   onAuthorMenu,
+  pinned = false,
   canDelete = false,
   onDelete,
 }: {
@@ -74,6 +75,7 @@ export const FeedEventCard = memo(function FeedEventCard({
   onAuthor: (plan: HomeFeedPlan) => void;
   onShare: (plan: HomeFeedPlan) => void;
   onAuthorMenu: (plan: HomeFeedPlan) => void;
+  pinned?: boolean;
   canDelete?: boolean;
   onDelete?: (plan: HomeFeedPlan) => void;
 }) {
@@ -115,6 +117,11 @@ export const FeedEventCard = memo(function FeedEventCard({
 
         <div className="absolute left-5 right-5 top-5 flex items-start justify-between gap-3">
           <div className="flex flex-wrap gap-2">
+            {pinned && (
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/45" aria-label="Закреплённый план">
+                <Pin size={15} strokeWidth={2} color="#fff" />
+              </span>
+            )}
             <span className="inline-flex items-center rounded-full bg-black/45 px-3 py-1.5 text-[13px] font-medium leading-4 text-white">
               {PLAN_TAG_LABELS[tag]}
             </span>
@@ -193,6 +200,7 @@ export function HomeScreen({
   initialScrollTop = 0,
   onScrollTopChange,
   plans,
+  pinnedPlanIds,
 }: {
   onNavigate: (s: Screen, from?: Screen) => void;
   onPlanOpen: (id: PlanId, from?: Screen) => void;
@@ -204,6 +212,7 @@ export function HomeScreen({
   initialScrollTop?: number;
   onScrollTopChange?: (scrollTop: number) => void;
   plans: HomeFeedPlan[];
+  pinnedPlanIds: ReadonlySet<string>;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const initialScrollTopRef = useRef(initialScrollTop);
@@ -306,6 +315,7 @@ export function HomeScreen({
               onAuthor={openAuthor}
               onShare={openShare}
               onAuthorMenu={openAuthorMenu}
+              pinned={pinnedPlanIds.has(planKey(plan.id))}
             />
           ))
         ) : (

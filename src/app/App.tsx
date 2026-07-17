@@ -123,6 +123,7 @@ const SUPPORT_PEER: ChatPeer = {
 
 const SUPPORT_MESSAGE = "Это сервисный чат WellWellWell. Будем присылать сюда важные уведомления и новости приложения. Если у тебя есть обратная связь, предложения или вопросы, пиши нам напрямую или в наше сообщество.";
 const MODERATOR_IDS = ["353298824"];
+const PINNED_PLAN_IDS = new Set(["5b1baeba-5262-4b38-b5c9-fd9b854e1e61"]);
 const DEMO_PROFILE_IDS = new Set(experts.filter((profile) => profile.isDemo).map((profile) => profile.id));
 const isNumericUserId = (id?: string | null) => Boolean(id && /^\d+$/.test(id));
 const isDemoProfileId = (id?: string | null) => Boolean(id && DEMO_PROFILE_IDS.has(id));
@@ -745,7 +746,12 @@ export default function App() {
         return getParticipantsCount(b) - getParticipantsCount(a);
       });
 
-    return [...clubPlans, ...communityPlans, ...realPlans];
+    const plans = [...clubPlans, ...communityPlans, ...realPlans];
+    const pinnedPlans = plans
+      .filter((plan) => PINNED_PLAN_IDS.has(planKey(plan.id)))
+      .sort(sortByOccurrence);
+    const unpinnedPlans = plans.filter((plan) => !PINNED_PLAN_IDS.has(planKey(plan.id)));
+    return [...pinnedPlans, ...unpinnedPlans];
   }, [catalogPublicPlans, deletedPlanIdSet, demoPlansWithParticipants, justCreatedPublicPlans, moderatorHiddenPlanIdSet]);
   const participantChatPeers: ChatPeer[] = useMemo(() => EVENT_PARTICIPANTS.map((participant) => ({
     id: participant.id,
@@ -2164,6 +2170,7 @@ export default function App() {
         return (
           <HomeScreen
             plans={publicPlans}
+            pinnedPlanIds={PINNED_PLAN_IDS}
             onNavigate={navigate}
             onPlanOpen={(id) => openPlanEvent(id, "home")}
             onAuthorOpen={openExpertProfile}
