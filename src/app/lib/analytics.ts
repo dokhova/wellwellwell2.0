@@ -14,12 +14,14 @@ type AnalyticsEventProps = {
   plan_leave: { plan_id: string; source: PlanViewSource };
   plan_link_copied: { plan_id: string; screen: "feed" | "plan" };
   plan_invite_clicked: { plan_id: string; method: "native" | "fallback" };
+  plan_report_clicked: { plan_id: string; screen: "feed" };
   plan_save_clicked: { plan_id: string };
   plan_check: { plan_id: string };
   comment_sent: { plan_id: string; mentions_count: number; has_photo: boolean; is_reply: boolean };
   comment_like_toggled: { plan_id: string; comment_id: string; liked: boolean };
   follow: { target_id: string; target_is_demo: boolean };
   message_sent: Record<string, never>;
+  support_contact_clicked: { target: "support" | "community" };
   plan_created: { plan_id: string };
   plan_description_format_applied: { format: "bold" | "italic" | "link" };
 };

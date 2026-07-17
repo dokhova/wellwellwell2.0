@@ -4,7 +4,7 @@ import type { ChatPeer, HomeFeedPlan, PlanId, Screen, TagFilter } from "@/app/ty
 import { CATEGORY_CHIPS, normalizePlanTag, PLAN_TAG_LABELS } from "@/app/data/plans";
 import { GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES } from "@/app/data/constants";
 import { HomeSheet } from "@/app/components/HomeSheet";
-import { buildPlanStartAppUrl } from "@/app/lib/telegram";
+import { buildPlanStartAppUrl, openExternalUrl } from "@/app/lib/telegram";
 import { track } from "@/app/lib/analytics";
 import { formatWeekdayRanges } from "@/app/lib/weekdayRanges";
 
@@ -370,6 +370,16 @@ export function HomeScreen({
             {canHidePlan?.(activePlan) && (
               <button onClick={() => { setSheet(null); onHidePlan?.(activePlan); }} className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900">Скрыть из ленты</button>
             )}
+            <button
+              onClick={() => {
+                setSheet(null);
+                track("plan_report_clicked", { plan_id: planKey(activePlan.id), screen: "feed" });
+                openExternalUrl("https://t.me/wellwellwell_support");
+              }}
+              className="w-full rounded-2xl bg-gray-100 px-4 py-3 text-left text-[15px] font-medium text-gray-900"
+            >
+              Пожаловаться
+            </button>
           </div>
         </HomeSheet>
       )}

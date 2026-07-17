@@ -7,6 +7,7 @@ import { searchProfiles } from "@/app/lib/api/profiles";
 import { sanitizeImageUrl } from "@/app/lib/api/storage";
 import { fetchPlan, upsertPlanParticipant } from "@/app/lib/api/plans";
 import { track } from "@/app/lib/analytics";
+import { openExternalUrl } from "@/app/lib/telegram";
 import type { HomeFeedPlan } from "@/app/types";
 
 const QUICK_MESSAGES = [
@@ -390,7 +391,35 @@ export function ChatScreen({
                       ) : null}
                     </div>
                   ) : (
-                    <p className="text-[14px] leading-5">{message.text}</p>
+                    <>
+                      <p className="text-[14px] leading-5">{message.text}</p>
+                      {message.id === "support-welcome" && (
+                        <div className="mt-3 flex flex-col gap-2">
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              track("support_contact_clicked", { target: "support" });
+                              openExternalUrl("https://t.me/wellwellwell_support");
+                            }}
+                            className="w-full rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold"
+                            style={{ color: GREEN }}
+                          >
+                            Написать нам
+                          </button>
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              track("support_contact_clicked", { target: "community" });
+                              openExternalUrl("https://t.me/+qlIKItlCsmUxYzUy");
+                            }}
+                            className="w-full rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold"
+                            style={{ color: GREEN }}
+                          >
+                            Наше сообщество
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                   <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${mine ? "text-white/70" : "text-muted-foreground"}`}>
                     <span>{formatChatTime(message.createdAt)}</span>
