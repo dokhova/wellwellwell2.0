@@ -12,7 +12,7 @@ import { getNearestWeekdayDate, getRepeatUntil, normalizeSchedule, toIsoDate, to
 import { formatWeekdayRanges } from "@/app/lib/weekdayRanges";
 
 type CreateStep = "welcome" | "name" | "description" | "image" | "schedule" | "finalOptions" | "success";
-type PlanDraft = { title: string; description: string; coverImage: string | null; schedule: Schedule };
+type PlanDraft = { title: string; description: string; coverImage: string | null; photos: string[]; schedule: Schedule };
 type Person = { id: string; name: string; avatarUrl: string | null };
 const TITLE_LIMIT = 80;
 const DESCRIPTION_LIMIT = 3000;
@@ -79,7 +79,7 @@ const defaultSchedule = (): Schedule => ({
   repeat: { type: "none" },
 });
 
-const defaultPlan = (): PlanDraft => ({ title: "", description: "", coverImage: null, schedule: defaultSchedule() });
+const defaultPlan = (): PlanDraft => ({ title: "", description: "", coverImage: null, photos: [], schedule: defaultSchedule() });
 
 export const finalizeSchedule = (schedule: Schedule): Schedule => {
   const mode = schedule.timeMode ?? schedule.mode ?? "partOfDay";
@@ -127,6 +127,7 @@ export function CreateScreen({
     title: editingPlan.title.slice(0, TITLE_LIMIT),
     description: editingPlan.description.slice(0, DESCRIPTION_LIMIT),
     coverImage: editingPlan.coverUrl ?? null,
+    photos: editingPlan.photos ?? [],
     schedule: normalizeSchedule(editingPlan.schedule),
   } : defaultPlan());
   const [titleError, setTitleError] = useState("");
@@ -140,6 +141,8 @@ export function CreateScreen({
   const [participantQuery, setParticipantQuery] = useState("");
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [galleryUploadProgress, setGalleryUploadProgress] = useState<{ current: number; total: number } | null>(null);
+  const [galleryToast, setGalleryToast] = useState("");
   const [fieldFocused, setFieldFocused] = useState(false);
   const [locationMode, setLocationMode] = useState<"online" | "offline">(editingPlan?.format ?? "online");
   const [locationAddress, setLocationAddress] = useState(editingPlan?.address ?? "");
@@ -217,6 +220,38 @@ export function CreateScreen({
     setTitleError("");
   };
   const updateDescription = (value: string) => updatePlan({ description: value.slice(0, DESCRIPTION_LIMIT) });
+  const uploadGalleryPhotos = async (files: File[]) => {
+    const selectedFiles = files.slice(0, Math.max(0, 10 - draft.photos.length));
+    if (selectedFiles.length === 0) return;
+
+    setUploadProgress(0);
+    setGalleryUploadProgress({ current: 1, total: selectedFiles.length });
+    let failedUploads = 0;
+    try {
+      for (let index = 0; index < selectedFiles.length; index += 1) {
+        setGalleryUploadProgress({ current: index + 1, total: selectedFiles.length });
+        try {
+          const publicUrl = await uploadPhoto(selectedFiles[index], { onProgress: setUploadProgress });
+          if (publicUrl) {
+            setDraft((item) => ({ ...item, photos: [...item.photos, publicUrl] }));
+          } else {
+            failedUploads += 1;
+          }
+        } catch (error) {
+          console.error("Gallery photo upload failed", error);
+          failedUploads += 1;
+        }
+      }
+    } finally {
+      setUploadProgress(null);
+      setGalleryUploadProgress(null);
+    }
+
+    if (failedUploads > 0) {
+      setGalleryToast("Не все фото загрузились");
+      window.setTimeout(() => setGalleryToast(""), 2600);
+    }
+  };
 
   const getRepeatEnd = (schedule: Schedule) => {
     if (schedule.repeat?.type === "none") return schedule.start;
@@ -311,6 +346,7 @@ export function CreateScreen({
         description: draft.description.trim(),
         habit: { ...(editingPlan.habit ?? { durationMin: 15 }), title: draft.title.trim() },
         coverUrl: draft.coverImage ?? undefined,
+        photos: draft.photos.length > 0 ? draft.photos : undefined,
         schedule: finalizedSchedule,
         maxParticipants: parsedMaxParticipants,
         timeDate: getTimeDate(finalizedSchedule),
@@ -342,6 +378,7 @@ export function CreateScreen({
       description: draft.description.trim(),
       habit: { title: draft.title.trim(), durationMin: 15 },
       coverUrl: draft.coverImage ?? undefined,
+      photos: draft.photos.length > 0 ? draft.photos : undefined,
       gradient: PLAN_TAG_GRADIENTS.other,
       schedule: finalizedSchedule,
       participants: authorParticipants,
@@ -642,7 +679,64 @@ export function CreateScreen({
       case "description":
         return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Описание</h2><textarea value={draft.description} maxLength={DESCRIPTION_LIMIT} onChange={(e) => updateDescription(e.target.value)} onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }} onBlur={() => setFieldFocused(false)} placeholder="Что будешь делать, и с какой целью" rows={5} className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none" />{descriptionLeft < DESCRIPTION_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{descriptionLeft}</p>}</div>;
       case "image":
-        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Обложка</h2><label className={`relative flex min-h-[220px] flex-col items-center justify-center overflow-hidden rounded-2xl bg-card px-6 text-center ${uploadProgress === null ? "active:opacity-90" : "cursor-not-allowed"}`}>{draft.coverImage ? <img loading="lazy" decoding="async" src={draft.coverImage} alt="" className="mb-4 h-28 w-28 rounded-xl object-cover" /> : <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary"><ImageIcon size={28} color={GREEN} /></div>}<p className="text-[16px] font-semibold">Добавь обложку</p><span className="mt-4 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Загрузить</span><input type="file" accept="image/*" disabled={uploadProgress !== null} className="hidden" onChange={async (event) => { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; setUploadProgress(0); try { const publicUrl = await uploadPhoto(file, { onProgress: setUploadProgress }); if (publicUrl) updatePlan({ coverImage: publicUrl }); } finally { setUploadProgress(null); } }} />{uploadProgress !== null && <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60"><span className="text-[22px] font-semibold text-white">{uploadProgress}%</span></div>}</label></div>;
+        return (
+          <div className="pt-6">
+            <h2 className="mb-5 text-[28px] font-bold">Обложка</h2>
+            <label className={`relative flex min-h-[220px] flex-col items-center justify-center overflow-hidden rounded-2xl bg-card px-6 text-center ${uploadProgress === null ? "active:opacity-90" : "cursor-not-allowed"}`}>
+              {draft.coverImage ? <img loading="lazy" decoding="async" src={draft.coverImage} alt="" className="mb-4 h-28 w-28 rounded-xl object-cover" /> : <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary"><ImageIcon size={28} color={GREEN} /></div>}
+              <p className="text-[16px] font-semibold">Добавь обложку</p>
+              <span className="mt-4 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Загрузить</span>
+              <input type="file" accept="image/*" disabled={uploadProgress !== null} className="hidden" onChange={async (event) => { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; setUploadProgress(0); try { const publicUrl = await uploadPhoto(file, { onProgress: setUploadProgress }); if (publicUrl) updatePlan({ coverImage: publicUrl }); } finally { setUploadProgress(null); } }} />
+              {uploadProgress !== null && !galleryUploadProgress && <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60"><span className="text-[22px] font-semibold text-white">{uploadProgress}%</span></div>}
+            </label>
+
+            <section className="relative mt-7">
+              <h3 className="text-[16px] font-semibold">Фото для галереи</h3>
+              <p className="mt-1 text-[14px] text-muted-foreground">Покажи, как проходит активность</p>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {draft.photos.map((photo, index) => (
+                  <div key={`${photo}-${index}`} className="relative aspect-square overflow-hidden rounded-xl">
+                    <img loading="lazy" decoding="async" src={photo} alt="" className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      disabled={uploadProgress !== null}
+                      aria-label={`Удалить фото ${index + 1}`}
+                      onClick={() => setDraft((item) => ({ ...item, photos: item.photos.filter((_, photoIndex) => photoIndex !== index) }))}
+                      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white disabled:opacity-50"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+                {draft.photos.length < 10 && (
+                  <label className={`flex aspect-square items-center justify-center rounded-xl border-2 border-dashed border-border bg-card ${uploadProgress === null ? "active:opacity-80" : "cursor-not-allowed opacity-50"}`}>
+                    <Plus size={28} color={GREEN} />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      disabled={uploadProgress !== null}
+                      className="hidden"
+                      onChange={(event) => {
+                        const files = Array.from(event.target.files ?? []);
+                        event.target.value = "";
+                        void uploadGalleryPhotos(files);
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+              {uploadProgress !== null && galleryUploadProgress && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60">
+                  <span className="text-center text-[18px] font-semibold text-white">
+                    {galleryUploadProgress.current} из {galleryUploadProgress.total}
+                    <span className="mt-1 block text-[14px]">{uploadProgress}%</span>
+                  </span>
+                </div>
+              )}
+            </section>
+          </div>
+        );
       case "schedule":
         return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Регулярность</h2>{renderSchedule()}</div>;
       case "finalOptions":
@@ -677,6 +771,11 @@ export function CreateScreen({
         {renderStep()}
       </div>
       {footer && <div className="flex-shrink-0 border-t border-border bg-card px-4 pb-4 pt-3">{footer}</div>}
+      {galleryToast && (
+        <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-foreground px-4 py-3 text-[14px] font-medium text-background shadow-lg">
+          {galleryToast}
+        </div>
+      )}
       {participantsOpen && (
         <HomeSheet title="Участники" onClose={() => setParticipantsOpen(false)} panelClassName="max-h-[85vh] flex flex-col" bodyClassName="flex min-h-0 flex-col">
           <div className="mb-3 flex h-11 flex-shrink-0 items-center gap-2 rounded-xl bg-gray-100 px-3">
