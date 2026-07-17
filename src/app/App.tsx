@@ -124,6 +124,7 @@ const SUPPORT_PEER: ChatPeer = {
 const SUPPORT_MESSAGE = "Это сервисный чат WellWellWell. Будем присылать сюда важные уведомления и новости приложения. Если у тебя есть обратная связь, предложения или вопросы, пиши нам напрямую или в наше сообщество.";
 const MODERATOR_IDS = ["353298824"];
 const PINNED_PLAN_IDS = new Set(["5b1baeba-5262-4b38-b5c9-fd9b854e1e61"]);
+const RUNNING_TAG_AUTHOR_IDS = new Set(["103230833"]);
 const DEMO_PROFILE_IDS = new Set(experts.filter((profile) => profile.isDemo).map((profile) => profile.id));
 const isNumericUserId = (id?: string | null) => Boolean(id && /^\d+$/.test(id));
 const isDemoProfileId = (id?: string | null) => Boolean(id && DEMO_PROFILE_IDS.has(id));
@@ -150,6 +151,7 @@ const normalizeProfile = (profile: ExpertProfile): ExpertProfile => {
 
 const sanitizePlan = (plan: HomeFeedPlan): HomeFeedPlan => ({
   ...plan,
+  tag: RUNNING_TAG_AUTHOR_IDS.has(plan.author.id) && plan.tag === "other" ? "running" : plan.tag,
   duration: plan.duration?.trim() === "План" ? undefined : plan.duration,
   schedule: normalizeSchedule(plan.schedule),
   coverUrl: sanitizeImageUrl(plan.coverUrl) ?? undefined,
@@ -1020,11 +1022,47 @@ export default function App() {
           id: planKey(plan.id),
           authorId: plan.author.id,
         })));
-        if (!cancelled) {
-          setJoinedCounts((items) => ({
-            ...items,
-            ...counts,
+        if (cancelled) return;
+        setJoinedCounts((items) => ({
+          ...items,
+          ...counts,
+        }));
+        try {
+          const participantPlans = realFeedPlans.slice(0, 20);
+          const rowsByPlanId = await fetchParticipantsForPlans(participantPlans.map((plan) => planKey(plan.id)));
+          if (cancelled) return;
+          const planById = new Map(participantPlans.map((plan) => [planKey(plan.id), plan]));
+          const joinedIdsByPlan = Object.fromEntries(participantPlans.map((plan) => {
+            const id = planKey(plan.id);
+            const joinedIds = Array.from(new Set((rowsByPlanId[id] ?? [])
+              .filter((row) => row.status === "joined")
+              .map((row) => row.user_id)))
+              .filter((userId) => userId !== plan.author.id && !isDemoProfileId(userId));
+            return [id, joinedIds];
           }));
+          const participantIds = Array.from(new Set(Object.values(joinedIdsByPlan).flat()));
+          const profiles = await fetchProfilesByIds(participantIds);
+          if (cancelled) return;
+          const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+          setJoinedParticipantPeers((items) => {
+            const next = { ...items };
+            planById.forEach((_plan, id) => {
+              const loadedPeers = (joinedIdsByPlan[id] ?? []).map((userId) => {
+                const profile = profileById.get(userId);
+                return {
+                  id: userId,
+                  name: profile?.name ?? "Участник",
+                  avatarUrl: sanitizeImageUrl(profile?.photoUrl ?? null),
+                  realUser: true,
+                } satisfies ChatPeer;
+              });
+              next[id] = Array.from(new Map([...(items[id] ?? []), ...loadedPeers]
+                .map((peer) => [peer.id, peer])).values());
+            });
+            return next;
+          });
+        } catch (error) {
+          console.error("Supabase feed plan participants fetch failed", error);
         }
       } catch (error) {
         console.error("Supabase public plans fetch failed", error);
