@@ -17,6 +17,7 @@ import { deleteCommentsByAuthor } from "@/app/lib/api/comments";
 import { deleteUserPlanProgress, fetchPlanProgressKeys, upsertPlanProgress } from "@/app/lib/api/planProgress";
 import { applyTelegramChrome, buildPlanStartAppUrl, getTelegramAuthDate, getTelegramStartParam, getTelegramUser, initTelegram, parsePlanStartParam } from "@/app/lib/telegram";
 import { checkBackendHealth } from "@/app/lib/health";
+import { supabase } from "@/app/lib/supabase";
 import { identifyUser, track, type PlanViewSource } from "@/app/lib/analytics";
 import { HomeScreen } from "@/app/screens/HomeScreen";
 import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
@@ -48,6 +49,21 @@ const writeJson = (key: string, value: unknown) => {
   } catch (error) {
     console.error(`localStorage write failed for ${key}`, error);
   }
+};
+
+const fetchWithRetry = async <T,>(operation: () => Promise<T>, attempts = 3, baseDelayMs = 500): Promise<T> => {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts - 1) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, baseDelayMs * (2 ** attempt)));
+      }
+    }
+  }
+  throw lastError;
 };
 
 const isRemovedLegacyDemoRecord = (value: unknown) => {
@@ -501,6 +517,7 @@ export default function App() {
   const [dbFollowers, setDbFollowers] = useState<ExpertConnection[]>([]);
   const [profileFollowCounts, setProfileFollowCounts] = useState<Record<string, { followers: number; following: number }>>({});
   const [connectionSetsByUser, setConnectionSetsByUser] = useState<Record<string, ProfileConnectionSets>>({});
+  const [participantSyncCompletedForUser, setParticipantSyncCompletedForUser] = useState("");
   const [chatThreads, setChatThreads] = useState<ChatThread[]>(() => {
     const ids = readJson<string[]>(chatThreadIdsStorageKey, []);
     const storedThreads = ids
@@ -522,6 +539,8 @@ export default function App() {
   const planDetailSessionRef = useRef<PlanDetailSession | null>(null);
   const allPlanDetailsRef = useRef<HomeFeedPlan[]>([]);
   const myParticipantIdsRef = useRef<ParticipantPlanRef[]>([]);
+  const hydratedJoinedPlansRef = useRef<HomeFeedPlan[]>([]);
+  const participantSyncCompletedForUserRef = useRef("");
   const currentUserIdRef = useRef("");
   const lastVisibilityRefreshAtRef = useRef(0);
   const screenRef = useRef<Screen>("home");
@@ -669,6 +688,12 @@ export default function App() {
     [createdPlansWithCounts, deletedPlanIdSet, demoPlansWithParticipants, moderatorHiddenPlanIdSet, remotePlansWithCounts],
   );
   const participantKey = (ref: ParticipantPlanRef) => `${ref.kind}:${ref.id}`;
+  const updateMyParticipantIdsFromUserAction = (update: (items: ParticipantPlanRef[]) => ParticipantPlanRef[]) => {
+    const next = update(myParticipantIdsRef.current);
+    myParticipantIdsRef.current = next;
+    setMyParticipantIds(next);
+    writeJson(myPlansStorageKey, next);
+  };
   allPlanDetailsRef.current = allPlanDetails;
   myParticipantIdsRef.current = myParticipantIds;
   currentUserIdRef.current = currentUserId;
@@ -1018,10 +1043,11 @@ export default function App() {
     let cancelled = false;
     const loadRemotePlans = async () => {
       try {
-        const plans = await fetchPublicPlans();
+        const plans = await fetchWithRetry(fetchPublicPlans);
         if (cancelled) return;
         const publicRemotePlans = plans.map(sanitizePlan);
-        setRemotePublicPlans(publicRemotePlans);
+        setRemotePublicPlans([...publicRemotePlans, ...hydratedJoinedPlansRef.current]
+          .filter((plan, index, items) => items.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index));
         const realFeedPlans = [...publicRemotePlans, ...createdPlans, ...homeFeedPlans]
           .filter((plan) => !isDemoCommunityPlanId(plan.id) && !isDemoProfileId(plan.author.id))
           .filter((plan, index, items) => items.findIndex((item) => planKey(item.id) === planKey(plan.id)) === index);
@@ -1474,9 +1500,11 @@ export default function App() {
   }, [editableProfile, profileStorageKey]);
 
   useEffect(() => {
-    writeJson(myPlansStorageKey, myParticipantIds);
+    if (participantSyncCompletedForUserRef.current === currentUserId) {
+      writeJson(myPlansStorageKey, myParticipantIds);
+    }
     setEditableProfile((profile) => ({ ...profile, plansCount: myParticipantIds.length }));
-  }, [myParticipantIds, myPlansStorageKey]);
+  }, [currentUserId, myParticipantIds, myPlansStorageKey, participantSyncCompletedForUser]);
 
   useEffect(() => {
     writeJson(savedPlanIdsStorageKey, savedPlanIds);
@@ -1522,34 +1550,64 @@ export default function App() {
   useEffect(() => {
     const availablePlanKeys = new Set(allPlans.map((plan) => planKey(plan.id)));
     setMyParticipantIds((items) => {
-      const next = items.filter((item) => availablePlanKeys.has(planKey(item.id)));
+      const next = items.filter((item) => !isDemoCommunityPlanId(item.id) || availablePlanKeys.has(planKey(item.id)));
       return next.length === items.length ? items : next;
     });
   }, [allPlans]);
 
   useEffect(() => {
+    if (!supabase || !currentUserId) return;
     let cancelled = false;
     const pruneLocalPlanCache = async () => {
       try {
         const [ownRemotePlans, joinedPlanIds] = await Promise.all([
           fetchPlansByAuthor(currentUserId),
-          fetchJoinedPlanIdsForUser(currentUserId),
+          fetchWithRetry(() => fetchJoinedPlanIdsForUser(currentUserId)),
         ]);
         if (cancelled) return;
         const existingOwnPlanIds = new Set(ownRemotePlans.filter((plan) => plan.hidden !== true).map((plan) => planKey(plan.id)));
         const localRealCreatedIds = createdPlans
           .filter((plan) => !isDemoCommunityPlanId(plan.id) && plan.author.id === currentUserId)
           .map((plan) => planKey(plan.id));
-        const participantRealIds = myParticipantIds
+        const participantRealIds = myParticipantIdsRef.current
           .map((item) => planKey(item.id))
           .filter((id) => !isDemoCommunityPlanId(id));
-        const idsToCheck = Array.from(new Set([...localRealCreatedIds, ...participantRealIds]))
-          .filter((id) => !existingOwnPlanIds.has(id));
+        const loadedPlanIds = new Set(allPlanDetailsRef.current.map((plan) => planKey(plan.id)));
+        const missingJoinedIds = joinedPlanIds.map(planKey).filter((id) => !loadedPlanIds.has(id));
+        const idsToCheck = Array.from(new Set([...localRealCreatedIds, ...participantRealIds, ...missingJoinedIds]))
+          .filter((id) => !existingOwnPlanIds.has(id) && (!loadedPlanIds.has(id) || participantRealIds.includes(id)));
         const checkedPlans = await Promise.all(idsToCheck.map(async (id) => [id, await fetchPlan(id)] as const));
         if (cancelled) return;
+        const checkedPlanById = new Map(checkedPlans);
         const existingPlanIds = new Set(existingOwnPlanIds);
         checkedPlans.forEach(([id, plan]) => {
           if (plan && plan.hidden !== true) existingPlanIds.add(id);
+        });
+        const joinedIdsByKey = new Map(joinedPlanIds.map((id) => [planKey(id), id]));
+        const validJoinedIds = joinedPlanIds
+          .map(planKey)
+          .filter((id) => {
+            const loadedPlan = allPlanDetailsRef.current.find((plan) => planKey(plan.id) === id);
+            const checkedPlan = checkedPlanById.get(id);
+            const plan = checkedPlanById.has(id) ? checkedPlan : loadedPlan;
+            return Boolean(plan && plan.hidden !== true);
+          });
+        const hydratedJoinedPlans = validJoinedIds
+          .map((id) => checkedPlanById.get(id))
+          .filter((plan): plan is HomeFeedPlan => Boolean(plan && plan.hidden !== true))
+          .map(sanitizePlan);
+        const previouslyHydratedIds = new Set(hydratedJoinedPlansRef.current.map((plan) => planKey(plan.id)));
+        hydratedJoinedPlansRef.current = hydratedJoinedPlans;
+        setRemotePublicPlans((plans) => {
+          const next = plans.filter((plan) => !previouslyHydratedIds.has(planKey(plan.id)));
+          const knownIds = new Set(next.map((plan) => planKey(plan.id)));
+          hydratedJoinedPlans.forEach((plan) => {
+            if (!knownIds.has(planKey(plan.id))) {
+              next.push(plan);
+              knownIds.add(planKey(plan.id));
+            }
+          });
+          return next;
         });
         setCreatedPlans((plans) => {
           const next = plans.filter((plan) => isDemoCommunityPlanId(plan.id) || plan.author.id !== currentUserId || existingPlanIds.has(planKey(plan.id)));
@@ -1570,28 +1628,27 @@ export default function App() {
           return hydrated;
         });
         setMyParticipantIds((items) => {
-          const next = items.filter((item) => isDemoCommunityPlanId(item.id) || existingPlanIds.has(planKey(item.id)));
-          return next.length === items.length ? items : next;
-        });
-        setMyParticipantIds((items) => {
-          const joinedIdsByKey = new Map(joinedPlanIds.map((id) => [planKey(id), id]));
+          const demoItems = items.filter((item) => isDemoCommunityPlanId(item.id));
           const localJoinedKeys = items
             .map((item) => planKey(item.id))
-            .filter((id, index, ids) => joinedIdsByKey.has(id) && ids.indexOf(id) === index);
+            .filter((id, index, ids) => validJoinedIds.includes(id) && ids.indexOf(id) === index);
           const localJoinedKeySet = new Set(localJoinedKeys);
           const orderedJoinedKeys = [
             ...localJoinedKeys,
-            ...joinedPlanIds.map(planKey).filter((id) => !localJoinedKeySet.has(id)),
+            ...validJoinedIds.filter((id) => !localJoinedKeySet.has(id)),
           ];
-          return orderedJoinedKeys.map((id) => {
+          const realItems = orderedJoinedKeys.map((id) => {
             const localItem = items.find((item) => planKey(item.id) === id);
-            const plan = allPlanDetailsRef.current.find((item) => planKey(item.id) === id);
+            const plan = checkedPlanById.get(id) ?? allPlanDetailsRef.current.find((item) => planKey(item.id) === id);
             return {
               kind: localItem?.kind ?? plan?.kind ?? "plan",
               id: joinedIdsByKey.get(id) ?? id,
             };
           });
+          return [...demoItems, ...realItems];
         });
+        participantSyncCompletedForUserRef.current = currentUserId;
+        setParticipantSyncCompletedForUser(currentUserId);
       } catch (error) {
         console.error("Supabase local plan cache prune failed", error);
       }
@@ -1859,7 +1916,7 @@ export default function App() {
     const wasJoined = myParticipantIds.some((item) => participantKey(item) === key);
     const isAuthorJoiningOwnPlan = plan?.author.id === currentUserId;
     if (!wasJoined) track("plan_join", { plan_id: idKey, source });
-    setMyParticipantIds((ids) => ids.some((item) => participantKey(item) === key) ? ids : [ref, ...ids]);
+    updateMyParticipantIdsFromUserAction((ids) => ids.some((item) => participantKey(item) === key) ? ids : [ref, ...ids]);
     setJoinedParticipantPeers((items) => ({
       ...items,
       [idKey]: items[idKey]?.some((peer) => peer.id === currentUserId) ? items[idKey] : [...(items[idKey] ?? []), currentPeer],
@@ -1867,7 +1924,7 @@ export default function App() {
     if (!wasJoined && !isAuthorJoiningOwnPlan) setJoinedCounts((items) => ({ ...items, [idKey]: (items[idKey] ?? 0) + 1 }));
     void upsertPlanParticipant(idKey, currentUserId, "joined").catch((error) => {
       console.error("Supabase plan join failed", error);
-      setMyParticipantIds((ids) => ids.filter((item) => participantKey(item) !== key));
+      updateMyParticipantIdsFromUserAction((ids) => ids.filter((item) => participantKey(item) !== key));
       setJoinedParticipantPeers((items) => ({ ...items, [idKey]: (items[idKey] ?? []).filter((peer) => peer.id !== currentUserId) }));
       if (!wasJoined && !isAuthorJoiningOwnPlan) setJoinedCounts((items) => ({ ...items, [idKey]: Math.max(0, (items[idKey] ?? 1) - 1) }));
     });
@@ -1892,7 +1949,7 @@ export default function App() {
     const idsToRemove = scope === "program" && plan?.items?.length
       ? new Set([planKey(id), ...plan.items.map((item) => planKey(item.id))])
       : new Set([planKey(id)]);
-    setMyParticipantIds((ids) => ids.filter((item) => !idsToRemove.has(planKey(item.id))));
+    updateMyParticipantIdsFromUserAction((ids) => ids.filter((item) => !idsToRemove.has(planKey(item.id))));
     setCheckedItemKeys((keys) => keys.filter((key) => !Array.from(idsToRemove).some((planId) => key.endsWith(`:${planId}`))));
     idsToRemove.forEach((planId) => {
       const removedRef = { kind: "plan", id: planId } satisfies ParticipantPlanRef;
@@ -1905,7 +1962,7 @@ export default function App() {
       if (!isAuthorLeavingOwnPlan) setJoinedCounts((items) => ({ ...items, [planId]: Math.max(0, (items[planId] ?? 1) - 1) }));
       void deletePlanParticipant(planId, currentUserId).catch((error) => {
         console.error("Supabase plan leave failed", error);
-        if (wasJoined) setMyParticipantIds((ids) => ids.some((item) => participantKey(item) === removedKey) ? ids : [removedRef, ...ids]);
+        if (wasJoined) updateMyParticipantIdsFromUserAction((ids) => ids.some((item) => participantKey(item) === removedKey) ? ids : [removedRef, ...ids]);
         setJoinedParticipantPeers((items) => ({
           ...items,
           [planId]: items[planId]?.some((peer) => peer.id === currentUserId) ? items[planId] : [...(items[planId] ?? []), currentPeer],
@@ -1931,7 +1988,7 @@ export default function App() {
       authorId,
       plans.filter((plan) => !idsToRemove.has(planKey(plan.id))),
     ])));
-    setMyParticipantIds((ids) => ids.filter((item) => !idsToRemove.has(planKey(item.id))));
+    updateMyParticipantIdsFromUserAction((ids) => ids.filter((item) => !idsToRemove.has(planKey(item.id))));
     setCheckedItemKeys((keys) => keys.filter((key) => !Array.from(idsToRemove).some((planId) => key.endsWith(`:${planId}`))));
     setJoinedCounts((items) => {
       const next = { ...items };
@@ -2011,7 +2068,7 @@ export default function App() {
       authorId,
       plans.filter((item) => planKey(item.id) !== idKey),
     ])));
-    setMyParticipantIds((items) => items.filter((item) => planKey(item.id) !== idKey));
+    updateMyParticipantIdsFromUserAction((items) => items.filter((item) => planKey(item.id) !== idKey));
     setCheckedItemKeys((keys) => keys.filter((key) => !key.endsWith(`:${idKey}`)));
     void setPlanHidden(planKey(plan.id), true).catch((error) => {
       console.error("Supabase plan hide failed", error);
@@ -2069,7 +2126,9 @@ export default function App() {
   const createPlan = (plans: HomeFeedPlan[], result: CreatedPlanResult) => {
     const sanitizedPlans = plans.map(sanitizePlan);
     const ids = sanitizedPlans.map((plan) => plan.id);
-    setCreatedPlans((items) => [...sanitizedPlans, ...items.filter((item) => !ids.includes(item.id))]);
+    const nextCreatedPlans = [...sanitizedPlans, ...createdPlans.filter((item) => !ids.includes(item.id))];
+    setCreatedPlans(nextCreatedPlans);
+    writeJson(createdPlansStorageKey, nextCreatedPlans.map(sanitizePlan));
     setHighlightedPlanId(ids[0]);
     window.setTimeout(() => setHighlightedPlanId(null), 1500);
     setViewingOwnProfile(true);
@@ -2111,7 +2170,7 @@ export default function App() {
     const sanitizedPlan = sanitizePlan(plan);
     setCreatedPlans((items) => items.some((item) => planKey(item.id) === planKey(sanitizedPlan.id)) ? items : [sanitizedPlan, ...items]);
     const ref = { kind: "plan", id: sanitizedPlan.id } satisfies ParticipantPlanRef;
-    setMyParticipantIds((items) => items.some((item) => participantKey(item) === participantKey(ref)) ? items : [ref, ...items]);
+    updateMyParticipantIdsFromUserAction((items) => items.some((item) => participantKey(item) === participantKey(ref)) ? items : [ref, ...items]);
   };
 
   const adjustProfileFollowersCount = (profile: ExpertProfile, delta: number) => {
@@ -2242,6 +2301,7 @@ export default function App() {
             onDeletePlan={deletePlan}
             currentUserId={currentUserId}
             highlightedPlanId={highlightedPlanId}
+            plansLoading={participantSyncCompletedForUser !== currentUserId}
           />
         );
       case "create":
@@ -2360,6 +2420,8 @@ export default function App() {
             profile={viewedProfile}
             plans={viewedPlans}
             isMe={isCurrentUserProfile}
+            plansLoading={isCurrentUserProfile && participantSyncCompletedForUser !== currentUserId}
+            connectionsLoading={!isDemoProfile(viewedProfile) && !loadedViewedConnectionSets}
           />
         );
       case "editProfile":

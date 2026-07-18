@@ -92,6 +92,7 @@ export function PlansScreen({
   onDeletePlan,
   currentUserId,
   highlightedPlanId,
+  plansLoading = false,
 }: {
   onNavigate: (s: Screen, from?: Screen) => void;
   onPlanOpen: (id: PlanId) => void;
@@ -103,6 +104,7 @@ export function PlansScreen({
   onDeletePlan: (id: PlanId, scope?: "single" | "program") => void;
   currentUserId: string;
   highlightedPlanId?: PlanId | null;
+  plansLoading?: boolean;
 }) {
   const isEmpty = participantPlans.length === 0;
   const [removingPlan, setRemovingPlan] = useState<HomeFeedPlan | null>(null);
@@ -231,6 +233,10 @@ export function PlansScreen({
               })}
             </div>
           )
+        ) : plansLoading && isEmpty ? (
+          <div className="flex min-h-[420px] items-center justify-center rounded-2xl bg-card px-6 text-center">
+            <p className="text-[14px] leading-5 text-muted-foreground">Загружаем ваши планы…</p>
+          </div>
         ) : isEmpty ? (
           <div className="flex min-h-[420px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full" style={{ backgroundColor: GREEN_LIGHT }}>

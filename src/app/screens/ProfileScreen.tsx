@@ -15,14 +15,16 @@ function ProfileStat({
   value,
   label,
   onClick,
+  loading = false,
 }: {
   value: number;
   label: string;
   onClick?: () => void;
+  loading?: boolean;
 }) {
   const content = (
     <>
-      <span className="text-[20px] font-bold leading-6 text-foreground">{value}</span>
+      <span className="text-[20px] font-bold leading-6 text-foreground">{loading ? "—" : value}</span>
       <span className="mt-1 text-[12px] leading-4 text-muted-foreground">{label}</span>
     </>
   );
@@ -195,6 +197,8 @@ export function ProfileScreen(props: {
   profile: ExpertProfile;
   plans: HomeFeedPlan[];
   isMe: boolean;
+  plansLoading?: boolean;
+  connectionsLoading?: boolean;
 }) {
   void props.onArticle;
   void props.onNavigate;
@@ -436,9 +440,9 @@ export function ProfileScreen(props: {
           ) : null}
 
           <div className="mt-5 flex items-center justify-between rounded-2xl bg-muted px-1">
-            <ProfileStat value={props.profile.followersCount} label="Подписчики" onClick={() => props.onConnectionsOpen("followers")} />
+            <ProfileStat value={props.profile.followersCount} label="Подписчики" loading={props.connectionsLoading} onClick={() => props.onConnectionsOpen("followers")} />
             <div className="h-9 w-px bg-border" />
-            <ProfileStat value={props.profile.followingCount} label="Подписки" onClick={() => props.onConnectionsOpen("following")} />
+            <ProfileStat value={props.profile.followingCount} label="Подписки" loading={props.connectionsLoading} onClick={() => props.onConnectionsOpen("following")} />
           </div>
 
           {!props.isMe && props.canMessage !== false && (
@@ -461,7 +465,11 @@ export function ProfileScreen(props: {
           {props.isMe ? (
             <div className="mt-7">
               <h2 className="mb-3 text-[19px] font-bold leading-6 text-foreground">Ближайшие планы</h2>
-              {visibleNearestPlans.length > 0 ? (
+              {props.plansLoading && visibleNearestPlans.length === 0 ? (
+                <div className="rounded-xl bg-muted px-4 py-6 text-center">
+                  <p className="text-[14px] leading-5 text-muted-foreground">Загружаем ближайшие планы…</p>
+                </div>
+              ) : visibleNearestPlans.length > 0 ? (
                 <div className="space-y-2.5">
                   {visibleNearestPlans.map((plan) => {
                     const nearestDate = formatNearestDate(plan.schedule);
