@@ -25,22 +25,6 @@ const TRAINING_DAYS = [
   { dayLabel: "Вс", weekday: 7 },
 ] as const;
 
-const TEMPLATE_5K: TrainingProgram = {
-  totalWeeks: 4,
-  weeks: [
-    { week: 1, levelLabel: "Восстановление", sessions: [
-      { id: "w1s1", dayLabel: "Пн", weekday: 1, title: "Лёгкий бег", note: "3 км · спокойный темп" },
-      { id: "w1s2", dayLabel: "Ср", weekday: 3, title: "Интервалы", note: "4×400 м" },
-      { id: "w1s3", dayLabel: "Сб", weekday: 6, title: "Длинная", note: "5 км непрерывно" },
-    ] },
-    { week: 2, levelLabel: "База", sessions: [
-      { id: "w2s1", dayLabel: "Пн", weekday: 1, title: "Темповый бег", note: "4 км" },
-      { id: "w2s2", dayLabel: "Ср", weekday: 3, title: "Интервалы", note: "5×400 м" },
-      { id: "w2s3", dayLabel: "Сб", weekday: 6, title: "Длинная", note: "6 км" },
-    ] },
-  ],
-};
-
 export type CreatedPlanResult = {
   plan: PlanDraft;
   visibility: Visibility;
@@ -178,7 +162,7 @@ export function CreateScreen({
   const [durationMinutes, setDurationMinutes] = useState(() => editingPlan?.duration?.match(/[\d.,]+/)?.[0]?.replace(",", ".") ?? "");
   const [planType, setPlanType] = useState<"simple" | "training">(editingPlan?.trainingProgram ? "training" : "simple");
   const [sessionWeekIndex, setSessionWeekIndex] = useState<number | null>(null);
-  const [sessionDayIndex, setSessionDayIndex] = useState(0);
+  const [sessionDayIndices, setSessionDayIndices] = useState<number[]>([]);
   const [sessionTitle, setSessionTitle] = useState("");
   const [sessionNote, setSessionNote] = useState("");
   const currentSchedule = draft.schedule;
@@ -259,14 +243,14 @@ export function CreateScreen({
     });
     setSessionWeekIndex((current) => current === weekIndex ? null : current !== null && current > weekIndex ? current - 1 : current);
   };
-  const addSession = (weekIndex: number, session: Omit<TrainingSession, "id">) => {
+  const addSessions = (weekIndex: number, sessions: Omit<TrainingSession, "id">[]) => {
     const week = program.weeks[weekIndex];
-    if (!week) return;
-    const id = `w${week.week}s${crypto.randomUUID()}`;
+    if (!week || sessions.length === 0) return;
+    const withIds = sessions.map((session) => ({ id: `w${week.week}s${crypto.randomUUID()}`, ...session }));
     setProgram({
       ...program,
       weeks: program.weeks.map((item, index) => index === weekIndex
-        ? { ...item, sessions: [...item.sessions, { id, ...session }] }
+        ? { ...item, sessions: [...item.sessions, ...withIds] }
         : item),
     });
   };
@@ -276,32 +260,37 @@ export function CreateScreen({
       ? { ...week, sessions: week.sessions.filter((session) => session.id !== sessionId) }
       : week),
   });
-  const applyTemplate5k = () => {
-    setProgram(TEMPLATE_5K);
-    setSessionWeekIndex(null);
-  };
   const updateWeekLevel = (weekIndex: number, levelLabel: string) => setProgram({
     ...program,
     weeks: program.weeks.map((week, index) => index === weekIndex
       ? { ...week, levelLabel: levelLabel || undefined }
       : week),
   });
+  const updateWeekDescription = (weekIndex: number, description: string) => setProgram({
+    ...program,
+    weeks: program.weeks.map((week, index) => index === weekIndex
+      ? { ...week, description: description || undefined }
+      : week),
+  });
   const resetSessionForm = () => {
     setSessionWeekIndex(null);
-    setSessionDayIndex(0);
+    setSessionDayIndices([]);
     setSessionTitle("");
     setSessionNote("");
   };
   const submitSession = (weekIndex: number) => {
     const title = sessionTitle.trim();
-    if (!title) return;
-    const day = TRAINING_DAYS[sessionDayIndex];
-    addSession(weekIndex, {
-      dayLabel: day.dayLabel,
-      weekday: day.weekday,
-      title,
-      ...(sessionNote.trim() ? { note: sessionNote.trim() } : {}),
+    if (!title || sessionDayIndices.length === 0) return;
+    const newSessions = sessionDayIndices.map((dayIndex) => {
+      const day = TRAINING_DAYS[dayIndex];
+      return {
+        dayLabel: day.dayLabel,
+        weekday: day.weekday,
+        title,
+        ...(sessionNote.trim() ? { note: sessionNote.trim() } : {}),
+      };
     });
+    addSessions(weekIndex, newSessions);
     resetSessionForm();
   };
   const updateSchedule = (next: Partial<Schedule>) => updatePlan({ schedule: { ...currentSchedule, ...next } });
@@ -402,14 +391,17 @@ export function CreateScreen({
       return;
     }
 
-    const invalidSchedule = validateSchedule(draft.schedule);
+    const baseSchedule = planType === "training"
+      ? { ...draft.schedule, start: draft.schedule.start ?? toLocalIsoDate(new Date()), repeat: { type: "none" as const } }
+      : draft.schedule;
+    const invalidSchedule = planType === "simple" ? validateSchedule(baseSchedule) : "";
     if (invalidSchedule) {
       setScheduleError(invalidSchedule);
       setStep("schedule");
       return;
     }
 
-    const finalizedSchedule = finalizeSchedule(draft.schedule);
+    const finalizedSchedule = finalizeSchedule(baseSchedule);
     const trainingProgram = planType === "training"
       && draft.trainingProgram
       && draft.trainingProgram.weeks.some((week) => week.sessions.length > 0)
@@ -532,7 +524,7 @@ export function CreateScreen({
   const titleLeft = TITLE_LIMIT - draft.title.length;
   const descriptionLeft = DESCRIPTION_LIMIT - draft.description.length;
   const stepFlow: CreateStep[] = planType === "training"
-    ? ["welcome", "name", "description", "image", "planType", "program", "schedule", "finalOptions", "success"]
+    ? ["welcome", "name", "description", "image", "planType", "program", "finalOptions", "success"]
     : ["welcome", "name", "description", "image", "planType", "schedule", "finalOptions", "success"];
   const progressSteps = stepFlow.length - 2;
   const progressIndex = Math.max(0, stepFlow.indexOf(step) - 1);
@@ -866,15 +858,6 @@ export function CreateScreen({
         return (
           <div className="pt-6">
             <h2 className="text-[28px] font-bold leading-8 text-foreground">Программа</h2>
-            <button
-              type="button"
-              onClick={applyTemplate5k}
-              className="mt-4 h-11 w-full rounded-xl bg-card text-[14px] font-semibold active:opacity-85"
-              style={{ color: GREEN }}
-            >
-              Заполнить шаблоном 5 км
-            </button>
-
             <div className="mt-5 space-y-4">
               {program.weeks.map((week, weekIndex) => (
                 <section key={week.week} className="rounded-xl bg-card p-4">
@@ -889,8 +872,17 @@ export function CreateScreen({
                     onChange={(event) => updateWeekLevel(weekIndex, event.target.value)}
                     onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }}
                     onBlur={() => setFieldFocused(false)}
-                    placeholder="Уровень недели (необязательно)"
+                    placeholder="Заголовок недели"
                     className="mt-3 h-11 w-full rounded-xl bg-muted px-3.5 text-[14px] outline-none placeholder:text-muted-foreground"
+                  />
+                  <textarea
+                    value={week.description ?? ""}
+                    onChange={(event) => updateWeekDescription(weekIndex, event.target.value)}
+                    onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }}
+                    onBlur={() => setFieldFocused(false)}
+                    placeholder="Описание недели (необязательно)"
+                    rows={2}
+                    className="mt-2 w-full resize-none rounded-xl bg-muted px-3.5 py-2.5 text-[14px] outline-none placeholder:text-muted-foreground"
                   />
 
                   {week.sessions.length > 0 && (
@@ -912,17 +904,22 @@ export function CreateScreen({
                   {sessionWeekIndex === weekIndex ? (
                     <div className="mt-3 rounded-xl bg-muted p-3">
                       <div className="grid grid-cols-7 gap-1">
-                        {TRAINING_DAYS.map((day, dayIndex) => (
-                          <button
-                            type="button"
-                            key={day.dayLabel}
-                            onClick={() => setSessionDayIndex(dayIndex)}
-                            className="aspect-square rounded-full text-[11px] font-semibold"
-                            style={sessionDayIndex === dayIndex ? { backgroundColor: GREEN, color: "#fff" } : { background: "var(--card)", color: "var(--foreground)" }}
-                          >
-                            {day.dayLabel}
-                          </button>
-                        ))}
+                        {TRAINING_DAYS.map((day, dayIndex) => {
+                          const active = sessionDayIndices.includes(dayIndex);
+                          return (
+                            <button
+                              type="button"
+                              key={day.dayLabel}
+                              onClick={() => setSessionDayIndices((previous) => previous.includes(dayIndex)
+                                ? previous.filter((selectedDay) => selectedDay !== dayIndex)
+                                : [...previous, dayIndex])}
+                              className="aspect-square rounded-full text-[11px] font-semibold"
+                              style={active ? { backgroundColor: GREEN, color: "#fff" } : { background: "var(--card)", color: "var(--foreground)" }}
+                            >
+                              {day.dayLabel}
+                            </button>
+                          );
+                        })}
                       </div>
                       <input
                         value={sessionTitle}
@@ -942,14 +939,14 @@ export function CreateScreen({
                       />
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <button type="button" onClick={resetSessionForm} className="h-10 rounded-xl bg-card text-[13px] font-semibold text-foreground">Отмена</button>
-                        <button type="button" disabled={!sessionTitle.trim()} onClick={() => submitSession(weekIndex)} className="h-10 rounded-xl text-[13px] font-semibold text-white disabled:opacity-40" style={{ backgroundColor: GREEN }}>Добавить</button>
+                        <button type="button" disabled={!sessionTitle.trim() || sessionDayIndices.length === 0} onClick={() => submitSession(weekIndex)} className="h-10 rounded-xl text-[13px] font-semibold text-white disabled:opacity-40" style={{ backgroundColor: GREEN }}>Добавить</button>
                       </div>
                     </div>
                   ) : (
                     <button
                       type="button"
                       onClick={() => {
-                        setSessionDayIndex(0);
+                        setSessionDayIndices([]);
                         setSessionTitle("");
                         setSessionNote("");
                         setSessionWeekIndex(weekIndex);
@@ -992,7 +989,7 @@ export function CreateScreen({
       : step === "planType"
         ? () => goTo(planType === "training" ? "program" : "schedule")
         : step === "program"
-          ? () => goTo("schedule")
+          ? () => goTo("finalOptions")
           : step === "schedule"
             ? continueFromSchedule
             : handleCreate;

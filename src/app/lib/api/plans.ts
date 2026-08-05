@@ -40,7 +40,7 @@ const normalizeTrainingProgram = (value: unknown): TrainingProgram | undefined =
 
   const weeks = raw.weeks.flatMap<TrainingWeek>((week) => {
     if (!week || typeof week !== "object") return [];
-    const rawWeek = week as { week?: unknown; levelLabel?: unknown; sessions?: unknown };
+    const rawWeek = week as { week?: unknown; levelLabel?: unknown; description?: unknown; sessions?: unknown };
     if (typeof rawWeek.week !== "number" || !Array.isArray(rawWeek.sessions)) return [];
 
     const sessions = rawWeek.sessions.flatMap<TrainingSession>((session) => {
@@ -64,6 +64,7 @@ const normalizeTrainingProgram = (value: unknown): TrainingProgram | undefined =
     return [{
       week: rawWeek.week,
       ...(typeof rawWeek.levelLabel === "string" ? { levelLabel: rawWeek.levelLabel } : {}),
+      ...(typeof rawWeek.description === "string" ? { description: rawWeek.description } : {}),
       sessions,
     }];
   });

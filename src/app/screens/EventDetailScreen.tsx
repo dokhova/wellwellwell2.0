@@ -1035,6 +1035,7 @@ export function EventDetailScreen({
                       <span className="text-[13px] font-medium">Неделя {week.week}</span>
                       {week.levelLabel && <span className="rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ color: PLAN_DARK.accent, background: "rgba(47,191,175,0.16)" }}>{week.levelLabel}</span>}
                     </div>
+                    {week.description && <p className="mb-2 mt-1 text-[13px]" style={{ color: PLAN_DARK.textSecondary }}>{week.description}</p>}
                     <div className="flex flex-col gap-2">
                       {week.sessions.map((session) => {
                         const key = sessionKey(session.id);

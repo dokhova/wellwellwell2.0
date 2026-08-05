@@ -88,6 +88,7 @@ export interface TrainingSession {
 export interface TrainingWeek {
   week: number;
   levelLabel?: string;
+  description?: string;
   sessions: TrainingSession[];
 }
 
