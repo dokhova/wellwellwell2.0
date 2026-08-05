@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import confetti from "canvas-confetti";
 import { Calendar, Camera, Check, Eye, Image as ImageIcon, Lock, MapPin, Plus, Search, SlidersHorizontal, Users, X } from "lucide-react";
 import type { HomeFeedPlan, Schedule, Screen, Visibility } from "@/app/types";
-import { GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES } from "@/app/data/constants";
+import { GREEN, PART_OF_DAY_RANGES } from "@/app/data/constants";
 import { DEFAULT_PLAN_AUTHOR } from "@/app/data/plans";
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
@@ -57,25 +57,6 @@ export type CreatedPlanResult = {
   location: { address: string } | "online" | null;
   videoMeeting: { enabled: boolean; link: string };
 };
-
-function OptionRow({ icon, label, subtitle, control, onClick }: {
-  icon: React.ReactNode;
-  label: string;
-  subtitle?: string;
-  control: React.ReactNode;
-  onClick?: () => void;
-}) {
-  return (
-    <button onClick={onClick} className="flex w-full items-center gap-3 rounded-xl bg-card px-4 py-3.5 text-left active:opacity-80">
-      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-secondary">{icon}</div>
-      <div className="min-w-0 flex-1">
-        <p className="text-[15px] font-medium text-foreground">{label}</p>
-        {subtitle && <p className="mt-0.5 truncate text-[12px] leading-4 text-muted-foreground">{subtitle}</p>}
-      </div>
-      {control}
-    </button>
-  );
-}
 
 const getLocalDateTime = () => {
   const date = new Date();
@@ -166,11 +147,6 @@ export function CreateScreen({
   const [locationApartment, setLocationApartment] = useState("");
   const [locationVenueName, setLocationVenueName] = useState("");
   const [allDay, setAllDay] = useState(false);
-  const [selectedLevel, setSelectedLevel] = useState<HomeFeedPlan["level"]>(editingPlan?.level);
-  const [metricMode, setMetricMode] = useState<"none" | "distance" | "time">(editingPlan?.distanceLabel ? "distance" : editingPlan?.duration ? "time" : "none");
-  const [distanceValue, setDistanceValue] = useState(() => editingPlan?.distanceLabel?.match(/[\d.,]+/)?.[0]?.replace(",", ".") ?? "");
-  const [distanceUnit, setDistanceUnit] = useState<"км" | "м">(editingPlan?.distanceLabel?.trim().endsWith(" км") ? "км" : "м");
-  const [durationMinutes, setDurationMinutes] = useState(() => editingPlan?.duration?.match(/[\d.,]+/)?.[0]?.replace(",", ".") ?? "");
   const planType = "simple" as const;
   const currentSchedule = draft.schedule;
   const exactStart = currentSchedule.start ?? initialDateTime;
@@ -337,8 +313,6 @@ export function CreateScreen({
     void planType;
     const trainingProgram = undefined;
     const finalizedDraft = { ...draft, schedule: finalizedSchedule, trainingProgram };
-    const distanceLabel = metricMode === "distance" && Number(distanceValue) > 0 ? `${Number(distanceValue)} ${distanceUnit}` : undefined;
-    const duration = metricMode === "time" && Number(durationMinutes) > 0 ? `${Number(durationMinutes)} мин` : undefined;
     const maxParticipantsValue = maxParticipants.trim();
     const parsedMaxParticipants = maxParticipantsValue ? Number.parseInt(maxParticipantsValue, 10) : undefined;
     if (
@@ -356,9 +330,9 @@ export function CreateScreen({
         ...editingPlan,
         visibility,
         format: locationMode,
-        level: selectedLevel,
-        distanceLabel,
-        duration,
+        level: editingPlan.level,
+        distanceLabel: editingPlan.distanceLabel,
+        duration: editingPlan.duration,
         title: draft.title.trim(),
         description: draft.description.trim(),
         habit: { ...(editingPlan.habit ?? { durationMin: 15 }), title: draft.title.trim() },
@@ -390,9 +364,9 @@ export function CreateScreen({
       visibility,
       tag: "other",
       format: locationMode,
-      level: selectedLevel,
-      distanceLabel,
-      duration,
+      level: undefined,
+      distanceLabel: undefined,
+      duration: undefined,
       title: draft.title.trim(),
       description: draft.description.trim(),
       habit: { title: draft.title.trim(), durationMin: 15 },
@@ -422,63 +396,6 @@ export function CreateScreen({
   };
 
   const descriptionLeft = DESCRIPTION_LIMIT - draft.description.length;
-
-  const renderFinalOptions = () => (
-    <div className="space-y-2">
-      <div className="rounded-xl bg-card px-4 py-4">
-        <p className="mb-3 text-[15px] font-medium">Уровень</p>
-        <div className="grid grid-cols-3 gap-1.5">
-          {([
-            ["well", "Well"],
-            ["veryWell", "Very well"],
-            ["tooWell", "Too well"],
-          ] as const).map(([value, label]) => {
-            const active = selectedLevel === value;
-            return <button key={label} type="button" onClick={() => setSelectedLevel(active ? undefined : value)} className="flex h-11 min-w-0 items-center justify-center overflow-hidden rounded-xl border px-1 text-center" style={active ? { borderColor: GREEN, backgroundColor: GREEN_LIGHT, color: GREEN } : { borderColor: "var(--border)" }}><span className="block max-w-full truncate text-[13px] font-semibold">{label}</span></button>;
-          })}
-        </div>
-      </div>
-      <div className="rounded-xl bg-card px-4 py-4">
-        <p className="mb-3 text-[15px] font-medium">Дистанция или время</p>
-        <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
-          {([['distance', 'Дистанция'], ['time', 'Время']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setMetricMode(metricMode === value ? "none" : value)} className="h-10 rounded-lg text-[13px] font-semibold" style={metricMode === value ? { backgroundColor: GREEN, color: "#fff" } : undefined}>{label}</button>)}
-        </div>
-        {metricMode === "distance" && <div className="mt-3 flex gap-2"><input type="number" inputMode="decimal" min="0" step="any" value={distanceValue} onChange={(event) => setDistanceValue(event.target.value)} placeholder="5" className="h-11 min-w-0 flex-1 rounded-xl bg-muted px-3 text-[14px] outline-none" /><div className="grid w-24 grid-cols-2 rounded-xl bg-muted p-1">{(["км", "м"] as const).map((unit) => <button key={unit} type="button" onClick={() => setDistanceUnit(unit)} className="rounded-lg text-[13px] font-semibold" style={distanceUnit === unit ? { backgroundColor: GREEN, color: "#fff" } : undefined}>{unit}</button>)}</div></div>}
-        {metricMode === "time" && <div className="mt-3 flex items-center gap-2"><input type="number" inputMode="numeric" min="0" step="1" value={durationMinutes} onChange={(event) => setDurationMinutes(event.target.value)} placeholder="60" className="h-11 min-w-0 flex-1 rounded-xl bg-muted px-3 text-[14px] outline-none" /><span className="text-[14px] text-muted-foreground">мин</span></div>}
-      </div>
-      <button onClick={() => setVisibility((value) => value === "all" ? "onlyMe" : "all")} className="flex w-full items-center gap-3 rounded-xl bg-card px-4 py-3.5 text-left">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary">{visibility === "all" ? <Eye size={17} color={GREEN} /> : <Lock size={17} color={GREEN} />}</div>
-        <span className="flex-1 text-[15px] font-medium">Видимость</span>
-        <span className="text-[14px] text-muted-foreground">{visibility === "all" ? "Все" : "Только я"}</span>
-      </button>
-      <OptionRow
-        icon={<Users size={17} color={GREEN} />}
-        label="Участники"
-        subtitle={selectedParticipantItems.length ? `Выбрано: ${selectedParticipantItems.length}` : "Выбрать участников"}
-        onClick={() => setParticipantsOpen(true)}
-        control={selectedParticipantItems.length > 0 ? <div className="flex -space-x-2">{selectedParticipantItems.slice(0, 4).map((person) => person.avatarUrl ? <img loading="lazy" decoding="async" key={person.id} src={person.avatarUrl} alt={person.name} className="h-7 w-7 rounded-full border-2 border-card object-cover" /> : <span key={person.id} className="h-7 w-7 rounded-full border-2 border-card bg-secondary" />)}</div> : <Plus size={18} color={GREEN} />}
-      />
-      <div className="rounded-xl bg-card px-4 py-3.5">
-        <label>
-          <span className="mb-2 block text-[15px] font-medium text-foreground">Лимит участников</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            min="2"
-            step="1"
-            value={maxParticipants}
-            onChange={(event) => {
-              setMaxParticipants(event.target.value);
-              setMaxParticipantsError("");
-            }}
-            placeholder="Без ограничения"
-            className="h-11 w-full rounded-xl bg-muted px-3 text-[14px] outline-none placeholder:text-muted-foreground"
-          />
-        </label>
-        {maxParticipantsError && <p className="mt-2 text-[12px] font-medium text-destructive">{maxParticipantsError}</p>}
-      </div>
-    </div>
-  );
 
   const uploadCoverImage = async (file: File) => {
     setUploadProgress(0);
@@ -638,6 +555,7 @@ export function CreateScreen({
             >
               <SlidersHorizontal size={18} className="opacity-80" />
               <span className="text-[15px]">Детали</span>
+              <span className="text-[12px] text-white/55">Участники, лимит, видимость</span>
             </button>
           </div>
 
@@ -752,6 +670,8 @@ export function CreateScreen({
               })}
             </div>
 
+            {renderGalleryPhotos()}
+
             {uploadProgress !== null && !galleryUploadProgress && (
               <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60">
                 <span className="text-[22px] font-semibold text-white">{uploadProgress}%</span>
@@ -770,9 +690,9 @@ export function CreateScreen({
           panelClassName="max-h-[85vh]"
           bodyClassName="overflow-y-auto"
         >
-          <div className="overflow-hidden rounded-2xl bg-white/5">
+          <div className="overflow-hidden rounded-2xl bg-white/[0.06]">
             <div className="flex items-center justify-between px-4 py-4">
-              <span className="text-[15px] font-medium text-white">На весь день</span>
+              <span className="text-[16px] text-white">На весь день</span>
               <button
                 type="button"
                 role="switch"
@@ -782,21 +702,24 @@ export function CreateScreen({
                   setAllDay(next);
                   writeExact({ allDay: next });
                 }}
-                className="relative h-8 w-[51px] rounded-full transition-colors"
-                style={{ backgroundColor: allDay ? GREEN : "rgba(255,255,255,0.18)" }}
+                className="relative h-7 w-12 flex-shrink-0 rounded-full transition-colors"
+                style={{ background: allDay ? GREEN : "rgba(255,255,255,0.22)" }}
               >
-                <span className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${allDay ? "translate-x-[23px]" : "translate-x-1"}`} />
+                <span
+                  className="absolute top-0.5 h-6 w-6 rounded-full bg-white transition-transform"
+                  style={{ left: 2, transform: allDay ? "translateX(20px)" : "translateX(0)" }}
+                />
               </button>
             </div>
 
-            <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-3.5">
+            <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-4">
               <span className="text-[15px] text-white">Начало</span>
               <div className="flex min-w-0 items-center justify-end gap-2">
                 <input
                   type="date"
                   value={startParts.date}
                   onChange={(event) => writeExact({ startDate: event.target.value })}
-                  className="min-w-0 rounded-full bg-white/10 px-3 py-2 text-[15px] text-white outline-none"
+                  className="min-w-0 flex-shrink-0 rounded-full bg-white/10 px-3 py-2 text-[15px] text-white outline-none"
                   style={{ colorScheme: "dark" }}
                 />
                 {!allDay && (
@@ -804,7 +727,7 @@ export function CreateScreen({
                     type="time"
                     value={startParts.time}
                     onChange={(event) => writeExact({ startTime: event.target.value })}
-                    className="w-[108px] rounded-full bg-white/10 px-3 py-2 text-[15px] text-white outline-none"
+                    className="w-[108px] flex-shrink-0 rounded-full bg-white/10 px-3 py-2 text-[15px] text-white outline-none"
                     style={{ colorScheme: "dark" }}
                   />
                 )}
@@ -812,14 +735,14 @@ export function CreateScreen({
             </div>
 
             {currentSchedule.end && (
-              <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-3.5">
+              <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-4">
                 <span className="text-[15px] text-white">Окончание</span>
                 <div className="flex min-w-0 items-center justify-end gap-2">
                   <input
                     type="date"
                     value={endParts.date}
                     onChange={(event) => writeExact({ endDate: event.target.value })}
-                    className="min-w-0 rounded-full bg-white/10 px-3 py-2 text-[15px] text-white outline-none"
+                    className="min-w-0 flex-shrink-0 rounded-full bg-white/10 px-3 py-2 text-[15px] text-white outline-none"
                     style={{ colorScheme: "dark" }}
                   />
                   {!allDay && (
@@ -827,7 +750,7 @@ export function CreateScreen({
                       type="time"
                       value={endParts.time}
                       onChange={(event) => writeExact({ endTime: event.target.value })}
-                      className="w-[108px] rounded-full bg-white/10 px-3 py-2 text-[15px] text-white outline-none"
+                      className="w-[108px] flex-shrink-0 rounded-full bg-white/10 px-3 py-2 text-[15px] text-white outline-none"
                       style={{ colorScheme: "dark" }}
                     />
                   )}
@@ -841,18 +764,18 @@ export function CreateScreen({
             onClick={() => currentSchedule.end
               ? writeExact({ endDate: null })
               : writeExact({ endDate: startParts.date, endTime: allDay ? "23:59" : "21:00" })}
-            className="mt-4 text-[15px] font-medium"
+            className="px-4 pt-3 text-[15px] font-medium"
             style={{ color: GREEN }}
           >
             {currentSchedule.end ? "Удалить время окончания" : "Добавить окончание"}
           </button>
-          {scheduleError && <p className="mt-3 text-[12px] font-medium text-red-400">{scheduleError}</p>}
+          {scheduleError && <p className="px-4 pt-2 text-[12px] font-medium text-red-400">{scheduleError}</p>}
         </HomeSheet>
       )}
 
       {activeSheet === "place" && (
         <HomeSheet variant="dark" title="Место" onClose={() => setActiveSheet(null)} onConfirm={() => setActiveSheet(null)} panelClassName="max-h-[85vh]" bodyClassName="overflow-y-auto">
-          <div className="grid grid-cols-2 gap-2 rounded-xl bg-white/10 p-1">
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-white/10 p-1">
             {(["online", "offline"] as const).map((mode) => {
               const active = locationMode === mode;
               return (
@@ -860,7 +783,7 @@ export function CreateScreen({
                   key={mode}
                   type="button"
                   onClick={() => setLocationMode(mode)}
-                  className="h-10 rounded-lg text-[14px] font-semibold text-white transition-colors"
+                  className={`h-10 rounded-lg text-[14px] font-semibold transition-colors ${active ? "text-white" : "text-white/80"}`}
                   style={active ? { backgroundColor: GREEN } : undefined}
                 >
                   {mode === "online" ? "Онлайн" : "Офлайн"}
@@ -883,7 +806,7 @@ export function CreateScreen({
 
               {locationAddress.trim() && (
                 <div className="mt-5">
-                  <p className="mb-2 text-[13px] text-white/60">Место проведения события</p>
+                  <p className="mb-2 text-[13px] text-white/55">Место проведения события</p>
                   <div className="flex items-center gap-3 rounded-xl bg-white/10 px-3 py-3">
                     <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: GREEN }}>
                       <MapPin size={16} className="text-white" />
@@ -897,25 +820,25 @@ export function CreateScreen({
               )}
 
               <label className="mt-5 block">
-                <span className="mb-2 block text-[13px] text-white/60">Квартира, офис или этаж</span>
+                <span className="mb-2 block text-[13px] text-white/55">Квартира, офис или этаж</span>
                 <input
                   value={locationApartment}
                   onChange={(event) => setLocationApartment(event.target.value)}
                   placeholder="Пример: квартира 102"
                   className="h-11 w-full rounded-xl bg-white/10 px-3 text-[14px] text-white outline-none placeholder:text-white/40"
                 />
-                <span className="mt-1.5 block text-[12px] text-white/45">Необязательно. Отображается в плане.</span>
+                <span className="mt-1 block text-[12px] text-white/40">Необязательно. Отображается в плане.</span>
               </label>
 
               <label className="mt-5 block">
-                <span className="mb-2 block text-[13px] text-white/60">Название места</span>
+                <span className="mb-2 block text-[13px] text-white/55">Название места</span>
                 <input
                   value={locationVenueName}
                   onChange={(event) => setLocationVenueName(event.target.value)}
                   placeholder="Пример: дом Данила"
                   className="h-11 w-full rounded-xl bg-white/10 px-3 text-[14px] text-white outline-none placeholder:text-white/40"
                 />
-                <span className="mt-1.5 block text-[12px] text-white/45">Необязательно. Отображается в плане.</span>
+                <span className="mt-1 block text-[12px] text-white/40">Необязательно. Отображается в плане.</span>
               </label>
             </div>
           ) : (
@@ -942,12 +865,66 @@ export function CreateScreen({
       )}
 
       {activeSheet === "details" && (
-        <HomeSheet title="Детали" onClose={() => setActiveSheet(null)} panelClassName="max-h-[85vh]" bodyClassName="overflow-y-auto">
-          {renderFinalOptions()}
-          {renderGalleryPhotos()}
-          <button type="button" onClick={() => setActiveSheet(null)} className="mt-4 h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
-            Готово
-          </button>
+        <HomeSheet variant="dark" title="Детали" onClose={() => setActiveSheet(null)} onConfirm={() => setActiveSheet(null)} panelClassName="max-h-[85vh]" bodyClassName="overflow-y-auto">
+          <div className="overflow-hidden rounded-2xl bg-white/[0.06]">
+            <div className="flex items-center justify-between gap-3 px-4 py-4">
+              <div className="flex items-center gap-2 text-white">
+                {visibility === "all" ? <Eye size={18} /> : <Lock size={18} />}
+                <span className="text-[15px] font-medium">Видимость</span>
+              </div>
+              <div className="grid w-[168px] grid-cols-2 gap-1 rounded-xl bg-white/10 p-1">
+                {([["all", "Все"], ["onlyMe", "Только я"]] as const).map(([value, label]) => {
+                  const active = visibility === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setVisibility(value)}
+                      className={`h-9 rounded-lg text-[13px] font-semibold ${active ? "text-white" : "text-white/80"}`}
+                      style={active ? { background: GREEN } : undefined}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <button type="button" onClick={() => setParticipantsOpen(true)} className="flex w-full items-center gap-3 border-t border-white/10 px-4 py-4 text-left">
+              <Users size={19} className="flex-shrink-0 text-white" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-medium text-white">Участники</p>
+                <p className="mt-0.5 text-[12px] text-white/50">{selectedParticipantItems.length ? `Выбрано: ${selectedParticipantItems.length}` : "Выбрать участников"}</p>
+              </div>
+              {selectedParticipantItems.length > 0 ? (
+                <div className="flex -space-x-2">
+                  {selectedParticipantItems.slice(0, 4).map((person) => person.avatarUrl
+                    ? <img loading="lazy" decoding="async" key={person.id} src={person.avatarUrl} alt={person.name} className="h-7 w-7 rounded-full border-2 border-[#1C1C1E] object-cover" />
+                    : <span key={person.id} className="h-7 w-7 rounded-full border-2 border-[#1C1C1E] bg-white/15" />)}
+                </div>
+              ) : <Plus size={19} className="text-white" />}
+            </button>
+
+            <div className="border-t border-white/10 px-4 py-4">
+              <label>
+                <span className="text-[15px] font-medium text-white">Лимит участников</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="2"
+                  step="1"
+                  value={maxParticipants}
+                  onChange={(event) => {
+                    setMaxParticipants(event.target.value);
+                    setMaxParticipantsError("");
+                  }}
+                  placeholder="Без ограничения"
+                  className="mt-2 h-11 w-full rounded-xl bg-white/10 px-3 text-[14px] text-white outline-none placeholder:text-white/40"
+                />
+              </label>
+              {maxParticipantsError && <p className="mt-2 text-[12px] font-medium text-red-400">{maxParticipantsError}</p>}
+            </div>
+          </div>
         </HomeSheet>
       )}
       {galleryToast && (
@@ -956,19 +933,19 @@ export function CreateScreen({
         </div>
       )}
       {participantsOpen && (
-        <HomeSheet title="Участники" onClose={() => setParticipantsOpen(false)} panelClassName="max-h-[85vh] flex flex-col" bodyClassName="flex min-h-0 flex-col">
-          <div className="mb-3 flex h-11 flex-shrink-0 items-center gap-2 rounded-xl bg-gray-100 px-3">
-            <Search size={17} strokeWidth={1.9} className="text-gray-500" />
+        <HomeSheet variant="dark" title="Участники" onClose={() => setParticipantsOpen(false)} panelClassName="max-h-[85vh] flex flex-col" bodyClassName="flex min-h-0 flex-col">
+          <div className="mb-3 flex h-11 flex-shrink-0 items-center gap-2 rounded-xl bg-white/10 px-3">
+            <Search size={17} strokeWidth={1.9} className="text-white/60" />
             <input
               value={participantQuery}
               onChange={(event) => setParticipantQuery(event.target.value)}
               placeholder="Поиск по имени"
-              className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-gray-400"
+              className="min-w-0 flex-1 bg-transparent text-[14px] text-white outline-none placeholder:text-white/40"
             />
           </div>
           <div className="max-h-[60vh] min-h-0 space-y-1 overflow-y-auto pb-2">
-            {participantsLoading && <p className="px-3 py-4 text-center text-[13px] text-muted-foreground">Загружаем участников...</p>}
-            {!participantsLoading && filteredPeople.length === 0 && <p className="px-3 py-4 text-center text-[13px] text-muted-foreground">Пользователи не найдены</p>}
+            {participantsLoading && <p className="px-3 py-4 text-center text-[13px] text-white/50">Загружаем участников...</p>}
+            {!participantsLoading && filteredPeople.length === 0 && <p className="px-3 py-4 text-center text-[13px] text-white/50">Пользователи не найдены</p>}
             {filteredPeople.map((person) => {
               const active = selectedParticipants.includes(person.id);
               return (
@@ -979,16 +956,16 @@ export function CreateScreen({
                     setSelectedPeople((items) => active ? items.filter((item) => item.id !== person.id) : items.some((item) => item.id === person.id) ? items : [...items, person]);
                   }}
                   className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left"
-                  style={active ? { backgroundColor: GREEN_LIGHT } : { backgroundColor: "var(--card)" }}
+                  style={active ? { background: "rgba(255,255,255,0.10)" } : undefined}
                 >
-                  {person.avatarUrl ? <img loading="lazy" decoding="async" src={person.avatarUrl} alt={person.name} className="h-9 w-9 rounded-full object-cover" /> : <span className="h-9 w-9 rounded-full bg-secondary" />}
-                  <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{person.name}</span>
+                  {person.avatarUrl ? <img loading="lazy" decoding="async" src={person.avatarUrl} alt={person.name} className="h-9 w-9 rounded-full object-cover" /> : <span className="h-9 w-9 rounded-full bg-white/10" />}
+                  <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-white">{person.name}</span>
                   {active && <Check size={16} color={GREEN} />}
                 </button>
               );
             })}
           </div>
-          <div className="flex-shrink-0 border-t border-border bg-white pt-3">
+          <div className="flex-shrink-0 border-t border-white/10 pt-3">
             <button onClick={() => setParticipantsOpen(false)} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
               Пригласить участников
             </button>
