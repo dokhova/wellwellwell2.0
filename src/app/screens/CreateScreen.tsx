@@ -1,21 +1,45 @@
 import { useEffect, useMemo, useState, type TouchEvent } from "react";
 import confetti from "canvas-confetti";
 import { ArrowLeft, Check, Eye, Image as ImageIcon, Lock, MapPin, Plus, Repeat2, Search, Sparkles, Users, X } from "lucide-react";
-import type { HomeFeedPlan, PartOfDay, PlanRepeat, Schedule, Screen, TimeMode, Visibility } from "@/app/types";
+import type { HomeFeedPlan, PartOfDay, PlanRepeat, Schedule, Screen, TimeMode, TrainingProgram, TrainingSession, TrainingWeek, Visibility } from "@/app/types";
 import { ALL_DAYS, GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES, WEEKDAY_VALUES } from "@/app/data/constants";
 import { DEFAULT_PLAN_AUTHOR, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { fetchRecentProfiles, searchProfiles } from "@/app/lib/api/profiles";
-import { track } from "@/app/lib/analytics";
 import { getNearestWeekdayDate, getRepeatUntil, normalizeSchedule, toIsoDate, toLocalIsoDate } from "@/app/lib/schedule";
 import { formatWeekdayRanges } from "@/app/lib/weekdayRanges";
 
-type CreateStep = "welcome" | "name" | "description" | "image" | "schedule" | "finalOptions" | "success";
-type PlanDraft = { title: string; description: string; coverImage: string | null; photos: string[]; schedule: Schedule };
+type CreateStep = "welcome" | "name" | "description" | "image" | "planType" | "program" | "schedule" | "finalOptions" | "success";
+type PlanDraft = { title: string; description: string; coverImage: string | null; photos: string[]; schedule: Schedule; trainingProgram?: TrainingProgram };
 type Person = { id: string; name: string; avatarUrl: string | null };
 const TITLE_LIMIT = 80;
 const DESCRIPTION_LIMIT = 3000;
+const TRAINING_DAYS = [
+  { dayLabel: "Пн", weekday: 1 },
+  { dayLabel: "Вт", weekday: 2 },
+  { dayLabel: "Ср", weekday: 3 },
+  { dayLabel: "Чт", weekday: 4 },
+  { dayLabel: "Пт", weekday: 5 },
+  { dayLabel: "Сб", weekday: 6 },
+  { dayLabel: "Вс", weekday: 7 },
+] as const;
+
+const TEMPLATE_5K: TrainingProgram = {
+  totalWeeks: 4,
+  weeks: [
+    { week: 1, levelLabel: "Восстановление", sessions: [
+      { id: "w1s1", dayLabel: "Пн", weekday: 1, title: "Лёгкий бег", note: "3 км · спокойный темп" },
+      { id: "w1s2", dayLabel: "Ср", weekday: 3, title: "Интервалы", note: "4×400 м" },
+      { id: "w1s3", dayLabel: "Сб", weekday: 6, title: "Длинная", note: "5 км непрерывно" },
+    ] },
+    { week: 2, levelLabel: "База", sessions: [
+      { id: "w2s1", dayLabel: "Пн", weekday: 1, title: "Темповый бег", note: "4 км" },
+      { id: "w2s2", dayLabel: "Ср", weekday: 3, title: "Интервалы", note: "5×400 м" },
+      { id: "w2s3", dayLabel: "Сб", weekday: 6, title: "Длинная", note: "6 км" },
+    ] },
+  ],
+};
 
 export type CreatedPlanResult = {
   plan: PlanDraft;
@@ -79,7 +103,7 @@ const defaultSchedule = (): Schedule => ({
   repeat: { type: "none" },
 });
 
-const defaultPlan = (): PlanDraft => ({ title: "", description: "", coverImage: null, photos: [], schedule: defaultSchedule() });
+const defaultPlan = (): PlanDraft => ({ title: "", description: "", coverImage: null, photos: [], schedule: defaultSchedule(), trainingProgram: undefined });
 
 export const finalizeSchedule = (schedule: Schedule): Schedule => {
   const mode = schedule.timeMode ?? schedule.mode ?? "partOfDay";
@@ -129,6 +153,7 @@ export function CreateScreen({
     coverImage: editingPlan.coverUrl ?? null,
     photos: editingPlan.photos ?? [],
     schedule: normalizeSchedule(editingPlan.schedule),
+    trainingProgram: editingPlan.trainingProgram,
   } : defaultPlan());
   const [titleError, setTitleError] = useState("");
   const [scheduleError, setScheduleError] = useState("");
@@ -151,6 +176,11 @@ export function CreateScreen({
   const [distanceValue, setDistanceValue] = useState(() => editingPlan?.distanceLabel?.match(/[\d.,]+/)?.[0]?.replace(",", ".") ?? "");
   const [distanceUnit, setDistanceUnit] = useState<"км" | "м">(editingPlan?.distanceLabel?.trim().endsWith(" км") ? "км" : "м");
   const [durationMinutes, setDurationMinutes] = useState(() => editingPlan?.duration?.match(/[\d.,]+/)?.[0]?.replace(",", ".") ?? "");
+  const [planType, setPlanType] = useState<"simple" | "training">(editingPlan?.trainingProgram ? "training" : "simple");
+  const [sessionWeekIndex, setSessionWeekIndex] = useState<number | null>(null);
+  const [sessionDayIndex, setSessionDayIndex] = useState(0);
+  const [sessionTitle, setSessionTitle] = useState("");
+  const [sessionNote, setSessionNote] = useState("");
   const currentSchedule = draft.schedule;
   const timeMode: TimeMode = currentSchedule.timeMode ?? currentSchedule.mode ?? "partOfDay";
   const partOfDay = currentSchedule.partOfDay;
@@ -214,6 +244,66 @@ export function CreateScreen({
   };
 
   const updatePlan = (next: Partial<PlanDraft>) => setDraft((item) => ({ ...item, ...next }));
+  const program = draft.trainingProgram ?? { weeks: [] as TrainingWeek[] };
+  const setProgram = (next: TrainingProgram) => updatePlan({ trainingProgram: next });
+  const addWeek = () => setProgram({
+    ...program,
+    weeks: [...program.weeks, { week: program.weeks.length + 1, sessions: [] }],
+  });
+  const removeWeek = (weekIndex: number) => {
+    setProgram({
+      ...program,
+      weeks: program.weeks
+        .filter((_, index) => index !== weekIndex)
+        .map((week, index) => ({ ...week, week: index + 1 })),
+    });
+    setSessionWeekIndex((current) => current === weekIndex ? null : current !== null && current > weekIndex ? current - 1 : current);
+  };
+  const addSession = (weekIndex: number, session: Omit<TrainingSession, "id">) => {
+    const week = program.weeks[weekIndex];
+    if (!week) return;
+    const id = `w${week.week}s${crypto.randomUUID()}`;
+    setProgram({
+      ...program,
+      weeks: program.weeks.map((item, index) => index === weekIndex
+        ? { ...item, sessions: [...item.sessions, { id, ...session }] }
+        : item),
+    });
+  };
+  const removeSession = (weekIndex: number, sessionId: string) => setProgram({
+    ...program,
+    weeks: program.weeks.map((week, index) => index === weekIndex
+      ? { ...week, sessions: week.sessions.filter((session) => session.id !== sessionId) }
+      : week),
+  });
+  const applyTemplate5k = () => {
+    setProgram(TEMPLATE_5K);
+    setSessionWeekIndex(null);
+  };
+  const updateWeekLevel = (weekIndex: number, levelLabel: string) => setProgram({
+    ...program,
+    weeks: program.weeks.map((week, index) => index === weekIndex
+      ? { ...week, levelLabel: levelLabel || undefined }
+      : week),
+  });
+  const resetSessionForm = () => {
+    setSessionWeekIndex(null);
+    setSessionDayIndex(0);
+    setSessionTitle("");
+    setSessionNote("");
+  };
+  const submitSession = (weekIndex: number) => {
+    const title = sessionTitle.trim();
+    if (!title) return;
+    const day = TRAINING_DAYS[sessionDayIndex];
+    addSession(weekIndex, {
+      dayLabel: day.dayLabel,
+      weekday: day.weekday,
+      title,
+      ...(sessionNote.trim() ? { note: sessionNote.trim() } : {}),
+    });
+    resetSessionForm();
+  };
   const updateSchedule = (next: Partial<Schedule>) => updatePlan({ schedule: { ...currentSchedule, ...next } });
   const updateTitle = (value: string) => {
     updatePlan({ title: value.slice(0, TITLE_LIMIT) });
@@ -320,7 +410,12 @@ export function CreateScreen({
     }
 
     const finalizedSchedule = finalizeSchedule(draft.schedule);
-    const finalizedDraft = { ...draft, schedule: finalizedSchedule };
+    const trainingProgram = planType === "training"
+      && draft.trainingProgram
+      && draft.trainingProgram.weeks.some((week) => week.sessions.length > 0)
+      ? draft.trainingProgram
+      : undefined;
+    const finalizedDraft = { ...draft, schedule: finalizedSchedule, trainingProgram };
     const distanceLabel = metricMode === "distance" && Number(distanceValue) > 0 ? `${Number(distanceValue)} ${distanceUnit}` : undefined;
     const duration = metricMode === "time" && Number(durationMinutes) > 0 ? `${Number(durationMinutes)} мин` : undefined;
     const maxParticipantsValue = maxParticipants.trim();
@@ -348,6 +443,7 @@ export function CreateScreen({
         coverUrl: draft.coverImage ?? undefined,
         photos: draft.photos.length > 0 ? draft.photos : undefined,
         schedule: finalizedSchedule,
+        trainingProgram,
         maxParticipants: parsedMaxParticipants,
         timeDate: getTimeDate(finalizedSchedule),
         address: locationMode === "offline" && locationAddress.trim() ? locationAddress.trim() : undefined,
@@ -381,6 +477,7 @@ export function CreateScreen({
       photos: draft.photos.length > 0 ? draft.photos : undefined,
       gradient: PLAN_TAG_GRADIENTS.other,
       schedule: finalizedSchedule,
+      trainingProgram,
       participants: authorParticipants,
       participantsLabel: "1 чел.",
       maxParticipants: parsedMaxParticipants,
@@ -434,8 +531,11 @@ export function CreateScreen({
     : "";
   const titleLeft = TITLE_LIMIT - draft.title.length;
   const descriptionLeft = DESCRIPTION_LIMIT - draft.description.length;
-  const progressSteps = 6;
-  const progressIndex = ["welcome", "name", "description", "image", "schedule", "finalOptions", "success"].indexOf(step);
+  const stepFlow: CreateStep[] = planType === "training"
+    ? ["welcome", "name", "description", "image", "planType", "program", "schedule", "finalOptions", "success"]
+    : ["welcome", "name", "description", "image", "planType", "schedule", "finalOptions", "success"];
+  const progressSteps = stepFlow.length - 2;
+  const progressIndex = Math.max(0, stepFlow.indexOf(step) - 1);
 
   const renderProgress = () => (
     <div className="flex justify-center gap-1.5 px-4 pb-3">
@@ -737,6 +837,140 @@ export function CreateScreen({
             </section>
           </div>
         );
+      case "planType":
+        return (
+          <div className="pt-6">
+            <p className="mb-2 text-[13px] text-muted-foreground">Шаг: тип плана</p>
+            <h2 className="mb-5 text-[28px] font-bold leading-8 text-foreground">Что за план?</h2>
+            <button
+              type="button"
+              onClick={() => setPlanType("simple")}
+              className="mb-2.5 w-full rounded-xl p-4 text-left"
+              style={{ background: "var(--card)", border: planType === "simple" ? `2px solid ${GREEN}` : "2px solid transparent" }}
+            >
+              <p className="text-[16px] font-semibold text-foreground">Обычный план</p>
+              <p className="mt-0.5 text-[13px] text-muted-foreground">Событие с датой и участниками</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPlanType("training")}
+              className="w-full rounded-xl p-4 text-left"
+              style={{ background: "var(--card)", border: planType === "training" ? `2px solid ${GREEN}` : "2px solid transparent" }}
+            >
+              <p className="text-[16px] font-semibold text-foreground">С тренировкой</p>
+              <p className="mt-0.5 text-[13px] text-muted-foreground">Программа по неделям, отметки прогресса</p>
+            </button>
+          </div>
+        );
+      case "program":
+        return (
+          <div className="pt-6">
+            <h2 className="text-[28px] font-bold leading-8 text-foreground">Программа</h2>
+            <button
+              type="button"
+              onClick={applyTemplate5k}
+              className="mt-4 h-11 w-full rounded-xl bg-card text-[14px] font-semibold active:opacity-85"
+              style={{ color: GREEN }}
+            >
+              Заполнить шаблоном 5 км
+            </button>
+
+            <div className="mt-5 space-y-4">
+              {program.weeks.map((week, weekIndex) => (
+                <section key={week.week} className="rounded-xl bg-card p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-[17px] font-semibold text-foreground">Неделя {week.week}</h3>
+                    <button type="button" onClick={() => removeWeek(weekIndex)} className="flex h-8 w-8 items-center justify-center rounded-full bg-muted active:opacity-80" aria-label={`Удалить неделю ${week.week}`}>
+                      <X size={16} className="text-muted-foreground" />
+                    </button>
+                  </div>
+                  <input
+                    value={week.levelLabel ?? ""}
+                    onChange={(event) => updateWeekLevel(weekIndex, event.target.value)}
+                    onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }}
+                    onBlur={() => setFieldFocused(false)}
+                    placeholder="Уровень недели (необязательно)"
+                    className="mt-3 h-11 w-full rounded-xl bg-muted px-3.5 text-[14px] outline-none placeholder:text-muted-foreground"
+                  />
+
+                  {week.sessions.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {week.sessions.map((session) => (
+                        <div key={session.id} className="flex items-center gap-3 rounded-xl bg-muted px-3 py-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[14px] font-semibold text-foreground">{session.dayLabel} · {session.title}</p>
+                            {session.note && <p className="mt-0.5 text-[12px] text-muted-foreground">{session.note}</p>}
+                          </div>
+                          <button type="button" onClick={() => removeSession(weekIndex, session.id)} className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full active:opacity-75" aria-label={`Удалить тренировку ${session.title}`}>
+                            <X size={16} className="text-muted-foreground" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {sessionWeekIndex === weekIndex ? (
+                    <div className="mt-3 rounded-xl bg-muted p-3">
+                      <div className="grid grid-cols-7 gap-1">
+                        {TRAINING_DAYS.map((day, dayIndex) => (
+                          <button
+                            type="button"
+                            key={day.dayLabel}
+                            onClick={() => setSessionDayIndex(dayIndex)}
+                            className="aspect-square rounded-full text-[11px] font-semibold"
+                            style={sessionDayIndex === dayIndex ? { backgroundColor: GREEN, color: "#fff" } : { background: "var(--card)", color: "var(--foreground)" }}
+                          >
+                            {day.dayLabel}
+                          </button>
+                        ))}
+                      </div>
+                      <input
+                        value={sessionTitle}
+                        onChange={(event) => setSessionTitle(event.target.value)}
+                        onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }}
+                        onBlur={() => setFieldFocused(false)}
+                        placeholder="Название тренировки"
+                        className="mt-3 h-11 w-full rounded-xl bg-card px-3.5 text-[14px] outline-none placeholder:text-muted-foreground"
+                      />
+                      <input
+                        value={sessionNote}
+                        onChange={(event) => setSessionNote(event.target.value)}
+                        onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }}
+                        onBlur={() => setFieldFocused(false)}
+                        placeholder="Заметка: дистанция, темп…"
+                        className="mt-2 h-11 w-full rounded-xl bg-card px-3.5 text-[14px] outline-none placeholder:text-muted-foreground"
+                      />
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button type="button" onClick={resetSessionForm} className="h-10 rounded-xl bg-card text-[13px] font-semibold text-foreground">Отмена</button>
+                        <button type="button" disabled={!sessionTitle.trim()} onClick={() => submitSession(weekIndex)} className="h-10 rounded-xl text-[13px] font-semibold text-white disabled:opacity-40" style={{ backgroundColor: GREEN }}>Добавить</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSessionDayIndex(0);
+                        setSessionTitle("");
+                        setSessionNote("");
+                        setSessionWeekIndex(weekIndex);
+                      }}
+                      className="mt-3 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-muted text-[13px] font-semibold active:opacity-80"
+                      style={{ color: GREEN }}
+                    >
+                      <Plus size={16} />
+                      Добавить тренировку
+                    </button>
+                  )}
+                </section>
+              ))}
+            </div>
+
+            <button type="button" onClick={addWeek} className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-card text-[14px] font-semibold active:opacity-85" style={{ color: GREEN }}>
+              <Plus size={18} />
+              Добавить неделю
+            </button>
+          </div>
+        );
       case "schedule":
         return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Регулярность</h2>{renderSchedule()}</div>;
       case "finalOptions":
@@ -749,8 +983,19 @@ export function CreateScreen({
   const renderFooter = () => {
     if (step === "success") return null;
     if (step === "welcome") return <button onClick={() => goTo("name")} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Создать</button>;
-    if (step === "description" || step === "image") return <div className="flex gap-3"><button disabled={uploadProgress !== null} onClick={() => goTo(step === "description" ? "image" : "schedule")} className="h-12 flex-1 rounded-xl bg-card text-[15px] font-semibold disabled:opacity-50">Пропустить</button><button disabled={uploadProgress !== null} onClick={() => goTo(step === "description" ? "image" : "schedule")} className="h-12 flex-1 rounded-xl text-[15px] font-semibold text-white disabled:opacity-50" style={{ backgroundColor: GREEN }}>Далее</button></div>;
-    const action = step === "name" ? continueFromName : step === "schedule" ? continueFromSchedule : handleCreate;
+    if (step === "description" || step === "image") {
+      const nextStep: CreateStep = step === "description" ? "image" : "planType";
+      return <div className="flex gap-3"><button disabled={uploadProgress !== null} onClick={() => goTo(nextStep)} className="h-12 flex-1 rounded-xl bg-card text-[15px] font-semibold disabled:opacity-50">Пропустить</button><button disabled={uploadProgress !== null} onClick={() => goTo(nextStep)} className="h-12 flex-1 rounded-xl text-[15px] font-semibold text-white disabled:opacity-50" style={{ backgroundColor: GREEN }}>Далее</button></div>;
+    }
+    const action = step === "name"
+      ? continueFromName
+      : step === "planType"
+        ? () => goTo(planType === "training" ? "program" : "schedule")
+        : step === "program"
+          ? () => goTo("schedule")
+          : step === "schedule"
+            ? continueFromSchedule
+            : handleCreate;
     return <button onClick={action} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>{step === "finalOptions" ? (isEditing ? "Сохранить" : "Создать") : "Далее"}</button>;
   };
 

@@ -2,13 +2,50 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, Edit3, MessageCircle } from "lucide-react";
 import type { Article, ChatPeer, HomeFeedPlan, PlanId, Screen } from "@/app/types";
 import { formatNearestDate, getNextOccurrence, weekDateMonths } from "@/app/data/calendar";
-import { GREEN, GREEN_LIGHT } from "@/app/data/constants";
+import { GREEN, GREEN_LIGHT, PLAN_DARK } from "@/app/data/constants";
 import { DEFAULT_COVER_URLS, profileFollowers, profileFollowing, resolveCoverUrl, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
-import { PlanListCard } from "@/app/screens/PlansScreen";
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { isSchedulePastRepeatEnd } from "@/app/lib/schedule";
 
 export type ConnectionType = "followers" | "following";
+
+function ProfilePlanCard({
+  plan,
+  dayNumber,
+  monthLabel,
+  scheduleMeta,
+  onOpen,
+}: {
+  plan: HomeFeedPlan;
+  dayNumber?: number | string;
+  monthLabel?: string;
+  scheduleMeta?: string;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      onClick={onOpen}
+      className="flex w-full items-center gap-3 rounded-2xl p-3 text-left active:opacity-90"
+      style={{ background: PLAN_DARK.card }}
+    >
+      <div
+        className="h-[52px] w-[52px] flex-shrink-0 overflow-hidden rounded-xl"
+        style={{ background: plan.gradient ?? "rgba(255,255,255,0.10)" }}
+      >
+        {plan.coverUrl && <img loading="lazy" decoding="async" src={plan.coverUrl} alt="" className="h-full w-full object-cover" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[12px] leading-4" style={{ color: PLAN_DARK.textSecondary }}>
+          {[dayNumber, monthLabel].filter(Boolean).join(" ") || scheduleMeta}
+        </p>
+        <h3 className="mt-0.5 truncate text-[15px] font-semibold leading-5" style={{ color: PLAN_DARK.text }}>{plan.title}</h3>
+        {scheduleMeta && (dayNumber || monthLabel) && (
+          <p className="mt-0.5 truncate text-[12px]" style={{ color: PLAN_DARK.textSecondary }}>{scheduleMeta}</p>
+        )}
+      </div>
+    </button>
+  );
+}
 
 function Avatar({ user }: { user: ExpertConnection }) {
   if (user.avatarUrl) {
@@ -180,8 +217,11 @@ export function ProfileScreen(props: {
   const hasMoreNearestPlans = nearestPlans.length > visibleNearestPlans.length;
   const coverUrls = props.profile.coverUrls === null ? [...DEFAULT_COVER_URLS] : props.profile.coverUrls ?? [];
   const resolvedCoverUrls = coverUrls.map(resolveCoverUrl);
-  const heroCover = resolvedCoverUrls[0] ?? null;
-  const galleryPhotos = props.profile.photoUrls ?? [];
+  const heroImage = props.profile.photoUrl ?? resolvedCoverUrls[0] ?? null;
+  const galleryItems = [
+    ...(props.profile.photoUrls ?? []),
+    ...resolvedCoverUrls,
+  ];
   const monthShortByName: Record<string, string> = {
     января: "Янв",
     февраля: "Фев",
@@ -260,11 +300,11 @@ export function ProfileScreen(props: {
   }, [measureBioClamp]);
 
   return (
-    <div className="relative h-full overflow-y-auto bg-card">
+    <div className="relative h-full overflow-y-auto" style={{ background: PLAN_DARK.bg }}>
       <div className="relative flex min-h-full flex-col">
         <div className="relative flex min-h-[82dvh] flex-col justify-end overflow-hidden">
-          {heroCover ? (
-            <img src={heroCover} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" decoding="async" />
+          {heroImage ? (
+            <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" decoding="async" />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center" style={{ background: "linear-gradient(135deg, var(--secondary) 0%, var(--brand-bright) 100%)" }}>
               <span className="text-[62px] font-bold" style={{ color: GREEN }}>{profileInitials}</span>
@@ -377,84 +417,84 @@ export function ProfileScreen(props: {
           </div>
         </div>
 
-        <section className="relative z-10 -mt-6 flex-shrink-0 rounded-t-[28px] bg-card px-4 pb-6 pt-6">
-          {galleryPhotos.length > 0 && (
-            <div className="mb-7 grid grid-cols-2 gap-2.5">
-              {galleryPhotos.map((photo, index) => (
-                <img key={`${photo}-${index}`} src={photo} alt="" loading="lazy" decoding="async" className="aspect-[3/4] w-full rounded-2xl object-cover" />
+        <section className="relative z-10 flex-shrink-0 px-4 pb-8 pt-6" style={{ background: PLAN_DARK.bg }}>
+          {galleryItems.length > 0 && (
+            <div className="-mx-4 mb-7 flex gap-2.5 overflow-x-auto px-4 pb-1" style={{ scrollbarWidth: "none" }}>
+              {galleryItems.map((photo, index) => (
+                <img key={`${photo}-${index}`} src={photo} alt="" loading="lazy" decoding="async" className="h-[104px] w-[150px] flex-shrink-0 rounded-2xl object-cover" />
               ))}
             </div>
           )}
 
           {props.isMe ? (
             <div className="mt-7">
-              <h2 className="mb-3 text-[19px] font-bold leading-6 text-foreground">Ближайшие планы</h2>
+              <h2 className="mb-3 text-[19px] font-bold leading-6" style={{ color: PLAN_DARK.text }}>Ближайшие планы</h2>
               {props.plansLoading && visibleNearestPlans.length === 0 ? (
-                <div className="rounded-xl bg-muted px-4 py-6 text-center">
-                  <p className="text-[14px] leading-5 text-muted-foreground">Загружаем ближайшие планы…</p>
+                <div className="rounded-xl px-4 py-6 text-center" style={{ background: PLAN_DARK.card }}>
+                  <p className="text-[14px] leading-5" style={{ color: PLAN_DARK.textSecondary }}>Загружаем ближайшие планы…</p>
                 </div>
               ) : visibleNearestPlans.length > 0 ? (
                 <div className="space-y-2.5">
                   {visibleNearestPlans.map((plan) => {
                     const nearestDate = formatNearestDate(plan.schedule);
                     return (
-                      <PlanListCard
+                      <ProfilePlanCard
                         key={plan.id}
                         plan={plan}
                         dayNumber={nearestDate.dayNumber}
                         monthLabel={nearestDate.monthLabel}
                         scheduleMeta={plan.timeDate}
                         onOpen={() => props.onPlanOpen(plan.id)}
-                        showToggle={false}
                       />
                     );
                   })}
                   {hasMoreNearestPlans && (
                     <button
                       onClick={() => setShowAllPlans(true)}
-                      className="mt-1 flex h-11 w-full items-center justify-center rounded-xl bg-muted text-[14px] font-semibold text-foreground active:opacity-85"
+                      className="mt-1 flex h-11 w-full items-center justify-center rounded-xl text-[14px] font-semibold active:opacity-85"
+                      style={{ background: PLAN_DARK.card, color: PLAN_DARK.text }}
                     >
                       Показать все
                     </button>
                   )}
                 </div>
               ) : (
-                <div className="rounded-xl bg-muted px-4 py-6 text-center">
-                  <p className="text-[14px] leading-5 text-muted-foreground">Нет ближайших планов</p>
+                <div className="rounded-xl px-4 py-6 text-center" style={{ background: PLAN_DARK.card }}>
+                  <p className="text-[14px] leading-5" style={{ color: PLAN_DARK.textSecondary }}>Нет ближайших планов</p>
                 </div>
               )}
             </div>
           ) : (
             <div className="mt-7">
-              <h2 className="mb-3 text-[19px] font-bold leading-6 text-foreground">Планы</h2>
+              <h2 className="mb-3 text-[19px] font-bold leading-6" style={{ color: PLAN_DARK.text }}>Планы</h2>
               {props.plans.length > 0 ? (
                 <div className="space-y-2.5">
                   {visiblePlans.map((plan, index) => {
                     const nearestDate = formatNearestDate(plan.schedule);
                     return (
-                      <PlanListCard
+                      <ProfilePlanCard
                         key={plan.id}
                         plan={plan}
                         dayNumber={nearestDate.dayNumber}
                         monthLabel={nearestDate.monthLabel || (monthShortByName[weekDateMonths[index % weekDateMonths.length]] ?? weekDateMonths[index % weekDateMonths.length])}
                         scheduleMeta={`${plan.timeDate} · Активен`}
                         onOpen={() => props.onPlanOpen(plan.id)}
-                        showToggle={false}
                       />
                     );
                   })}
                   {hasMorePlans && (
                     <button
                       onClick={() => setShowAllPlans(true)}
-                      className="mt-1 flex h-11 w-full items-center justify-center rounded-xl bg-muted text-[14px] font-semibold text-foreground active:opacity-85"
+                      className="mt-1 flex h-11 w-full items-center justify-center rounded-xl text-[14px] font-semibold active:opacity-85"
+                      style={{ background: PLAN_DARK.card, color: PLAN_DARK.text }}
                     >
                       Все планы
                     </button>
                   )}
                 </div>
               ) : (
-                <div className="rounded-xl bg-muted px-4 py-8 text-center">
-                  <p className="text-[14px] leading-5 text-muted-foreground">Нет публичных планов</p>
+                <div className="rounded-xl px-4 py-8 text-center" style={{ background: PLAN_DARK.card }}>
+                  <p className="text-[14px] leading-5" style={{ color: PLAN_DARK.textSecondary }}>Нет публичных планов</p>
                 </div>
               )}
             </div>
