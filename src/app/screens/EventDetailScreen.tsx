@@ -345,7 +345,6 @@ export function EventDetailScreen({
   void authorVerified;
   void readTime;
   void badgeDate;
-  void backgroundGradient;
   const [joined, setJoined] = useState(Boolean(initiallyJoined));
   const [toast, setToast] = useState("");
   const [sheet, setSheet] = useState<"participants" | "profile" | "share" | "photos" | "unfollow" | null>(null);
@@ -924,7 +923,9 @@ export function EventDetailScreen({
 
   return (
     <div className="relative flex h-full flex-col overflow-x-hidden overflow-y-hidden" style={{ background: PLAN_DARK.bg, color: PLAN_DARK.text }}>
-      {coverSrc && <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden"><img src={coverSrc} alt="" className="h-full w-full object-cover opacity-70" style={{ filter: "blur(60px)", transform: "scale(1.3)" }} /><div className="absolute inset-0 bg-black/60" /></div>}
+      {coverSrc
+        ? <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden"><img src={coverSrc} alt="" className="h-full w-full object-cover opacity-70" style={{ filter: "blur(60px)", transform: "scale(1.3)" }} /><div className="absolute inset-0 bg-black/60" /></div>
+        : backgroundGradient && <div className="pointer-events-none absolute inset-0 z-0" style={{ background: backgroundGradient }} />}
       {toast && (
         <div
           className="absolute left-1/2 z-40 -translate-x-1/2 rounded-full px-4 py-2 text-[14px] font-medium text-white shadow-lg"
@@ -938,6 +939,7 @@ export function EventDetailScreen({
           <div className="relative aspect-[4/5] w-full">
             <div className="absolute inset-0 overflow-hidden" style={{ maskImage: COVER_MASK, WebkitMaskImage: COVER_MASK }}>
               {coverSrc && <img loading="lazy" decoding="async" src={coverSrc} alt={title} className="h-full w-full object-cover" />}
+              {!coverSrc && backgroundGradient && <div className="h-full w-full" style={{ background: backgroundGradient }} />}
             </div>
             <button onClick={onBack} className="absolute left-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur-sm active:opacity-80" style={{ top: "calc(env(safe-area-inset-top) + 16px)" }} aria-label="Назад"><ArrowLeft size={20} /></button>
             <div className="absolute right-4 flex items-center gap-2" style={{ top: "calc(env(safe-area-inset-top) + 16px)" }}>

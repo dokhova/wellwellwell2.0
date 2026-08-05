@@ -1,29 +1,32 @@
-import { useEffect, useMemo, useState, type TouchEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import confetti from "canvas-confetti";
-import { ArrowLeft, Check, Eye, Image as ImageIcon, Lock, MapPin, Plus, Repeat2, Search, Sparkles, Users, X } from "lucide-react";
-import type { HomeFeedPlan, PartOfDay, PlanRepeat, Schedule, Screen, TimeMode, TrainingProgram, TrainingSession, TrainingWeek, Visibility } from "@/app/types";
+import { AlignLeft, Calendar, Camera, Check, ChevronRight, Eye, Image as ImageIcon, Lock, MapPin, Plus, Repeat2, Search, SlidersHorizontal, Users, X } from "lucide-react";
+import type { HomeFeedPlan, PartOfDay, PlanRepeat, Schedule, Screen, TimeMode, Visibility } from "@/app/types";
 import { ALL_DAYS, GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES, WEEKDAY_VALUES } from "@/app/data/constants";
-import { DEFAULT_PLAN_AUTHOR, PLAN_TAG_GRADIENTS } from "@/app/data/plans";
+import { DEFAULT_PLAN_AUTHOR } from "@/app/data/plans";
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { fetchRecentProfiles, searchProfiles } from "@/app/lib/api/profiles";
 import { getNearestWeekdayDate, getRepeatUntil, normalizeSchedule, toIsoDate, toLocalIsoDate } from "@/app/lib/schedule";
 import { formatWeekdayRanges } from "@/app/lib/weekdayRanges";
 
-type CreateStep = "welcome" | "name" | "description" | "image" | "planType" | "program" | "schedule" | "finalOptions" | "success";
-type PlanDraft = { title: string; description: string; coverImage: string | null; photos: string[]; schedule: Schedule; trainingProgram?: TrainingProgram };
+type Sheet = null | "background" | "datetime" | "place" | "description" | "details";
+type PlanDraft = { title: string; description: string; coverImage: string | null; photos: string[]; schedule: Schedule; gradient?: string };
 type Person = { id: string; name: string; avatarUrl: string | null };
 const TITLE_LIMIT = 80;
 const DESCRIPTION_LIMIT = 3000;
-const TRAINING_DAYS = [
-  { dayLabel: "Пн", weekday: 1 },
-  { dayLabel: "Вт", weekday: 2 },
-  { dayLabel: "Ср", weekday: 3 },
-  { dayLabel: "Чт", weekday: 4 },
-  { dayLabel: "Пт", weekday: 5 },
-  { dayLabel: "Сб", weekday: 6 },
-  { dayLabel: "Вс", weekday: 7 },
-] as const;
+const BG_PRESETS: string[] = [
+  "linear-gradient(160deg, #00A89D 0%, #00655E 100%)",
+  "linear-gradient(160deg, #00C2B2 0%, #0E7490 100%)",
+  "linear-gradient(160deg, #2E6BFF 0%, #00C2B2 100%)",
+  "linear-gradient(160deg, #34C759 0%, #00887F 100%)",
+  "linear-gradient(160deg, #7C5CFF 0%, #C13BFF 100%)",
+  "linear-gradient(160deg, #FF7E5F 0%, #FF3D77 100%)",
+  "linear-gradient(160deg, #FF9D2E 0%, #FF3D3D 100%)",
+  "linear-gradient(160deg, #FF4D8D 0%, #7C2BFF 100%)",
+  "linear-gradient(160deg, #2B3A67 0%, #0B1026 100%)",
+];
+const DEFAULT_BG = BG_PRESETS[0];
 
 export type CreatedPlanResult = {
   plan: PlanDraft;
@@ -69,15 +72,6 @@ const getWeekdayFromDate = (value: string) => {
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("ru-RU", { weekday: "long" });
 };
 
-const scrollFocusedFieldIntoView = (element: HTMLElement) => {
-  window.setTimeout(() => {
-    element.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, 300);
-};
-
-const isEditableElement = (element: Element | null): element is HTMLInputElement | HTMLTextAreaElement =>
-  element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
-
 const defaultSchedule = (): Schedule => ({
   mode: "partOfDay",
   timeMode: "partOfDay",
@@ -87,7 +81,7 @@ const defaultSchedule = (): Schedule => ({
   repeat: { type: "none" },
 });
 
-const defaultPlan = (): PlanDraft => ({ title: "", description: "", coverImage: null, photos: [], schedule: defaultSchedule(), trainingProgram: undefined });
+const defaultPlan = (): PlanDraft => ({ title: "", description: "", coverImage: null, photos: [], schedule: defaultSchedule(), gradient: undefined });
 
 export const finalizeSchedule = (schedule: Schedule): Schedule => {
   const mode = schedule.timeMode ?? schedule.mode ?? "partOfDay";
@@ -129,15 +123,14 @@ export function CreateScreen({
   const isEditing = Boolean(editingPlan);
   const [people, setPeople] = useState<Person[]>([]);
 
-  const [step, setStep] = useState<CreateStep>("name");
-  const [history, setHistory] = useState<CreateStep[]>([]);
+  const [activeSheet, setActiveSheet] = useState<Sheet>(null);
   const [draft, setDraft] = useState<PlanDraft>(() => editingPlan ? {
     title: editingPlan.title.slice(0, TITLE_LIMIT),
     description: editingPlan.description.slice(0, DESCRIPTION_LIMIT),
     coverImage: editingPlan.coverUrl ?? null,
     photos: editingPlan.photos ?? [],
     schedule: normalizeSchedule(editingPlan.schedule),
-    trainingProgram: editingPlan.trainingProgram,
+    gradient: editingPlan.gradient,
   } : defaultPlan());
   const [titleError, setTitleError] = useState("");
   const [scheduleError, setScheduleError] = useState("");
@@ -152,7 +145,6 @@ export function CreateScreen({
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [galleryUploadProgress, setGalleryUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [galleryToast, setGalleryToast] = useState("");
-  const [fieldFocused, setFieldFocused] = useState(false);
   const [locationMode, setLocationMode] = useState<"online" | "offline">(editingPlan?.format ?? "online");
   const [locationAddress, setLocationAddress] = useState(editingPlan?.address ?? "");
   const [selectedLevel, setSelectedLevel] = useState<HomeFeedPlan["level"]>(editingPlan?.level);
@@ -160,11 +152,7 @@ export function CreateScreen({
   const [distanceValue, setDistanceValue] = useState(() => editingPlan?.distanceLabel?.match(/[\d.,]+/)?.[0]?.replace(",", ".") ?? "");
   const [distanceUnit, setDistanceUnit] = useState<"км" | "м">(editingPlan?.distanceLabel?.trim().endsWith(" км") ? "км" : "м");
   const [durationMinutes, setDurationMinutes] = useState(() => editingPlan?.duration?.match(/[\d.,]+/)?.[0]?.replace(",", ".") ?? "");
-  const [planType, setPlanType] = useState<"simple" | "training">(editingPlan?.trainingProgram ? "training" : "simple");
-  const [sessionWeekIndex, setSessionWeekIndex] = useState<number | null>(null);
-  const [sessionDayIndices, setSessionDayIndices] = useState<number[]>([]);
-  const [sessionTitle, setSessionTitle] = useState("");
-  const [sessionNote, setSessionNote] = useState("");
+  const planType = "simple" as const;
   const currentSchedule = draft.schedule;
   const timeMode: TimeMode = currentSchedule.timeMode ?? currentSchedule.mode ?? "partOfDay";
   const partOfDay = currentSchedule.partOfDay;
@@ -206,88 +194,7 @@ export function CreateScreen({
     };
   }, [currentAuthor.id, participantQuery, participantsOpen]);
 
-  const goTo = (next: CreateStep) => {
-    if (uploadProgress !== null) return;
-    setHistory((items) => [...items, step]);
-    setStep(next);
-    setTitleError("");
-    setScheduleError("");
-  };
-
-  const goBack = () => {
-    if (uploadProgress !== null) return;
-    if (history.length === 0) {
-      onNavigate(backTo);
-      return;
-    }
-    const previous = history[history.length - 1];
-    setHistory((items) => items.slice(0, -1));
-    setStep(previous);
-    setTitleError("");
-    setScheduleError("");
-  };
-
   const updatePlan = (next: Partial<PlanDraft>) => setDraft((item) => ({ ...item, ...next }));
-  const program = draft.trainingProgram ?? { weeks: [] as TrainingWeek[] };
-  const setProgram = (next: TrainingProgram) => updatePlan({ trainingProgram: next });
-  const addWeek = () => {
-    const nextIndex = program.weeks.length;
-    setProgram({
-      ...program,
-      weeks: [...program.weeks, { week: nextIndex + 1, sessions: [] }],
-    });
-    setSessionDayIndices([]);
-    setSessionTitle("");
-    setSessionNote("");
-    setSessionWeekIndex(nextIndex);
-  };
-  const removeWeek = (weekIndex: number) => {
-    setProgram({
-      ...program,
-      weeks: program.weeks
-        .filter((_, index) => index !== weekIndex)
-        .map((week, index) => ({ ...week, week: index + 1 })),
-    });
-    setSessionWeekIndex((current) => current === weekIndex ? null : current !== null && current > weekIndex ? current - 1 : current);
-  };
-  const addSessions = (weekIndex: number, sessions: Omit<TrainingSession, "id">[]) => {
-    const week = program.weeks[weekIndex];
-    if (!week || sessions.length === 0) return;
-    const withIds = sessions.map((session) => ({ id: `w${week.week}s${crypto.randomUUID()}`, ...session }));
-    setProgram({
-      ...program,
-      weeks: program.weeks.map((item, index) => index === weekIndex
-        ? { ...item, sessions: [...item.sessions, ...withIds] }
-        : item),
-    });
-  };
-  const removeSession = (weekIndex: number, sessionId: string) => setProgram({
-    ...program,
-    weeks: program.weeks.map((week, index) => index === weekIndex
-      ? { ...week, sessions: week.sessions.filter((session) => session.id !== sessionId) }
-      : week),
-  });
-  const resetSessionForm = () => {
-    setSessionWeekIndex(null);
-    setSessionDayIndices([]);
-    setSessionTitle("");
-    setSessionNote("");
-  };
-  const submitSession = (weekIndex: number) => {
-    const title = sessionTitle.trim();
-    if (!title || sessionDayIndices.length === 0) return;
-    const newSessions = sessionDayIndices.map((dayIndex) => {
-      const day = TRAINING_DAYS[dayIndex];
-      return {
-        dayLabel: day.dayLabel,
-        weekday: day.weekday,
-        title,
-        ...(sessionNote.trim() ? { note: sessionNote.trim() } : {}),
-      };
-    });
-    addSessions(weekIndex, newSessions);
-    resetSessionForm();
-  };
   const updateSchedule = (next: Partial<Schedule>) => updatePlan({ schedule: { ...currentSchedule, ...next } });
   const updateTitle = (value: string) => {
     updatePlan({ title: value.slice(0, TITLE_LIMIT) });
@@ -382,26 +289,20 @@ export function CreateScreen({
   const handleCreate = () => {
     if (!draft.title.trim()) {
       setTitleError("Введите название");
-      setStep("name");
       return;
     }
 
-    const baseSchedule = planType === "training"
-      ? { ...draft.schedule, start: draft.schedule.start ?? toLocalIsoDate(new Date()), repeat: { type: "none" as const } }
-      : draft.schedule;
-    const invalidSchedule = planType === "simple" ? validateSchedule(baseSchedule) : "";
+    const baseSchedule = draft.schedule;
+    const invalidSchedule = validateSchedule(baseSchedule);
     if (invalidSchedule) {
       setScheduleError(invalidSchedule);
-      setStep("schedule");
+      setActiveSheet("datetime");
       return;
     }
 
     const finalizedSchedule = finalizeSchedule(baseSchedule);
-    const trainingProgram = planType === "training"
-      && draft.trainingProgram
-      && draft.trainingProgram.weeks.some((week) => week.sessions.length > 0)
-      ? draft.trainingProgram
-      : undefined;
+    void planType;
+    const trainingProgram = undefined;
     const finalizedDraft = { ...draft, schedule: finalizedSchedule, trainingProgram };
     const distanceLabel = metricMode === "distance" && Number(distanceValue) > 0 ? `${Number(distanceValue)} ${distanceUnit}` : undefined;
     const duration = metricMode === "time" && Number(durationMinutes) > 0 ? `${Number(durationMinutes)} мин` : undefined;
@@ -412,6 +313,7 @@ export function CreateScreen({
       && (!Number.isInteger(Number(maxParticipantsValue)) || parsedMaxParticipants === undefined || parsedMaxParticipants < 2)
     ) {
       setMaxParticipantsError("Минимум 2 участника");
+      setActiveSheet("details");
       return;
     }
     setMaxParticipantsError("");
@@ -428,6 +330,7 @@ export function CreateScreen({
         description: draft.description.trim(),
         habit: { ...(editingPlan.habit ?? { durationMin: 15 }), title: draft.title.trim() },
         coverUrl: draft.coverImage ?? undefined,
+        gradient: draft.gradient ?? DEFAULT_BG,
         photos: draft.photos.length > 0 ? draft.photos : undefined,
         schedule: finalizedSchedule,
         trainingProgram,
@@ -462,7 +365,7 @@ export function CreateScreen({
       habit: { title: draft.title.trim(), durationMin: 15 },
       coverUrl: draft.coverImage ?? undefined,
       photos: draft.photos.length > 0 ? draft.photos : undefined,
-      gradient: PLAN_TAG_GRADIENTS.other,
+      gradient: draft.gradient ?? DEFAULT_BG,
       schedule: finalizedSchedule,
       trainingProgram,
       participants: authorParticipants,
@@ -481,31 +384,8 @@ export function CreateScreen({
     };
 
     onCreatePlan([newPlan], result);
-    setStep("success");
     confetti({ particleCount: 70, spread: 60, origin: { y: 0.75 } });
     window.setTimeout(() => onNavigate("plans"), 750);
-  };
-
-  const continueFromName = () => {
-    if (!draft.title.trim()) {
-      setTitleError("Введите название");
-      return;
-    }
-    goTo("description");
-  };
-
-  const continueFromSchedule = () => {
-    const error = validateSchedule(currentSchedule);
-    setScheduleError(error);
-    if (error) return;
-    goTo("finalOptions");
-  };
-
-  const handleScrollTouchStart = (event: TouchEvent<HTMLDivElement>) => {
-    const activeElement = document.activeElement;
-    if (isEditableElement(activeElement) && event.target !== activeElement) {
-      activeElement.blur();
-    }
   };
 
   const repeatUntil = repeat.type === "weekly" ? repeat.until : undefined;
@@ -516,21 +396,7 @@ export function CreateScreen({
   const repeatSummary = repeat.type === "weekly"
     ? `${selectedDays.length === 7 ? "Каждый день" : `Каждые ${selectedDaysLabel || "выбранные дни"}`}${repeatUntilLabel ? ` до ${repeatUntilLabel}` : ""}`
     : "";
-  const titleLeft = TITLE_LIMIT - draft.title.length;
   const descriptionLeft = DESCRIPTION_LIMIT - draft.description.length;
-  const stepFlow: CreateStep[] = planType === "training"
-    ? ["welcome", "name", "description", "image", "planType", "program", "finalOptions", "success"]
-    : ["welcome", "name", "description", "image", "planType", "schedule", "finalOptions", "success"];
-  const progressSteps = stepFlow.length - 2;
-  const progressIndex = Math.max(0, stepFlow.indexOf(step) - 1);
-
-  const renderProgress = () => (
-    <div className="flex justify-center gap-1.5 px-4 pb-3">
-      {Array.from({ length: progressSteps }).map((_, index) => (
-        <span key={index} className="h-2 rounded-full transition-all duration-200" style={{ width: index <= progressIndex ? 22 : 8, backgroundColor: index <= progressIndex ? GREEN : "var(--border)" }} />
-      ))}
-    </div>
-  );
 
   const renderWeekdayGrid = (className = "mt-5") => (
     <div className={`${className} grid grid-cols-7 gap-[5px]`}>
@@ -725,18 +591,12 @@ export function CreateScreen({
         </label>
         {maxParticipantsError && <p className="mt-2 text-[12px] font-medium text-destructive">{maxParticipantsError}</p>}
       </div>
+    </div>
+  );
+
+  const renderPlace = () => (
+    <div className="space-y-2">
       <div className="rounded-xl bg-card px-4 py-3.5">
-        <div className="mb-3 flex items-center gap-3">
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-secondary">
-            <MapPin size={17} color={GREEN} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[15px] font-medium text-foreground">Локация</p>
-            <p className="mt-0.5 truncate text-[12px] leading-4 text-muted-foreground">
-              {locationMode === "online" ? "Онлайн" : locationAddress || "Адрес не указан"}
-            </p>
-          </div>
-        </div>
         <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
           {(["online", "offline"] as const).map((mode) => {
             const active = locationMode === mode;
@@ -757,239 +617,287 @@ export function CreateScreen({
     </div>
   );
 
-  const renderStep = () => {
-    switch (step) {
-      case "welcome":
-        return <div className="flex min-h-full flex-col justify-center"><div className="mb-5 flex h-16 w-16 items-center justify-center rounded-3xl" style={{ backgroundColor: GREEN_LIGHT }}><Sparkles size={30} color={GREEN} /></div><h2 className="text-[32px] font-bold leading-[36px] text-foreground">Собери свой план</h2><p className="mt-3 text-[16px] leading-6 text-muted-foreground">Пара шагов, немного расписания, и план уже в твоём списке.</p></div>;
-      case "name":
-        return <div className="pt-6 transition-all duration-200"><p className="mb-2 text-[13px] text-muted-foreground">Шаг 1: собери свой план</p><h2 className="mb-5 text-[28px] font-bold leading-[34px]">Название плана</h2><label><span className="mb-2 block text-[13px] text-muted-foreground">Короткое и ёмкое</span><input value={draft.title} maxLength={TITLE_LIMIT} onChange={(e) => updateTitle(e.target.value)} onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }} onBlur={() => setFieldFocused(false)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} enterKeyHint="done" placeholder="Например, вечерняя пробежка" className="h-14 w-full rounded-xl bg-card px-4 text-[16px] outline-none" /></label>{titleLeft < TITLE_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{titleLeft}</p>}{titleError && <p className="mt-2 text-[12px] font-medium text-destructive">{titleError}</p>}</div>;
-      case "description":
-        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Описание</h2><textarea value={draft.description} maxLength={DESCRIPTION_LIMIT} onChange={(e) => updateDescription(e.target.value)} onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }} onBlur={() => setFieldFocused(false)} placeholder="Что будешь делать, и с какой целью" rows={5} className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none" />{descriptionLeft < DESCRIPTION_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{descriptionLeft}</p>}</div>;
-      case "image":
-        return (
-          <div className="pt-6">
-            <h2 className="mb-5 text-[28px] font-bold">Обложка</h2>
-            <label className={`relative flex min-h-[220px] flex-col items-center justify-center overflow-hidden rounded-2xl bg-card px-6 text-center ${uploadProgress === null ? "active:opacity-90" : "cursor-not-allowed"}`}>
-              {draft.coverImage ? <img loading="lazy" decoding="async" src={draft.coverImage} alt="" className="mb-4 h-28 w-28 rounded-xl object-cover" /> : <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary"><ImageIcon size={28} color={GREEN} /></div>}
-              <p className="text-[16px] font-semibold">Добавь обложку</p>
-              <span className="mt-4 rounded-full px-5 py-2.5 text-[14px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Загрузить</span>
-              <input type="file" accept="image/*" disabled={uploadProgress !== null} className="hidden" onChange={async (event) => { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; setUploadProgress(0); try { const publicUrl = await uploadPhoto(file, { onProgress: setUploadProgress }); if (publicUrl) updatePlan({ coverImage: publicUrl }); } finally { setUploadProgress(null); } }} />
-              {uploadProgress !== null && !galleryUploadProgress && <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60"><span className="text-[22px] font-semibold text-white">{uploadProgress}%</span></div>}
-            </label>
-
-            <section className="relative mt-7">
-              <h3 className="text-[16px] font-semibold">Фото для галереи</h3>
-              <p className="mt-1 text-[14px] text-muted-foreground">Покажи, как проходит активность</p>
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                {draft.photos.map((photo, index) => (
-                  <div key={`${photo}-${index}`} className="relative aspect-square overflow-hidden rounded-xl">
-                    <img loading="lazy" decoding="async" src={photo} alt="" className="h-full w-full object-cover" />
-                    <button
-                      type="button"
-                      disabled={uploadProgress !== null}
-                      aria-label={`Удалить фото ${index + 1}`}
-                      onClick={() => setDraft((item) => ({ ...item, photos: item.photos.filter((_, photoIndex) => photoIndex !== index) }))}
-                      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white disabled:opacity-50"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
-                {draft.photos.length < 10 && (
-                  <label className={`flex aspect-square items-center justify-center rounded-xl border-2 border-dashed border-border bg-card ${uploadProgress === null ? "active:opacity-80" : "cursor-not-allowed opacity-50"}`}>
-                    <Plus size={28} color={GREEN} />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      disabled={uploadProgress !== null}
-                      className="hidden"
-                      onChange={(event) => {
-                        const files = Array.from(event.target.files ?? []);
-                        event.target.value = "";
-                        void uploadGalleryPhotos(files);
-                      }}
-                    />
-                  </label>
-                )}
-              </div>
-              {uploadProgress !== null && galleryUploadProgress && (
-                <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60">
-                  <span className="text-center text-[18px] font-semibold text-white">
-                    {galleryUploadProgress.current} из {galleryUploadProgress.total}
-                    <span className="mt-1 block text-[14px]">{uploadProgress}%</span>
-                  </span>
-                </div>
-              )}
-            </section>
-          </div>
-        );
-      case "planType":
-        return (
-          <div className="pt-6">
-            <p className="mb-2 text-[13px] text-muted-foreground">Шаг: тип плана</p>
-            <h2 className="mb-5 text-[28px] font-bold leading-8 text-foreground">Что за план?</h2>
-            <button
-              type="button"
-              onClick={() => setPlanType("simple")}
-              className="mb-2.5 w-full rounded-xl p-4 text-left"
-              style={{ background: "var(--card)", border: planType === "simple" ? `2px solid ${GREEN}` : "2px solid transparent" }}
-            >
-              <p className="text-[16px] font-semibold text-foreground">Обычный план</p>
-              <p className="mt-0.5 text-[13px] text-muted-foreground">Событие с датой и участниками</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPlanType("training")}
-              className="w-full rounded-xl p-4 text-left"
-              style={{ background: "var(--card)", border: planType === "training" ? `2px solid ${GREEN}` : "2px solid transparent" }}
-            >
-              <p className="text-[16px] font-semibold text-foreground">С тренировкой</p>
-              <p className="mt-0.5 text-[13px] text-muted-foreground">Программа по неделям, отметки прогресса</p>
-            </button>
-          </div>
-        );
-      case "program":
-        return (
-          <div className="pt-6">
-            <h2 className="text-[28px] font-bold leading-8 text-foreground">Программа</h2>
-            <div className="mt-5 space-y-4">
-              {program.weeks.map((week, weekIndex) => (
-                <section key={week.week} className="rounded-xl bg-card p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-[17px] font-semibold text-foreground">Неделя {week.week}</h3>
-                    <button type="button" onClick={() => removeWeek(weekIndex)} className="flex h-8 w-8 items-center justify-center rounded-full bg-muted active:opacity-80" aria-label={`Удалить неделю ${week.week}`}>
-                      <X size={16} className="text-muted-foreground" />
-                    </button>
-                  </div>
-                  {week.sessions.length > 0 && (
-                    <div className="mt-3 space-y-2">
-                      {[...week.sessions].sort((a, b) => (a.weekday ?? 99) - (b.weekday ?? 99)).map((session) => (
-                        <div key={session.id} className="flex items-center gap-3 rounded-xl bg-muted px-3 py-3">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[14px] font-semibold text-foreground">{session.dayLabel} · {session.title}</p>
-                            {session.note && <p className="mt-0.5 text-[12px] text-muted-foreground">{session.note}</p>}
-                          </div>
-                          <button type="button" onClick={() => removeSession(weekIndex, session.id)} className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full active:opacity-75" aria-label={`Удалить тренировку ${session.title}`}>
-                            <X size={16} className="text-muted-foreground" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {sessionWeekIndex === weekIndex ? (
-                    <div className="mt-3 rounded-xl bg-muted p-3">
-                      <div className="grid grid-cols-7 gap-1">
-                        {TRAINING_DAYS.map((day, dayIndex) => {
-                          const active = sessionDayIndices.includes(dayIndex);
-                          return (
-                            <button
-                              type="button"
-                              key={day.dayLabel}
-                              onClick={() => setSessionDayIndices((previous) => previous.includes(dayIndex)
-                                ? previous.filter((selectedDay) => selectedDay !== dayIndex)
-                                : [...previous, dayIndex])}
-                              className="aspect-square rounded-full text-[11px] font-semibold"
-                              style={active ? { backgroundColor: GREEN, color: "#fff" } : { background: "var(--card)", color: "var(--foreground)" }}
-                            >
-                              {day.dayLabel}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <input
-                        value={sessionTitle}
-                        onChange={(event) => setSessionTitle(event.target.value)}
-                        onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }}
-                        onBlur={() => setFieldFocused(false)}
-                        placeholder="Название тренировки"
-                        className="mt-3 h-11 w-full rounded-xl bg-card px-3.5 text-[14px] outline-none placeholder:text-muted-foreground"
-                      />
-                      <input
-                        value={sessionNote}
-                        onChange={(event) => setSessionNote(event.target.value)}
-                        onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }}
-                        onBlur={() => setFieldFocused(false)}
-                        placeholder="Заметка: дистанция, темп…"
-                        className="mt-2 h-11 w-full rounded-xl bg-card px-3.5 text-[14px] outline-none placeholder:text-muted-foreground"
-                      />
-                      <div className="mt-3 grid grid-cols-2 gap-2">
-                        <button type="button" onClick={resetSessionForm} className="h-10 rounded-xl bg-card text-[13px] font-semibold text-foreground">Отмена</button>
-                        <button type="button" disabled={!sessionTitle.trim() || sessionDayIndices.length === 0} onClick={() => submitSession(weekIndex)} className="h-10 rounded-xl text-[13px] font-semibold text-white disabled:opacity-40" style={{ backgroundColor: GREEN }}>Добавить</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSessionDayIndices([]);
-                        setSessionTitle("");
-                        setSessionNote("");
-                        setSessionWeekIndex(weekIndex);
-                      }}
-                      className="mt-3 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-muted text-[13px] font-semibold active:opacity-80"
-                      style={{ color: GREEN }}
-                    >
-                      <Plus size={16} />
-                      Добавить тренировку
-                    </button>
-                  )}
-                </section>
-              ))}
-            </div>
-
-            <button type="button" onClick={addWeek} className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-card text-[14px] font-semibold active:opacity-85" style={{ color: GREEN }}>
-              <Plus size={18} />
-              Добавить неделю
-            </button>
-          </div>
-        );
-      case "schedule":
-        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Регулярность</h2>{renderSchedule()}</div>;
-      case "finalOptions":
-        return <div className="pt-6"><h2 className="mb-5 text-[28px] font-bold">Настройки</h2>{renderFinalOptions()}</div>;
-      case "success":
-        return <div className="flex min-h-full flex-col items-center justify-center text-center"><div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full" style={{ backgroundColor: GREEN_LIGHT }}><Check size={38} color={GREEN} /></div><h2 className="text-[28px] font-bold">План создан</h2></div>;
+  const uploadCoverImage = async (file: File) => {
+    setUploadProgress(0);
+    try {
+      const publicUrl = await uploadPhoto(file, { onProgress: setUploadProgress });
+      if (publicUrl) {
+        updatePlan({ coverImage: publicUrl });
+        setActiveSheet(null);
+      }
+    } catch (error) {
+      console.error("Cover photo upload failed", error);
+    } finally {
+      setUploadProgress(null);
     }
   };
 
-  const renderFooter = () => {
-    if (step === "success") return null;
-    if (step === "welcome") return <button onClick={() => goTo("name")} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>Создать</button>;
-    if (step === "description" || step === "image") {
-      const nextStep: CreateStep = step === "description" ? "image" : "planType";
-      return <div className="flex gap-3"><button disabled={uploadProgress !== null} onClick={() => goTo(nextStep)} className="h-12 flex-1 rounded-xl bg-card text-[15px] font-semibold disabled:opacity-50">Пропустить</button><button disabled={uploadProgress !== null} onClick={() => goTo(nextStep)} className="h-12 flex-1 rounded-xl text-[15px] font-semibold text-white disabled:opacity-50" style={{ backgroundColor: GREEN }}>Далее</button></div>;
-    }
-    const action = step === "name"
-      ? continueFromName
-      : step === "planType"
-        ? () => goTo(planType === "training" ? "program" : "schedule")
-        : step === "program"
-          ? () => goTo("finalOptions")
-          : step === "schedule"
-            ? continueFromSchedule
-            : handleCreate;
-    return <button onClick={action} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>{step === "finalOptions" ? (isEditing ? "Сохранить" : "Создать") : "Далее"}</button>;
-  };
+  const renderGalleryPhotos = () => (
+    <section className="relative mt-7">
+      <h3 className="text-[16px] font-semibold">Фото для галереи</h3>
+      <p className="mt-1 text-[14px] text-muted-foreground">Покажи, как проходит активность</p>
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        {draft.photos.map((photo, index) => (
+          <div key={`${photo}-${index}`} className="relative aspect-square overflow-hidden rounded-xl">
+            <img loading="lazy" decoding="async" src={photo} alt="" className="h-full w-full object-cover" />
+            <button
+              type="button"
+              disabled={uploadProgress !== null}
+              aria-label={`Удалить фото ${index + 1}`}
+              onClick={() => setDraft((item) => ({ ...item, photos: item.photos.filter((_, photoIndex) => photoIndex !== index) }))}
+              className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white disabled:opacity-50"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+        {draft.photos.length < 10 && (
+          <label className={`flex aspect-square items-center justify-center rounded-xl border-2 border-dashed border-border bg-card ${uploadProgress === null ? "active:opacity-80" : "cursor-not-allowed opacity-50"}`}>
+            <Plus size={28} color={GREEN} />
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              disabled={uploadProgress !== null}
+              className="hidden"
+              onChange={(event) => {
+                const files = Array.from(event.target.files ?? []);
+                event.target.value = "";
+                void uploadGalleryPhotos(files);
+              }}
+            />
+          </label>
+        )}
+      </div>
+      {uploadProgress !== null && galleryUploadProgress && (
+        <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60">
+          <span className="text-center text-[18px] font-semibold text-white">
+            {galleryUploadProgress.current} из {galleryUploadProgress.total}
+            <span className="mt-1 block text-[14px]">{uploadProgress}%</span>
+          </span>
+        </div>
+      )}
+    </section>
+  );
 
-  const footer = renderFooter();
+  const cardBackground = draft.gradient ?? DEFAULT_BG;
+  const hasSchedule = timeMode === "exact"
+    ? Boolean(currentSchedule.start)
+    : Boolean(currentSchedule.partOfDay && currentSchedule.weekdays.length > 0);
+  const dateSummary = hasSchedule ? getTimeDate(currentSchedule) : "";
 
   return (
-    <div className="flex h-full flex-col bg-surface">
+    <div className="relative flex h-full flex-col bg-surface">
       <div className="flex h-14 flex-shrink-0 items-center justify-between px-4">
-        <button onClick={goBack} className="flex h-10 w-10 items-center justify-start">{history.length > 0 ? <ArrowLeft size={20} color="var(--foreground)" /> : <X size={20} color="var(--foreground)" />}</button>
+        <button onClick={() => onNavigate(backTo)} className="flex h-10 w-10 items-center justify-start" aria-label="Закрыть">
+          <X size={20} color="var(--foreground)" />
+        </button>
         <h1 className="text-[16px] font-semibold">{isEditing ? "Редактирование" : "Новый план"}</h1>
         <div className="h-10 w-10" />
       </div>
-      {renderProgress()}
-      <div
-        className={`flex-1 overflow-y-auto px-4 transition-all duration-200 ${fieldFocused ? "pb-[40vh]" : "pb-4"}`}
-        onTouchStart={handleScrollTouchStart}
-      >
-        {renderStep()}
+
+      <div className="flex-1 overflow-y-auto pb-4">
+        <div className="relative aspect-[4/5] w-full">
+          {draft.coverImage
+            ? <img src={draft.coverImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            : <div className="absolute inset-0" style={{ background: cardBackground }} />}
+          <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(0,0,0,0.55) 100%)" }} />
+
+          <button
+            type="button"
+            onClick={() => setActiveSheet("background")}
+            className="absolute right-4 top-4 rounded-full px-3 py-1.5 text-[13px] font-medium text-white backdrop-blur-md"
+            style={{ background: "rgba(255,255,255,0.18)" }}
+          >
+            Изменить фон
+          </button>
+
+          <div className="absolute inset-x-4 bottom-16 flex flex-col items-center text-center">
+            <textarea
+              value={draft.title}
+              maxLength={TITLE_LIMIT}
+              onChange={(event) => updateTitle(event.target.value)}
+              placeholder="Название плана"
+              rows={2}
+              className="w-full resize-none bg-transparent text-center text-[30px] font-bold leading-[1.1] text-white outline-none placeholder:text-white/60"
+            />
+            {titleError && <p className="mt-1 text-[12px] font-medium text-white/90">{titleError}</p>}
+          </div>
+
+          <div className="absolute inset-x-4 bottom-5 flex items-center justify-center gap-2 text-white/90">
+            {currentAuthor.avatarUrl
+              ? <img src={currentAuthor.avatarUrl} alt="" className="h-6 w-6 rounded-full object-cover" />
+              : <span className="h-6 w-6 rounded-full bg-white/30" />}
+            <span className="text-[13px]">Организует {currentAuthor.name}</span>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-2 px-4">
+          <OptionRow
+            icon={<Calendar size={17} color={GREEN} />}
+            label="Дата и время"
+            subtitle={dateSummary || "Добавить дату"}
+            onClick={() => setActiveSheet("datetime")}
+            control={<ChevronRight size={18} className="text-muted-foreground" />}
+          />
+          <OptionRow
+            icon={<MapPin size={17} color={GREEN} />}
+            label="Место"
+            subtitle={locationMode === "online" ? "Онлайн" : locationAddress || "Добавить место"}
+            onClick={() => setActiveSheet("place")}
+            control={<ChevronRight size={18} className="text-muted-foreground" />}
+          />
+          <OptionRow
+            icon={<AlignLeft size={17} color={GREEN} />}
+            label="Описание"
+            subtitle={draft.description ? draft.description.slice(0, 60) : "Добавить описание"}
+            onClick={() => setActiveSheet("description")}
+            control={<ChevronRight size={18} className="text-muted-foreground" />}
+          />
+          <OptionRow
+            icon={<SlidersHorizontal size={17} color={GREEN} />}
+            label="Детали"
+            subtitle="Уровень, дистанция, участники, видимость"
+            onClick={() => setActiveSheet("details")}
+            control={<ChevronRight size={18} className="text-muted-foreground" />}
+          />
+        </div>
       </div>
-      {footer && <div className="flex-shrink-0 border-t border-border bg-card px-4 pb-4 pt-3">{footer}</div>}
+
+      <div className="flex-shrink-0 border-t border-border bg-card px-4 pb-4 pt-3">
+        <button onClick={handleCreate} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
+          {isEditing ? "Сохранить" : "Создать"}
+        </button>
+      </div>
+
+      {activeSheet === "background" && (
+        <HomeSheet title="Фон" onClose={() => setActiveSheet(null)} panelClassName="max-h-[85vh]" bodyClassName="overflow-y-auto">
+          <div className="relative">
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex h-12 items-center justify-center gap-2 rounded-xl bg-card text-[14px] font-semibold active:opacity-80">
+                <ImageIcon size={18} color={GREEN} />
+                Фото
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={uploadProgress !== null}
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) void uploadCoverImage(file);
+                  }}
+                />
+              </label>
+              <label className="flex h-12 items-center justify-center gap-2 rounded-xl bg-card text-[14px] font-semibold active:opacity-80">
+                <Camera size={18} color={GREEN} />
+                Камера
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  disabled={uploadProgress !== null}
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) void uploadCoverImage(file);
+                  }}
+                />
+              </label>
+            </div>
+
+            {draft.coverImage && (
+              <button type="button" onClick={() => updatePlan({ coverImage: null })} className="mt-3 h-11 w-full rounded-xl bg-card text-[14px] font-semibold" style={{ color: GREEN }}>
+                Убрать фото
+              </button>
+            )}
+
+            <h3 className="mb-3 mt-6 text-[16px] font-semibold">Или выбери фон</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {BG_PRESETS.map((preset, index) => {
+                const active = draft.gradient === preset || (draft.gradient == null && index === 0);
+                return (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => {
+                      updatePlan({ gradient: preset, coverImage: null });
+                      setActiveSheet(null);
+                    }}
+                    aria-label={`Выбрать фон ${index + 1}`}
+                    className="relative h-[72px] rounded-xl border-2"
+                    style={{ background: preset, borderColor: active ? GREEN : "transparent" }}
+                  >
+                    {active && <Check size={20} className="absolute right-2 top-2 text-white" />}
+                  </button>
+                );
+              })}
+            </div>
+
+            {renderGalleryPhotos()}
+
+            {uploadProgress !== null && !galleryUploadProgress && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60">
+                <span className="text-[22px] font-semibold text-white">{uploadProgress}%</span>
+              </div>
+            )}
+          </div>
+        </HomeSheet>
+      )}
+
+      {activeSheet === "datetime" && (
+        <HomeSheet title="Дата и время" onClose={() => setActiveSheet(null)} panelClassName="max-h-[85vh]" bodyClassName="overflow-y-auto">
+          {renderSchedule()}
+          <button
+            type="button"
+            onClick={() => {
+              const error = validateSchedule(currentSchedule);
+              setScheduleError(error);
+              if (!error) setActiveSheet(null);
+            }}
+            className="mt-4 h-12 w-full rounded-xl text-[15px] font-semibold text-white"
+            style={{ backgroundColor: GREEN }}
+          >
+            Готово
+          </button>
+        </HomeSheet>
+      )}
+
+      {activeSheet === "place" && (
+        <HomeSheet title="Место" onClose={() => setActiveSheet(null)}>
+          {renderPlace()}
+          <button type="button" onClick={() => setActiveSheet(null)} className="mt-4 h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
+            Готово
+          </button>
+        </HomeSheet>
+      )}
+
+      {activeSheet === "description" && (
+        <HomeSheet title="Описание" onClose={() => setActiveSheet(null)}>
+          <textarea
+            value={draft.description}
+            maxLength={DESCRIPTION_LIMIT}
+            onChange={(event) => updateDescription(event.target.value)}
+            placeholder="Что будешь делать, и с какой целью"
+            rows={5}
+            className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none"
+          />
+          {descriptionLeft < DESCRIPTION_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{descriptionLeft}</p>}
+          <button type="button" onClick={() => setActiveSheet(null)} className="mt-4 h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
+            Готово
+          </button>
+        </HomeSheet>
+      )}
+
+      {activeSheet === "details" && (
+        <HomeSheet title="Детали" onClose={() => setActiveSheet(null)} panelClassName="max-h-[85vh]" bodyClassName="overflow-y-auto">
+          {renderFinalOptions()}
+          <button type="button" onClick={() => setActiveSheet(null)} className="mt-4 h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
+            Готово
+          </button>
+        </HomeSheet>
+      )}
       {galleryToast && (
         <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-foreground px-4 py-3 text-[14px] font-medium text-background shadow-lg">
           {galleryToast}
