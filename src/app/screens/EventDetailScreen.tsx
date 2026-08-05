@@ -233,7 +233,7 @@ function CommentsBlock({
             return <div key={item.id} className="space-y-4">{renderComment(item)}{replies.length > 0 && <button onClick={() => onToggleReplies(item.id)} className="ml-11 flex items-center gap-2 text-[13px]" style={{ color: PLAN_DARK.textSecondary }}><span className="h-px w-5" style={{ background: PLAN_DARK.textSecondary }} />{expanded ? "Скрыть ответы" : `Открыть ${replies.length} ${replies.length === 1 ? "ответ" : replies.length < 5 ? "ответа" : "ответов"}`}</button>}{expanded && <div className="space-y-4">{replies.map((reply) => renderComment(reply, true))}</div>}</div>;
           })}
         </div>
-        <div className="relative border-t p-3" style={{ borderColor: PLAN_DARK.divider }}>
+        <div className="relative border-t p-3" style={{ borderColor: PLAN_DARK.divider, paddingBottom: "calc(env(safe-area-inset-bottom) + 92px)" }}>
         {photoPreviewUrl && (
           <div className="relative mb-2 ml-[42px] h-16 w-16 overflow-hidden rounded-xl">
             <img src={photoPreviewUrl} alt="" className="h-full w-full object-cover" />

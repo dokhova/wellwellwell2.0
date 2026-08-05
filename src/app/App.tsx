@@ -1,4 +1,4 @@
-import { ArrowLeft, Calendar, CheckCircle2, MessageCircle, Newspaper, Plus, User } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2, Home, MessageCircle, Plus, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Article, ChatMessage, ChatPeer, ChatThread, HomeFeedPlan, ParticipantPlanRef, PlanId, PlanTag, Screen } from "@/app/types";
 import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN, PLAN_DARK } from "@/app/data/constants";
@@ -2593,7 +2593,7 @@ export default function App() {
 
   return (
     <div
-      className="flex flex-col w-full h-screen overflow-hidden bg-white"
+      className="relative flex h-screen w-full flex-col overflow-hidden bg-white"
       style={{ fontFamily: "var(--font-sans)", height: "100dvh" }}
     >
       {appToast && (
@@ -2604,46 +2604,71 @@ export default function App() {
           {appToast}
         </div>
       )}
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        style={{ paddingBottom: showNav ? "calc(env(safe-area-inset-bottom) + 96px)" : undefined }}
+      >
         {renderScreen()}
       </div>
       {showNav && (
-        <div className={`flex-shrink-0 flex items-center justify-around bg-white px-2 pb-safe pt-2 ${screen === "profile" ? "" : "border-t border-gray-200"}`}
-          style={{ paddingBottom: "max(env(safe-area-inset-bottom), 8px)" }}
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex items-center justify-between gap-2 px-4"
+          style={{ paddingBottom: "max(env(safe-area-inset-bottom), 16px)" }}
         >
-          {([
-            { id: "home" as Screen, label: "Лента", Icon: Newspaper },
-            { id: "plans" as Screen, label: "Мои планы", Icon: Calendar },
-            { id: "create" as Screen, label: "Создать", Icon: Plus },
-            { id: "chats" as Screen, label: "Чаты", Icon: MessageCircle },
-            { id: "profile" as Screen, label: "Профиль", Icon: User },
-          ] as { id: Screen; label: string; Icon: React.FC<{ size: number; strokeWidth: number; color: string }> }[]).map(({ id, label, Icon }) => {
-            const isActive = (id === "profile" ? screen === "profile" && viewingOwnProfile : screen === id)
-              || (id !== "profile" && (screen === "profile" || screen === "profileConnections") && profileSourceTab === id)
+          <div className="pointer-events-auto flex items-center gap-1 rounded-full p-1.5 shadow-lg" style={{ background: "#00A89D" }}>
+            {([
+              { id: "home" as Screen, label: "Главная", Icon: Home },
+              { id: "plans" as Screen, label: "Планы", Icon: Calendar },
+              { id: "chats" as Screen, label: "Чаты", Icon: MessageCircle },
+            ]).map(({ id, label, Icon }) => {
+              const isActive = screen === id
               || (id === "plans" && (screen === "detail" || screen === "planEvent") && planEventOrigin === "plans")
-              || (id === "home" && (screen === "search" || (screen === "planEvent" && planEventOrigin === "home")));
-            return (
-              <button
-                key={id}
-                onClick={() => {
-                  setNavStack([]);
-                  setProfileSourceTab(id === "profile" ? "profile" : id);
-                  navigate(id, id === "create" ? screen : undefined);
-                }}
-                className="relative flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 py-1"
-              >
-                <span className="relative">
-                  <Icon size={22} strokeWidth={isActive ? 2.2 : 1.7} color={isActive ? GREEN : "#9CA3AF"} />
-                  {id === "chats" && unreadChatsCount > 0 && (
-                    <span className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white" style={{ backgroundColor: GREEN }}>
-                      {unreadChatsCount > 99 ? "99+" : unreadChatsCount}
-                    </span>
-                  )}
-                </span>
-                <span className="whitespace-nowrap text-[10px] font-medium" style={{ color: isActive ? GREEN : "#9CA3AF" }}>{label}</span>
-              </button>
-            );
-          })}
+                || (id === "home" && (screen === "search" || (screen === "planEvent" && planEventOrigin === "home")))
+                || ((screen === "profile" || screen === "profileConnections") && profileSourceTab === id);
+              return (
+                <button
+                  key={id}
+                  onClick={() => { setNavStack([]); setProfileSourceTab(id); navigate(id, id === "create" ? screen : undefined); }}
+                  className="relative flex items-center gap-1.5 rounded-full px-3 py-2"
+                  style={{ background: isActive ? "rgba(255,255,255,0.20)" : "transparent" }}
+                >
+                  <span className="relative flex">
+                    <Icon size={20} strokeWidth={2} color="#fff" style={{ opacity: isActive ? 1 : 0.7 }} />
+                    {id === "chats" && unreadChatsCount > 0 && (
+                      <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold" style={{ color: "#00A89D" }}>
+                        {unreadChatsCount > 99 ? "99+" : unreadChatsCount}
+                      </span>
+                    )}
+                  </span>
+                  <span className="whitespace-nowrap text-[13px] font-semibold text-white" style={{ opacity: isActive ? 1 : 0.7 }}>{label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="pointer-events-auto flex items-center gap-2">
+            <button
+              onClick={() => { setNavStack([]); navigate("create", screen); }}
+              className="flex h-14 w-14 items-center justify-center rounded-full shadow-lg active:opacity-90"
+              style={{ background: "#00A89D" }}
+              aria-label="Добавить план"
+            >
+              <Plus size={26} strokeWidth={2.4} color="#fff" />
+            </button>
+            <button
+              onClick={() => { setNavStack([]); setProfileSourceTab("profile"); navigate("profile", undefined); }}
+              className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-full shadow-lg ring-2 ring-white/50 active:opacity-90"
+              aria-label="Профиль"
+            >
+              {currentAuthor.avatarUrl ? (
+                <img src={currentAuthor.avatarUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center" style={{ background: "#00A89D" }}>
+                  <User size={22} color="#fff" />
+                </div>
+              )}
+            </button>
+          </div>
         </div>
       )}
     </div>

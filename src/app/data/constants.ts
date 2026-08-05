@@ -56,4 +56,4 @@ export const EVENT_PARTICIPANTS = [
   { id: "yulia-belova", name: "Юлия Белова", avatar: expertAvatarYuliaBelova as unknown as string, cannedReplies: ["В этом плане важна терпеливая работа, без резких скачков.", "Если тренировка прошла тяжело, следующий день делаем легче."] },
 ];
 
-export const NO_BOTTOM_NAV: Screen[] = ["article", "search", "planEvent", "detail", "profileConnections", "editProfile", "addPlan", "create", "chat"];
+export const NO_BOTTOM_NAV: Screen[] = ["article", "search", "profileConnections", "editProfile", "addPlan", "create", "chat"];
