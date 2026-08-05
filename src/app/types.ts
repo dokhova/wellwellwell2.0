@@ -77,6 +77,25 @@ export interface Schedule {
   repeatUntilDate?: string;
 }
 
+export interface TrainingSession {
+  id: string;
+  dayLabel: string;
+  weekday?: number;
+  title: string;
+  note?: string;
+}
+
+export interface TrainingWeek {
+  week: number;
+  levelLabel?: string;
+  sessions: TrainingSession[];
+}
+
+export interface TrainingProgram {
+  totalWeeks?: number;
+  weeks: TrainingWeek[];
+}
+
 export interface HomeFeedPlan {
   id: PlanId;
   kind?: PlanKind;
@@ -114,6 +133,7 @@ export interface HomeFeedPlan {
   externalJoinUrl?: string;
   shareUrl?: string;
   items?: HomeFeedPlan[];
+  trainingProgram?: TrainingProgram;
 }
 
 export interface EventMeta {
@@ -154,6 +174,9 @@ export interface EventDetailProps {
   onBack: () => void;
   initiallyJoined?: boolean;
   planId?: PlanId;
+  trainingProgram?: TrainingProgram;
+  checkedItemKeys?: string[];
+  onToggleCheck?: (key: string) => void;
   onJoin?: (planId: PlanId) => void;
   onLeave?: (planId: PlanId) => void;
   onProfile?: () => void;

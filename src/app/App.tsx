@@ -2545,6 +2545,9 @@ export default function App() {
               authorSubtitle={pluralizeFollowers(authorFollowersCount)}
               onBack={() => goBackInStack(planEventOrigin)}
               planId={feedPlan.id}
+              trainingProgram={feedPlan.trainingProgram}
+              checkedItemKeys={checkedItemKeys}
+              onToggleCheck={toggleCheckedItem}
               initiallyJoined={feedPlan.author.id === currentUserId || myParticipantIds.some((item) => planKey(item.id) === planKey(feedPlan.id))}
               onJoin={(id) => addCatalogPlanToRoutine(id, planSourceFromScreen(planEventOrigin))}
               onLeave={(id) => removePlanFromMine(id, "single", planEventSource)}

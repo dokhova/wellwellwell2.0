@@ -1,4 +1,4 @@
-import type { HomeFeedPlan } from "@/app/types";
+import type { HomeFeedPlan, TrainingProgram, TrainingSession, TrainingWeek } from "@/app/types";
 import { supabase } from "@/app/lib/supabase";
 import { normalizeSchedule } from "@/app/lib/schedule";
 
@@ -10,6 +10,7 @@ type PlanRow = {
   cover_url: string | null;
   starts_at: string | null;
   payload: HomeFeedPlan | null;
+  training_program?: unknown;
   hidden: boolean | null;
   created_at: string;
 };
@@ -32,8 +33,60 @@ const normalizePlanDuration = (plan: HomeFeedPlan): HomeFeedPlan => ({
   items: plan.items?.map(normalizePlanDuration),
 });
 
+const normalizeTrainingProgram = (value: unknown): TrainingProgram | undefined => {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as { totalWeeks?: unknown; weeks?: unknown };
+  if (!Array.isArray(raw.weeks)) return undefined;
+
+  const weeks = raw.weeks.flatMap<TrainingWeek>((week) => {
+    if (!week || typeof week !== "object") return [];
+    const rawWeek = week as { week?: unknown; levelLabel?: unknown; sessions?: unknown };
+    if (typeof rawWeek.week !== "number" || !Array.isArray(rawWeek.sessions)) return [];
+
+    const sessions = rawWeek.sessions.flatMap<TrainingSession>((session) => {
+      if (!session || typeof session !== "object") return [];
+      const rawSession = session as Record<string, unknown>;
+      if (
+        typeof rawSession.id !== "string"
+        || rawSession.id.includes(":")
+        || typeof rawSession.dayLabel !== "string"
+        || typeof rawSession.title !== "string"
+      ) return [];
+      return [{
+        id: rawSession.id,
+        dayLabel: rawSession.dayLabel,
+        ...(typeof rawSession.weekday === "number" ? { weekday: rawSession.weekday } : {}),
+        title: rawSession.title,
+        ...(typeof rawSession.note === "string" ? { note: rawSession.note } : {}),
+      }];
+    });
+
+    return [{
+      week: rawWeek.week,
+      ...(typeof rawWeek.levelLabel === "string" ? { levelLabel: rawWeek.levelLabel } : {}),
+      sessions,
+    }];
+  });
+
+  if (weeks.length === 0) return undefined;
+  return {
+    ...(typeof raw.totalWeeks === "number" ? { totalWeeks: raw.totalWeeks } : {}),
+    weeks,
+  };
+};
+
 const mapPlanRows = (rows: PlanRow[] | null): HomeFeedPlan[] =>
-  (rows ?? []).map((row) => row.payload ? normalizePlanDuration({ ...row.payload, id: row.id, hidden: row.hidden ?? false }) : null).filter((plan): plan is HomeFeedPlan => Boolean(plan));
+  (rows ?? []).map((row) => row.payload ? normalizePlanDuration({
+    ...row.payload,
+    id: row.id,
+    hidden: row.hidden ?? false,
+    trainingProgram: normalizeTrainingProgram(row.training_program) ?? normalizeTrainingProgram(row.payload.trainingProgram),
+  }) : null).filter((plan): plan is HomeFeedPlan => Boolean(plan));
+
+const PLAN_COLUMNS = "id, author_id, title, description, cover_url, starts_at, payload, training_program, hidden, created_at";
+const LEGACY_PLAN_COLUMNS = "id, author_id, title, description, cover_url, starts_at, payload, hidden, created_at";
+const isMissingTrainingProgramColumn = (error: { code?: string; message?: string } | null) =>
+  error?.code === "42703" || error?.message?.includes("training_program");
 
 export const createPlanRemote = async (plan: HomeFeedPlan): Promise<HomeFeedPlan | null> => {
   if (!supabase) return null;
@@ -82,13 +135,23 @@ export const updatePlanRemote = async (plan: HomeFeedPlan): Promise<HomeFeedPlan
 export const fetchPublicPlans = async (): Promise<HomeFeedPlan[]> => {
   if (!supabase) return [];
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("plans")
-    .select("id, author_id, title, description, cover_url, starts_at, payload, hidden, created_at")
+    .select(PLAN_COLUMNS)
     .eq("hidden", false)
     .order("created_at", { ascending: false })
     .limit(100)
     .returns<PlanRow[]>();
+
+  if (isMissingTrainingProgramColumn(error)) {
+    ({ data, error } = await supabase
+      .from("plans")
+      .select(LEGACY_PLAN_COLUMNS)
+      .eq("hidden", false)
+      .order("created_at", { ascending: false })
+      .limit(100)
+      .returns<PlanRow[]>());
+  }
 
   if (error) throw error;
   return mapPlanRows(data);
@@ -97,26 +160,44 @@ export const fetchPublicPlans = async (): Promise<HomeFeedPlan[]> => {
 export const fetchPlan = async (planId: string): Promise<HomeFeedPlan | null> => {
   if (!supabase) return null;
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("plans")
-    .select("id, author_id, title, description, cover_url, starts_at, payload, hidden, created_at")
+    .select(PLAN_COLUMNS)
     .eq("id", planId)
     .maybeSingle<PlanRow>();
 
+  if (isMissingTrainingProgramColumn(error)) {
+    ({ data, error } = await supabase
+      .from("plans")
+      .select(LEGACY_PLAN_COLUMNS)
+      .eq("id", planId)
+      .maybeSingle<PlanRow>());
+  }
+
   if (error) throw error;
-  return data?.payload ? normalizePlanDuration({ ...data.payload, id: data.id, hidden: data.hidden ?? false }) : null;
+  return mapPlanRows(data ? [data] : [])[0] ?? null;
 };
 
 export const fetchPlansByAuthor = async (authorId: string): Promise<HomeFeedPlan[]> => {
   if (!supabase) return [];
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("plans")
-    .select("id, author_id, title, description, cover_url, starts_at, payload, hidden, created_at")
+    .select(PLAN_COLUMNS)
     .eq("author_id", authorId)
     .eq("hidden", false)
     .order("created_at", { ascending: false })
     .returns<PlanRow[]>();
+
+  if (isMissingTrainingProgramColumn(error)) {
+    ({ data, error } = await supabase
+      .from("plans")
+      .select(LEGACY_PLAN_COLUMNS)
+      .eq("author_id", authorId)
+      .eq("hidden", false)
+      .order("created_at", { ascending: false })
+      .returns<PlanRow[]>());
+  }
 
   if (error) throw error;
   return mapPlanRows(data);

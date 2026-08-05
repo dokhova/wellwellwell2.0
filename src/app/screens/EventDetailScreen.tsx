@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
-import { ArrowLeft, ArrowUp, Bookmark, CheckSquare, ChevronRight, Copy, Edit3, Eye, Heart, MessageCircle, Paperclip, Plus, Repeat2, Share2, Trash2, UserPlus, Users, X } from "lucide-react";
+import { ArrowLeft, ArrowUp, Bookmark, Check, CheckSquare, ChevronRight, Copy, Edit3, Eye, Heart, MessageCircle, Paperclip, Plus, Repeat2, Share2, Trash2, UserPlus, Users, X } from "lucide-react";
 import type { EventDetailProps } from "@/app/types";
 import { normalizePlanTag, PLAN_TAG_LABELS } from "@/app/data/plans";
 import { GREEN, PART_OF_DAY_RANGES, PLAN_DARK, UNSPLASH } from "@/app/data/constants";
@@ -338,7 +338,7 @@ function DetailCard({ children, className = "" }: { children: ReactNode; classNa
 export function EventDetailScreen({
   title, coverSrc, backgroundGradient, authorName, authorAvatarUrl, authorVerified,
   readTime, badgeDate, paragraphs, meta, format = "offline", duration, level, distanceLabel, photos = [], authorSubtitle, participantCount, maxParticipants, isDemo, isSaved = false, onToggleSaved, tag, schedule, shareUrl,
-  participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, planId, onJoin, onLeave, onProfile,
+  participantAvatars: planParticipantAvatars, participantsLabel, onBack, initiallyJoined, planId, trainingProgram, checkedItemKeys = [], onToggleCheck, onJoin, onLeave, onProfile,
   authorId, onMessageAuthor, isAuthorFollowedByMe = false, onToggleAuthorFollow, participantItems, onMessageParticipant,
   currentAuthor, canDelete = false, onDelete, canEdit = false, onEdit, canHide = false, onHide, refreshKey, onProfileOpen, profileById = {},
 }: EventDetailProps) {
@@ -375,6 +375,7 @@ export function EventDetailScreen({
   const [commentAuthorProfiles, setCommentAuthorProfiles] = useState<Record<string, { name: string; avatarUrl: string | null }>>({});
   const [copied, setCopied] = useState(false);
   const description = paragraphs.join("\n\n");
+  const sessionKey = (sessionId: string) => `${sessionId}:${planId}`;
   const participantAvatars = planParticipantAvatars ?? [];
   const participants = participantItems?.length
     ? participantItems
@@ -1010,6 +1011,49 @@ export function EventDetailScreen({
             {(levelConfig || distanceLabel || validDuration) && <><SectionTitle>Уровень</SectionTitle><div className="grid grid-cols-2 gap-2.5">{levelConfig && <DetailCard><SmallLabel>{levelConfig.subtitle}</SmallLabel><div className="mt-2 flex items-center justify-between text-[24px] font-bold"><span>{levelConfig.title}</span><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">{[0,1,2].map((bar) => <rect key={bar} x={2 + bar * 6} y={13 - bar * 4} width="4" height={5 + bar * 4} rx="1" fill={bar < levelConfig.bars ? levelConfig.color : "rgba(255,255,255,0.25)"} />)}</svg></div></DetailCard>}{(distanceLabel || validDuration) && <DetailCard><SmallLabel>{distanceLabel ? "Дистанция" : "Время"}</SmallLabel><p className="mt-2 text-[24px] font-bold">{distanceLabel || validDuration}</p></DetailCard>}</div></>}
 
             {description && <><SectionTitle>Описание</SectionTitle><div className="rounded-xl p-4 text-[15px] leading-[1.45]" style={{ background: PLAN_DARK.card }}><p style={!descriptionExpanded && needsDescriptionClamp ? { display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden", whiteSpace: "pre-line" } : { whiteSpace: "pre-line" }}>{renderFormattedText(description)}</p>{needsDescriptionClamp && <button onClick={() => setDescriptionExpanded((value) => !value)} className="mt-1 font-medium" style={{ color: PLAN_DARK.accent }}>{descriptionExpanded ? "Свернуть" : "Подробнее"}</button>}</div></>}
+
+            {trainingProgram && trainingProgram.weeks.length > 0 && (() => {
+              const allSessions = trainingProgram.weeks.flatMap((week) => week.sessions);
+              const total = allSessions.length;
+              const doneCount = allSessions.filter((session) => checkedItemKeys.includes(sessionKey(session.id))).length;
+              const pct = total ? Math.round((doneCount / total) * 100) : 0;
+
+              return <>
+                <SectionTitle>Программа</SectionTitle>
+                <div className="rounded-xl p-4" style={{ background: PLAN_DARK.card }}>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-[15px] font-medium">Твой прогресс</span>
+                    <span className="text-[14px] font-medium" style={{ color: PLAN_DARK.accent }}>{doneCount} из {total}</span>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.12)" }}>
+                    <div className="h-full rounded-full transition-[width] duration-200" style={{ width: `${pct}%`, background: PLAN_DARK.accent }} />
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-col gap-4">
+                  {trainingProgram.weeks.map((week) => <div key={week.week}>
+                    <div className="mb-2 flex items-baseline justify-between">
+                      <span className="text-[13px] font-medium">Неделя {week.week}</span>
+                      {week.levelLabel && <span className="rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ color: PLAN_DARK.accent, background: "rgba(47,191,175,0.16)" }}>{week.levelLabel}</span>}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {week.sessions.map((session) => {
+                        const key = sessionKey(session.id);
+                        const done = checkedItemKeys.includes(key);
+                        return <button key={session.id} type="button" onClick={() => onToggleCheck?.(key)} className="flex w-full items-center gap-3 rounded-xl p-3.5 text-left active:opacity-85" style={{ background: PLAN_DARK.card }}>
+                          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full" style={done ? { background: PLAN_DARK.accent } : { border: "2px solid rgba(255,255,255,0.25)" }}>
+                            {done && <Check size={15} className="text-white" />}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className={`block text-[15px] font-medium ${done ? "line-through" : ""}`} style={done ? { color: PLAN_DARK.textSecondary } : undefined}>{session.dayLabel} · {session.title}</span>
+                            {session.note && <span className="mt-0.5 block text-[12px]" style={{ color: PLAN_DARK.textSecondary }}>{session.note}</span>}
+                          </span>
+                        </button>;
+                      })}
+                    </div>
+                  </div>)}
+                </div>
+              </>;
+            })()}
 
             {photos.length > 0 && <button onClick={() => setSheet("photos")} className="mt-5 w-full rounded-xl p-4 text-left" style={{ background: PLAN_DARK.card }}><div className="mb-3 flex items-center justify-between text-[15px] font-semibold"><span>{photos.length} фото</span><ChevronRight size={18} /></div><div className="grid grid-cols-3 gap-2">{photos.slice(0,3).map((photo, index) => <img key={`${photo}-${index}`} src={photo} alt="" className="aspect-[4/3] w-full rounded-[10px] object-cover" />)}</div></button>}
 
