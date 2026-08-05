@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import confetti from "canvas-confetti";
-import { AlignLeft, Calendar, Camera, Check, ChevronRight, Eye, Image as ImageIcon, Lock, MapPin, Plus, Repeat2, Search, SlidersHorizontal, Users, X } from "lucide-react";
-import type { HomeFeedPlan, PartOfDay, PlanRepeat, Schedule, Screen, TimeMode, Visibility } from "@/app/types";
-import { ALL_DAYS, GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES, WEEKDAY_VALUES } from "@/app/data/constants";
+import { Calendar, Camera, Check, Eye, Image as ImageIcon, Lock, MapPin, Plus, Search, SlidersHorizontal, Users, X } from "lucide-react";
+import type { HomeFeedPlan, Schedule, Screen, Visibility } from "@/app/types";
+import { GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES } from "@/app/data/constants";
 import { DEFAULT_PLAN_AUTHOR } from "@/app/data/plans";
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
@@ -15,7 +15,7 @@ type PlanDraft = { title: string; description: string; coverImage: string | null
 type Person = { id: string; name: string; avatarUrl: string | null };
 const TITLE_LIMIT = 80;
 const DESCRIPTION_LIMIT = 3000;
-const BG_PRESETS: string[] = [
+const GRADIENT_PRESETS: string[] = [
   "linear-gradient(160deg, #00A89D 0%, #00655E 100%)",
   "linear-gradient(160deg, #00C2B2 0%, #0E7490 100%)",
   "linear-gradient(160deg, #2E6BFF 0%, #00C2B2 100%)",
@@ -23,10 +23,32 @@ const BG_PRESETS: string[] = [
   "linear-gradient(160deg, #7C5CFF 0%, #C13BFF 100%)",
   "linear-gradient(160deg, #FF7E5F 0%, #FF3D77 100%)",
   "linear-gradient(160deg, #FF9D2E 0%, #FF3D3D 100%)",
-  "linear-gradient(160deg, #FF4D8D 0%, #7C2BFF 100%)",
   "linear-gradient(160deg, #2B3A67 0%, #0B1026 100%)",
 ];
-const DEFAULT_BG = BG_PRESETS[0];
+
+function emojiPattern(color: string, emojis: string[]): string {
+  const cell = 140;
+  const items = emojis.map((emoji, index) => {
+    const column = index % 2;
+    const row = Math.floor(index / 2);
+    const x = column === 0 ? 34 : 104;
+    const y = 40 + row * 66;
+    return `<text x='${x}' y='${y}' font-size='30' text-anchor='middle'>${emoji}</text>`;
+  }).join("");
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${cell}' height='${cell}'>${items}</svg>`;
+  return `${color} url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+const EMOJI_PRESETS: { color: string; bg: string }[] = [
+  { color: "#0E7A6E", bg: emojiPattern("#0E7A6E", ["🏃", "👟", "💧", "🔥"]) },
+  { color: "#1E6F5C", bg: emojiPattern("#1E6F5C", ["⚡", "🔥", "🏅", "💪"]) },
+  { color: "#F5820D", bg: emojiPattern("#F5820D", ["🎉", "🎁", "🎂", "🎈"]) },
+  { color: "#2E6BFF", bg: emojiPattern("#2E6BFF", ["☀", "☕", "🌊", "⚡"]) },
+  { color: "#2E8B57", bg: emojiPattern("#2E8B57", ["🌸", "🌿", "🏔", "☀"]) },
+  { color: "#6F4E37", bg: emojiPattern("#6F4E37", ["☕", "🍩", "📖", "✨"]) },
+];
+
+const DEFAULT_BG = GRADIENT_PRESETS[0];
 
 export type CreatedPlanResult = {
   plan: PlanDraft;
@@ -64,12 +86,6 @@ const getLocalDateTime = () => {
 const splitDateTime = (value: string) => {
   const [date = "", time = ""] = value.split("T");
   return { date, time };
-};
-
-const getWeekdayFromDate = (value: string) => {
-  if (!value) return "";
-  const date = new Date(`${value}T12:00:00`);
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("ru-RU", { weekday: "long" });
 };
 
 const defaultSchedule = (): Schedule => ({
@@ -147,6 +163,9 @@ export function CreateScreen({
   const [galleryToast, setGalleryToast] = useState("");
   const [locationMode, setLocationMode] = useState<"online" | "offline">(editingPlan?.format ?? "online");
   const [locationAddress, setLocationAddress] = useState(editingPlan?.address ?? "");
+  const [locationApartment, setLocationApartment] = useState("");
+  const [locationVenueName, setLocationVenueName] = useState("");
+  const [allDay, setAllDay] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState<HomeFeedPlan["level"]>(editingPlan?.level);
   const [metricMode, setMetricMode] = useState<"none" | "distance" | "time">(editingPlan?.distanceLabel ? "distance" : editingPlan?.duration ? "time" : "none");
   const [distanceValue, setDistanceValue] = useState(() => editingPlan?.distanceLabel?.match(/[\d.,]+/)?.[0]?.replace(",", ".") ?? "");
@@ -154,12 +173,8 @@ export function CreateScreen({
   const [durationMinutes, setDurationMinutes] = useState(() => editingPlan?.duration?.match(/[\d.,]+/)?.[0]?.replace(",", ".") ?? "");
   const planType = "simple" as const;
   const currentSchedule = draft.schedule;
-  const timeMode: TimeMode = currentSchedule.timeMode ?? currentSchedule.mode ?? "partOfDay";
-  const partOfDay = currentSchedule.partOfDay;
-  const selectedDays = currentSchedule.weekdays;
   const exactStart = currentSchedule.start ?? initialDateTime;
   const exactEnd = typeof currentSchedule.end === "string" ? currentSchedule.end : exactStart;
-  const repeat = currentSchedule.repeat ?? { type: "none" };
   const startParts = splitDateTime(exactStart);
   const endParts = splitDateTime(exactEnd);
   const selectedParticipantItems = selectedPeople.filter((person) => selectedParticipants.includes(person.id));
@@ -196,6 +211,22 @@ export function CreateScreen({
 
   const updatePlan = (next: Partial<PlanDraft>) => setDraft((item) => ({ ...item, ...next }));
   const updateSchedule = (next: Partial<Schedule>) => updatePlan({ schedule: { ...currentSchedule, ...next } });
+  const writeExact = (patch: { startDate?: string; startTime?: string; endDate?: string | null; endTime?: string; allDay?: boolean }) => {
+    const isAllDay = patch.allDay ?? allDay;
+    const startDate = (patch.startDate ?? startParts.date) || toLocalIsoDate(new Date());
+    const startTime = isAllDay ? "00:00" : (patch.startTime ?? startParts.time) || "18:00";
+    const start = `${startDate}T${startTime}`;
+    let end: string | undefined = typeof currentSchedule.end === "string" ? currentSchedule.end : undefined;
+    if (patch.endDate === null) {
+      end = undefined;
+    } else if (patch.endDate || patch.endTime || patch.allDay !== undefined) {
+      const endDate = (patch.endDate ?? endParts.date) || startDate;
+      const endTime = isAllDay ? "23:59" : (patch.endTime ?? endParts.time) || "21:00";
+      end = `${endDate}T${endTime}`;
+    }
+    updateSchedule({ mode: "exact", timeMode: "exact", start, end, weekdays: [], repeat: { type: "none" } });
+    setScheduleError("");
+  };
   const updateTitle = (value: string) => {
     updatePlan({ title: value.slice(0, TITLE_LIMIT) });
     setTitleError("");
@@ -286,6 +317,8 @@ export function CreateScreen({
       : partLabel;
   };
 
+  const composedAddress = [locationVenueName.trim(), locationAddress.trim(), locationApartment.trim()].filter(Boolean).join(", ");
+
   const handleCreate = () => {
     if (!draft.title.trim()) {
       setTitleError("Введите название");
@@ -336,13 +369,13 @@ export function CreateScreen({
         trainingProgram,
         maxParticipants: parsedMaxParticipants,
         timeDate: getTimeDate(finalizedSchedule),
-        address: locationMode === "offline" && locationAddress.trim() ? locationAddress.trim() : undefined,
+        address: locationMode === "offline" && composedAddress ? composedAddress : undefined,
       };
       const result: CreatedPlanResult = {
         plan: { ...finalizedDraft, title: draft.title.trim(), description: draft.description.trim() },
         visibility,
         participants: selectedParticipants,
-        location: locationMode === "online" ? "online" : locationAddress.trim() ? { address: locationAddress.trim() } : null,
+        location: locationMode === "online" ? "online" : composedAddress ? { address: composedAddress } : null,
         videoMeeting: { enabled: false, link: "" },
       };
       onUpdatePlan?.(updatedPlan, result);
@@ -372,14 +405,14 @@ export function CreateScreen({
       participantsLabel: "1 чел.",
       maxParticipants: parsedMaxParticipants,
       timeDate: getTimeDate(finalizedSchedule),
-      address: locationMode === "offline" && locationAddress.trim() ? locationAddress.trim() : undefined,
+      address: locationMode === "offline" && composedAddress ? composedAddress : undefined,
       author: currentAuthor,
     };
     const result: CreatedPlanResult = {
       plan: { ...finalizedDraft, title: draft.title.trim(), description: draft.description.trim() },
       visibility,
       participants: selectedParticipants,
-      location: locationMode === "online" ? "online" : locationAddress.trim() ? { address: locationAddress.trim() } : null,
+      location: locationMode === "online" ? "online" : composedAddress ? { address: composedAddress } : null,
       videoMeeting: { enabled: false, link: "" },
     };
 
@@ -388,154 +421,7 @@ export function CreateScreen({
     window.setTimeout(() => onNavigate("plans"), 750);
   };
 
-  const repeatUntil = repeat.type === "weekly" ? repeat.until : undefined;
-  const repeatUntilLabel = repeatUntil
-    ? new Date(`${repeatUntil}T12:00:00`).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })
-    : "";
-  const selectedDaysLabel = formatWeekdayRanges(selectedDays).toUpperCase();
-  const repeatSummary = repeat.type === "weekly"
-    ? `${selectedDays.length === 7 ? "Каждый день" : `Каждые ${selectedDaysLabel || "выбранные дни"}`}${repeatUntilLabel ? ` до ${repeatUntilLabel}` : ""}`
-    : "";
   const descriptionLeft = DESCRIPTION_LIMIT - draft.description.length;
-
-  const renderWeekdayGrid = (className = "mt-5") => (
-    <div className={`${className} grid grid-cols-7 gap-[5px]`}>
-      {ALL_DAYS.map((day, index) => {
-        const value = WEEKDAY_VALUES[index];
-        const active = selectedDays.includes(value);
-        return (
-          <button key={day} onClick={() => {
-            const nextDays = active ? selectedDays.filter((item) => item !== value) : [...selectedDays, value].sort((a, b) => a - b);
-            updateSchedule({ weekdays: nextDays });
-            setScheduleError("");
-          }} className="aspect-square rounded-full border text-[12px] font-semibold" style={active ? { backgroundColor: GREEN, borderColor: GREEN, color: "#fff" } : { borderColor: "var(--border)", color: "var(--foreground)" }}>
-            {day}
-          </button>
-        );
-      })}
-    </div>
-  );
-
-  const renderSchedule = () => (
-    <div className="rounded-2xl bg-card p-4">
-      <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
-        {[
-          { mode: "partOfDay" as const, label: "Время суток" },
-          { mode: "exact" as const, label: "Точное время" },
-        ].map((item) => {
-          const active = timeMode === item.mode;
-          return (
-            <button
-              key={item.mode}
-              onClick={() => {
-                if (item.mode === timeMode) return;
-                if (item.mode === "exact") {
-                  updateSchedule({ mode: "exact", timeMode: "exact", time: null, partOfDay: null, start: exactStart, end: exactEnd || exactStart });
-                } else {
-                  updateSchedule({ mode: "partOfDay", timeMode: "partOfDay", time: null, start: undefined, end: undefined });
-                }
-                setScheduleError("");
-              }}
-              className="h-10 rounded-lg text-[14px] font-semibold transition-colors"
-              style={active ? { backgroundColor: GREEN, color: "#fff" } : { color: "var(--foreground)" }}
-            >
-              {item.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {timeMode === "partOfDay" ? (
-        <>
-          <div className="grid grid-cols-3 gap-2">
-            {Object.entries(PART_OF_DAY_RANGES).map(([key, item]) => {
-              const active = partOfDay === key;
-              return (
-                <button key={key} onClick={() => { updateSchedule({ partOfDay: key as PartOfDay }); setScheduleError(""); }} className="rounded-full border px-3 py-2.5 text-[14px] font-medium" style={active ? { backgroundColor: GREEN, borderColor: GREEN, color: "#fff" } : { borderColor: "var(--border)", color: "var(--foreground)" }}>
-                  {item.label}
-                </button>
-              );
-            })}
-          </div>
-          {renderWeekdayGrid()}
-        </>
-      ) : (
-        <div className="space-y-3">
-          {[
-            { label: "Начало", date: startParts.date, time: startParts.time, onDate: (value: string) => updateSchedule({ start: `${value}T${startParts.time || "00:00"}`, end: `${value}T${endParts.time || startParts.time || "00:00"}` }), onTime: (value: string) => updateSchedule({ start: `${startParts.date}T${value || "00:00"}` }) },
-            { label: "Конец", date: endParts.date || startParts.date, time: endParts.time, onDate: (value: string) => updateSchedule({ end: `${value}T${endParts.time || "00:00"}` }), onTime: (value: string) => updateSchedule({ end: `${endParts.date || startParts.date}T${value || "00:00"}` }) },
-          ].map((row) => (
-            <div key={row.label} className="rounded-lg border border-border px-3.5 py-3">
-              <p className="mb-2 text-[13px] font-medium text-foreground">{row.label}</p>
-              <div className="grid grid-cols-2 gap-3">
-                <label><span className="mb-1 block text-[12px] text-muted-foreground">Дата{getWeekdayFromDate(row.date) ? ` · ${getWeekdayFromDate(row.date)}` : ""}</span><input type="date" value={row.date} onChange={(e) => row.onDate(e.target.value)} className="w-full bg-transparent text-[14px] outline-none" /></label>
-                <label><span className="mb-1 block text-[12px] text-muted-foreground">Время</span><input type="time" value={row.time} onChange={(e) => row.onTime(e.target.value)} className="w-full bg-transparent text-[14px] outline-none" /></label>
-              </div>
-            </div>
-          ))}
-          {repeat.type !== "none" && renderWeekdayGrid("pt-2")}
-        </div>
-      )}
-
-      <div className="mt-5">
-        <div className="mb-2 flex items-center gap-2 text-[14px] font-medium"><Repeat2 size={18} />Повторять</div>
-        <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
-          {[
-            { label: "Не повторять", weekly: false },
-            { label: "Каждую неделю", weekly: true },
-          ].map((option) => {
-            const active = option.weekly ? repeat.type === "weekly" : repeat.type === "none";
-            return (
-              <button
-                key={option.label}
-                type="button"
-                onClick={() => {
-                  if (active) return;
-                  if (!option.weekly) {
-                    updateSchedule({ repeat: { type: "none" } });
-                    return;
-                  }
-                  const startDate = new Date(exactStart);
-                  const startWeekday = Number.isNaN(startDate.getTime()) ? 1 : startDate.getDay() || 7;
-                  updateSchedule({
-                    repeat: { type: "weekly" },
-                    weekdays: selectedDays.length > 0 ? selectedDays : [startWeekday],
-                  });
-                }}
-                className="h-10 rounded-lg text-[14px] font-semibold"
-                style={active ? { backgroundColor: GREEN, color: "#fff" } : { color: "var(--foreground)" }}
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      {repeat.type === "weekly" && (
-        <div className="mt-3 rounded-xl border border-border px-3.5 py-3">
-          <div className="flex items-center gap-3">
-            <label className="min-w-0 flex-1">
-              <span className="mb-1 block text-[13px] font-medium text-foreground">Повторять до</span>
-              <input
-                type="date"
-                min={startParts.date || undefined}
-                value={repeat.until ?? ""}
-                onChange={(event) => updateSchedule({ repeat: event.target.value ? { type: "weekly", until: event.target.value } : { type: "weekly" } })}
-                className="w-full bg-transparent text-[14px] outline-none"
-              />
-            </label>
-            {repeat.until && (
-              <button type="button" onClick={() => updateSchedule({ repeat: { type: "weekly" } })} className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted" aria-label="Сбросить дату окончания повтора">
-                <X size={15} />
-              </button>
-            )}
-          </div>
-          <p className="mt-3 text-[13px] text-muted-foreground">{repeatSummary}</p>
-        </div>
-      )}
-      {scheduleError && <p className="mt-3 text-[12px] font-medium text-destructive">{scheduleError}</p>}
-    </div>
-  );
 
   const renderFinalOptions = () => (
     <div className="space-y-2">
@@ -591,29 +477,6 @@ export function CreateScreen({
         </label>
         {maxParticipantsError && <p className="mt-2 text-[12px] font-medium text-destructive">{maxParticipantsError}</p>}
       </div>
-    </div>
-  );
-
-  const renderPlace = () => (
-    <div className="space-y-2">
-      <div className="rounded-xl bg-card px-4 py-3.5">
-        <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
-          {(["online", "offline"] as const).map((mode) => {
-            const active = locationMode === mode;
-            return (
-              <button
-                key={mode}
-                onClick={() => setLocationMode(mode)}
-                className="h-10 rounded-lg text-[14px] font-semibold transition-colors"
-                style={active ? { backgroundColor: GREEN, color: "#fff" } : { color: "var(--foreground)" }}
-              >
-                {mode === "online" ? "Онлайн" : "Офлайн"}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      {locationMode === "offline" && <input value={locationAddress} onChange={(event) => setLocationAddress(event.target.value)} placeholder="Адрес места проведения" className="h-12 w-full rounded-xl bg-card px-4 text-[14px] outline-none placeholder:text-muted-foreground" />}
     </div>
   );
 
@@ -680,94 +543,126 @@ export function CreateScreen({
     </section>
   );
 
-  const cardBackground = draft.gradient ?? DEFAULT_BG;
-  const hasSchedule = timeMode === "exact"
-    ? Boolean(currentSchedule.start)
-    : Boolean(currentSchedule.partOfDay && currentSchedule.weekdays.length > 0);
+  const cardBackground = draft.coverImage ? null : draft.gradient ?? DEFAULT_BG;
+  const hasSchedule = Boolean(currentSchedule.start)
+    || Boolean(currentSchedule.partOfDay && currentSchedule.weekdays.length > 0);
   const dateSummary = hasSchedule ? getTimeDate(currentSchedule) : "";
+  const confirmDate = () => {
+    const error = validateSchedule(currentSchedule);
+    setScheduleError(error);
+    if (!error) setActiveSheet(null);
+  };
 
   return (
-    <div className="relative flex h-full flex-col bg-surface">
-      <div className="flex h-14 flex-shrink-0 items-center justify-between px-4">
-        <button onClick={() => onNavigate(backTo)} className="flex h-10 w-10 items-center justify-start" aria-label="Закрыть">
-          <X size={20} color="var(--foreground)" />
-        </button>
-        <h1 className="text-[16px] font-semibold">{isEditing ? "Редактирование" : "Новый план"}</h1>
-        <div className="h-10 w-10" />
-      </div>
+    <div className="relative h-full overflow-hidden bg-black">
+      {draft.coverImage
+        ? <img src={draft.coverImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        : <div className="absolute inset-0" style={{ background: cardBackground ?? DEFAULT_BG }} />}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.30) 100%)" }}
+      />
 
-      <div className="flex-1 overflow-y-auto pb-4">
-        <div className="relative aspect-[4/5] w-full">
-          {draft.coverImage
-            ? <img src={draft.coverImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
-            : <div className="absolute inset-0" style={{ background: cardBackground }} />}
-          <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(0,0,0,0.55) 100%)" }} />
+      <div className="relative z-10 flex h-full flex-col overflow-y-auto">
+        <div className="flex items-center justify-between px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 12px)" }}>
+          <button
+            type="button"
+            onClick={() => onNavigate(backTo)}
+            className="flex h-10 w-10 items-center justify-center rounded-full text-white backdrop-blur-md"
+            style={{ background: "rgba(0,0,0,0.30)" }}
+            aria-label="Закрыть"
+          >
+            <X size={20} />
+          </button>
+          <button
+            type="button"
+            onClick={handleCreate}
+            className="rounded-full px-4 py-2 text-[15px] font-semibold text-white backdrop-blur-md"
+            style={{ background: "rgba(0,168,157,0.55)" }}
+          >
+            {isEditing ? "Сохранить" : "Создать"}
+          </button>
+        </div>
 
+        <div className="flex min-h-[110px] flex-1 flex-col items-center justify-center px-4">
           <button
             type="button"
             onClick={() => setActiveSheet("background")}
-            className="absolute right-4 top-4 rounded-full px-3 py-1.5 text-[13px] font-medium text-white backdrop-blur-md"
-            style={{ background: "rgba(255,255,255,0.18)" }}
+            className="flex items-center gap-2 rounded-full px-4 py-2.5 text-[15px] font-semibold text-white backdrop-blur-md"
+            style={{ background: "rgba(0,0,0,0.30)" }}
           >
+            <ImageIcon size={18} />
             Изменить фон
           </button>
-
-          <div className="absolute inset-x-4 bottom-16 flex flex-col items-center text-center">
-            <textarea
-              value={draft.title}
-              maxLength={TITLE_LIMIT}
-              onChange={(event) => updateTitle(event.target.value)}
-              placeholder="Название плана"
-              rows={2}
-              className="w-full resize-none bg-transparent text-center text-[30px] font-bold leading-[1.1] text-white outline-none placeholder:text-white/60"
-            />
-            {titleError && <p className="mt-1 text-[12px] font-medium text-white/90">{titleError}</p>}
-          </div>
-
-          <div className="absolute inset-x-4 bottom-5 flex items-center justify-center gap-2 text-white/90">
-            {currentAuthor.avatarUrl
-              ? <img src={currentAuthor.avatarUrl} alt="" className="h-6 w-6 rounded-full object-cover" />
-              : <span className="h-6 w-6 rounded-full bg-white/30" />}
-            <span className="text-[13px]">Организует {currentAuthor.name}</span>
-          </div>
         </div>
 
-        <div className="mt-4 space-y-2 px-4">
-          <OptionRow
-            icon={<Calendar size={17} color={GREEN} />}
-            label="Дата и время"
-            subtitle={dateSummary || "Добавить дату"}
-            onClick={() => setActiveSheet("datetime")}
-            control={<ChevronRight size={18} className="text-muted-foreground" />}
-          />
-          <OptionRow
-            icon={<MapPin size={17} color={GREEN} />}
-            label="Место"
-            subtitle={locationMode === "online" ? "Онлайн" : locationAddress || "Добавить место"}
-            onClick={() => setActiveSheet("place")}
-            control={<ChevronRight size={18} className="text-muted-foreground" />}
-          />
-          <OptionRow
-            icon={<AlignLeft size={17} color={GREEN} />}
-            label="Описание"
-            subtitle={draft.description ? draft.description.slice(0, 60) : "Добавить описание"}
-            onClick={() => setActiveSheet("description")}
-            control={<ChevronRight size={18} className="text-muted-foreground" />}
-          />
-          <OptionRow
-            icon={<SlidersHorizontal size={17} color={GREEN} />}
-            label="Детали"
-            subtitle="Уровень, дистанция, участники, видимость"
-            onClick={() => setActiveSheet("details")}
-            control={<ChevronRight size={18} className="text-muted-foreground" />}
-          />
-        </div>
-      </div>
+        <div className="space-y-3 px-4 pb-6">
+          <div
+            className="overflow-hidden rounded-[22px]"
+            style={{ background: "rgba(0,0,0,0.22)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)" }}
+          >
+            <div className="px-4 pb-4 pt-5">
+              <textarea
+                value={draft.title}
+                maxLength={TITLE_LIMIT}
+                onChange={(event) => updateTitle(event.target.value)}
+                placeholder="Название плана"
+                rows={1}
+                className="w-full resize-none bg-transparent text-center text-[28px] font-bold leading-[1.15] text-white outline-none placeholder:text-white/45"
+              />
+              {titleError && <p className="mt-1 text-center text-[12px] font-medium text-white/90">{titleError}</p>}
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveSheet("datetime")}
+              className="flex w-full flex-col items-center gap-1 border-t py-3.5 text-white active:opacity-80"
+              style={{ borderColor: "rgba(255,255,255,0.12)" }}
+            >
+              <Calendar size={18} className="opacity-80" />
+              <span className="text-[15px]">{dateSummary || "Дата и время"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSheet("place")}
+              className="flex w-full flex-col items-center gap-1 border-t py-3.5 text-white active:opacity-80"
+              style={{ borderColor: "rgba(255,255,255,0.12)" }}
+            >
+              <MapPin size={18} className="opacity-80" />
+              <span className="text-[15px]">{locationMode === "online" ? "Онлайн" : composedAddress || "Место"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSheet("details")}
+              className="flex w-full flex-col items-center gap-1 border-t py-3.5 text-white active:opacity-80"
+              style={{ borderColor: "rgba(255,255,255,0.12)" }}
+            >
+              <SlidersHorizontal size={18} className="opacity-80" />
+              <span className="text-[15px]">Детали</span>
+            </button>
+          </div>
 
-      <div className="flex-shrink-0 border-t border-border bg-card px-4 pb-4 pt-3">
-        <button onClick={handleCreate} className="h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
-          {isEditing ? "Сохранить" : "Создать"}
-        </button>
+          <div
+            className="overflow-hidden rounded-[22px]"
+            style={{ background: "rgba(0,0,0,0.22)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)" }}
+          >
+            <div className="flex flex-col items-center gap-2 px-4 pb-3 pt-5">
+              {currentAuthor.avatarUrl
+                ? <img src={currentAuthor.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover" />
+                : <span className="h-9 w-9 rounded-full bg-white/25" />}
+              <span className="text-[15px] font-semibold text-white">Организует {currentAuthor.name}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveSheet("description")}
+              className="w-full border-t px-4 py-3.5 text-center text-[15px] text-white/85 active:opacity-80"
+              style={{ borderColor: "rgba(255,255,255,0.12)" }}
+            >
+              {draft.description
+                ? draft.description.length > 70 ? `${draft.description.slice(0, 70)}...` : draft.description
+                : "Добавить описание"}
+            </button>
+          </div>
+        </div>
       </div>
 
       {activeSheet === "background" && (
@@ -813,9 +708,9 @@ export function CreateScreen({
               </button>
             )}
 
-            <h3 className="mb-3 mt-6 text-[16px] font-semibold">Или выбери фон</h3>
+            <h3 className="mb-3 mt-6 text-[16px] font-semibold">Градиенты</h3>
             <div className="grid grid-cols-3 gap-2">
-              {BG_PRESETS.map((preset, index) => {
+              {GRADIENT_PRESETS.map((preset, index) => {
                 const active = draft.gradient === preset || (draft.gradient == null && index === 0);
                 return (
                   <button
@@ -835,7 +730,27 @@ export function CreateScreen({
               })}
             </div>
 
-            {renderGalleryPhotos()}
+            <h3 className="mb-3 mt-6 text-[16px] font-semibold">Эмодзи</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {EMOJI_PRESETS.map((preset, index) => {
+                const active = draft.gradient === preset.bg;
+                return (
+                  <button
+                    key={preset.bg}
+                    type="button"
+                    onClick={() => {
+                      updatePlan({ gradient: preset.bg, coverImage: null });
+                      setActiveSheet(null);
+                    }}
+                    aria-label={`Выбрать эмодзи-фон ${index + 1}`}
+                    className="relative h-[72px] rounded-xl border-2"
+                    style={{ background: preset.bg, borderColor: active ? GREEN : "transparent" }}
+                  >
+                    {active && <Check size={20} className="absolute right-2 top-2 text-white" />}
+                  </button>
+                );
+              })}
+            </div>
 
             {uploadProgress !== null && !galleryUploadProgress && (
               <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60">
@@ -847,29 +762,165 @@ export function CreateScreen({
       )}
 
       {activeSheet === "datetime" && (
-        <HomeSheet title="Дата и время" onClose={() => setActiveSheet(null)} panelClassName="max-h-[85vh]" bodyClassName="overflow-y-auto">
-          {renderSchedule()}
+        <HomeSheet
+          variant="dark"
+          title="Дата и время"
+          onClose={() => setActiveSheet(null)}
+          onConfirm={confirmDate}
+          panelClassName="max-h-[85vh]"
+          bodyClassName="overflow-y-auto"
+        >
+          <div className="overflow-hidden rounded-2xl bg-white/5">
+            <div className="flex items-center justify-between px-4 py-4">
+              <span className="text-[15px] font-medium text-white">На весь день</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={allDay}
+                onClick={() => {
+                  const next = !allDay;
+                  setAllDay(next);
+                  writeExact({ allDay: next });
+                }}
+                className="relative h-8 w-[51px] rounded-full transition-colors"
+                style={{ backgroundColor: allDay ? GREEN : "rgba(255,255,255,0.18)" }}
+              >
+                <span className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${allDay ? "translate-x-[23px]" : "translate-x-1"}`} />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-3.5">
+              <span className="text-[15px] text-white">Начало</span>
+              <div className="flex min-w-0 items-center justify-end gap-2">
+                <input
+                  type="date"
+                  value={startParts.date}
+                  onChange={(event) => writeExact({ startDate: event.target.value })}
+                  className="min-w-0 rounded-full bg-white/10 px-3 py-2 text-[15px] text-white outline-none"
+                  style={{ colorScheme: "dark" }}
+                />
+                {!allDay && (
+                  <input
+                    type="time"
+                    value={startParts.time}
+                    onChange={(event) => writeExact({ startTime: event.target.value })}
+                    className="w-[108px] rounded-full bg-white/10 px-3 py-2 text-[15px] text-white outline-none"
+                    style={{ colorScheme: "dark" }}
+                  />
+                )}
+              </div>
+            </div>
+
+            {currentSchedule.end && (
+              <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-3.5">
+                <span className="text-[15px] text-white">Окончание</span>
+                <div className="flex min-w-0 items-center justify-end gap-2">
+                  <input
+                    type="date"
+                    value={endParts.date}
+                    onChange={(event) => writeExact({ endDate: event.target.value })}
+                    className="min-w-0 rounded-full bg-white/10 px-3 py-2 text-[15px] text-white outline-none"
+                    style={{ colorScheme: "dark" }}
+                  />
+                  {!allDay && (
+                    <input
+                      type="time"
+                      value={endParts.time}
+                      onChange={(event) => writeExact({ endTime: event.target.value })}
+                      className="w-[108px] rounded-full bg-white/10 px-3 py-2 text-[15px] text-white outline-none"
+                      style={{ colorScheme: "dark" }}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           <button
             type="button"
-            onClick={() => {
-              const error = validateSchedule(currentSchedule);
-              setScheduleError(error);
-              if (!error) setActiveSheet(null);
-            }}
-            className="mt-4 h-12 w-full rounded-xl text-[15px] font-semibold text-white"
-            style={{ backgroundColor: GREEN }}
+            onClick={() => currentSchedule.end
+              ? writeExact({ endDate: null })
+              : writeExact({ endDate: startParts.date, endTime: allDay ? "23:59" : "21:00" })}
+            className="mt-4 text-[15px] font-medium"
+            style={{ color: GREEN }}
           >
-            Готово
+            {currentSchedule.end ? "Удалить время окончания" : "Добавить окончание"}
           </button>
+          {scheduleError && <p className="mt-3 text-[12px] font-medium text-red-400">{scheduleError}</p>}
         </HomeSheet>
       )}
 
       {activeSheet === "place" && (
-        <HomeSheet title="Место" onClose={() => setActiveSheet(null)}>
-          {renderPlace()}
-          <button type="button" onClick={() => setActiveSheet(null)} className="mt-4 h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
-            Готово
-          </button>
+        <HomeSheet variant="dark" title="Место" onClose={() => setActiveSheet(null)} onConfirm={() => setActiveSheet(null)} panelClassName="max-h-[85vh]" bodyClassName="overflow-y-auto">
+          <div className="grid grid-cols-2 gap-2 rounded-xl bg-white/10 p-1">
+            {(["online", "offline"] as const).map((mode) => {
+              const active = locationMode === mode;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setLocationMode(mode)}
+                  className="h-10 rounded-lg text-[14px] font-semibold text-white transition-colors"
+                  style={active ? { backgroundColor: GREEN } : undefined}
+                >
+                  {mode === "online" ? "Онлайн" : "Офлайн"}
+                </button>
+              );
+            })}
+          </div>
+
+          {locationMode === "offline" ? (
+            <div className="mt-5">
+              <div className="flex h-11 items-center gap-2 rounded-xl bg-white/10 px-3">
+                <Search size={17} className="flex-shrink-0 text-white/60" />
+                <input
+                  value={locationAddress}
+                  onChange={(event) => setLocationAddress(event.target.value)}
+                  placeholder="Поиск места проведения"
+                  className="min-w-0 flex-1 bg-transparent text-[14px] text-white outline-none placeholder:text-white/40"
+                />
+              </div>
+
+              {locationAddress.trim() && (
+                <div className="mt-5">
+                  <p className="mb-2 text-[13px] text-white/60">Место проведения события</p>
+                  <div className="flex items-center gap-3 rounded-xl bg-white/10 px-3 py-3">
+                    <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: GREEN }}>
+                      <MapPin size={16} className="text-white" />
+                    </span>
+                    <span className="min-w-0 flex-1 text-[14px] text-white">{locationAddress}</span>
+                    <button type="button" onClick={() => setLocationAddress("")} className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/10" aria-label="Очистить адрес">
+                      <X size={16} className="text-white/70" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <label className="mt-5 block">
+                <span className="mb-2 block text-[13px] text-white/60">Квартира, офис или этаж</span>
+                <input
+                  value={locationApartment}
+                  onChange={(event) => setLocationApartment(event.target.value)}
+                  placeholder="Пример: квартира 102"
+                  className="h-11 w-full rounded-xl bg-white/10 px-3 text-[14px] text-white outline-none placeholder:text-white/40"
+                />
+                <span className="mt-1.5 block text-[12px] text-white/45">Необязательно. Отображается в плане.</span>
+              </label>
+
+              <label className="mt-5 block">
+                <span className="mb-2 block text-[13px] text-white/60">Название места</span>
+                <input
+                  value={locationVenueName}
+                  onChange={(event) => setLocationVenueName(event.target.value)}
+                  placeholder="Пример: дом Данила"
+                  className="h-11 w-full rounded-xl bg-white/10 px-3 text-[14px] text-white outline-none placeholder:text-white/40"
+                />
+                <span className="mt-1.5 block text-[12px] text-white/45">Необязательно. Отображается в плане.</span>
+              </label>
+            </div>
+          ) : (
+            <p className="mt-5 text-[14px] text-white/70">Онлайн-встреча</p>
+          )}
         </HomeSheet>
       )}
 
@@ -893,6 +944,7 @@ export function CreateScreen({
       {activeSheet === "details" && (
         <HomeSheet title="Детали" onClose={() => setActiveSheet(null)} panelClassName="max-h-[85vh]" bodyClassName="overflow-y-auto">
           {renderFinalOptions()}
+          {renderGalleryPhotos()}
           <button type="button" onClick={() => setActiveSheet(null)} className="mt-4 h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
             Готово
           </button>
