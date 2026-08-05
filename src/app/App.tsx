@@ -2604,15 +2604,12 @@ export default function App() {
           {appToast}
         </div>
       )}
-      <div
-        className="flex min-h-0 flex-1 flex-col overflow-hidden"
-        style={{ paddingBottom: showNav ? "calc(env(safe-area-inset-bottom) + 96px)" : undefined }}
-      >
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {renderScreen()}
       </div>
       {showNav && (
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex items-center justify-between gap-2 px-4"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex items-center justify-between gap-2 px-3"
           style={{ paddingBottom: "max(env(safe-area-inset-bottom), 16px)" }}
         >
           <div className="pointer-events-auto flex items-center gap-1 rounded-full p-1.5 shadow-lg" style={{ background: "#00A89D" }}>
@@ -2629,8 +2626,9 @@ export default function App() {
                 <button
                   key={id}
                   onClick={() => { setNavStack([]); setProfileSourceTab(id); navigate(id, id === "create" ? screen : undefined); }}
-                  className="relative flex items-center gap-1.5 rounded-full px-3 py-2"
+                  className="relative flex items-center gap-1 rounded-full px-2.5 py-1.5"
                   style={{ background: isActive ? "rgba(255,255,255,0.20)" : "transparent" }}
+                  aria-label={label}
                 >
                   <span className="relative flex">
                     <Icon size={20} strokeWidth={2} color="#fff" style={{ opacity: isActive ? 1 : 0.7 }} />
@@ -2640,7 +2638,9 @@ export default function App() {
                       </span>
                     )}
                   </span>
-                  <span className="whitespace-nowrap text-[13px] font-semibold text-white" style={{ opacity: isActive ? 1 : 0.7 }}>{label}</span>
+                  {isActive && (
+                    <span className="whitespace-nowrap text-[13px] font-semibold text-white">{label}</span>
+                  )}
                 </button>
               );
             })}
@@ -2649,7 +2649,7 @@ export default function App() {
           <div className="pointer-events-auto flex items-center gap-2">
             <button
               onClick={() => { setNavStack([]); navigate("create", screen); }}
-              className="flex h-14 w-14 items-center justify-center rounded-full shadow-lg active:opacity-90"
+              className="flex h-12 w-12 items-center justify-center rounded-full shadow-lg active:opacity-90"
               style={{ background: "#00A89D" }}
               aria-label="Добавить план"
             >
@@ -2657,7 +2657,7 @@ export default function App() {
             </button>
             <button
               onClick={() => { setNavStack([]); setProfileSourceTab("profile"); navigate("profile", undefined); }}
-              className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-full shadow-lg ring-2 ring-white/50 active:opacity-90"
+              className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full shadow-lg ring-2 ring-white/50 active:opacity-90"
               aria-label="Профиль"
             >
               {currentAuthor.avatarUrl ? (

@@ -178,7 +178,10 @@ export function PlansScreen({
         })}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div
+        className="flex-1 overflow-y-auto px-4 py-4"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 88px)" }}
+      >
         {activeTab === "saved" ? (
           savedPlans.length === 0 ? (
             <div className="flex min-h-[420px] flex-col items-center justify-center rounded-xl bg-card px-6 text-center">

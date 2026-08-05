@@ -136,7 +136,10 @@ export function ChatsScreen({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-5">
+      <div
+        className="flex-1 overflow-y-auto px-4 pb-5"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 88px)" }}
+      >
         {visibleThreads.length === 0 && !normalizedQuery ? (
           <div className="flex min-h-[420px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full" style={{ backgroundColor: GREEN_LIGHT }}>

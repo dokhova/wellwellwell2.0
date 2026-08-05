@@ -230,10 +230,17 @@ export function CreateScreen({
   const updatePlan = (next: Partial<PlanDraft>) => setDraft((item) => ({ ...item, ...next }));
   const program = draft.trainingProgram ?? { weeks: [] as TrainingWeek[] };
   const setProgram = (next: TrainingProgram) => updatePlan({ trainingProgram: next });
-  const addWeek = () => setProgram({
-    ...program,
-    weeks: [...program.weeks, { week: program.weeks.length + 1, sessions: [] }],
-  });
+  const addWeek = () => {
+    const nextIndex = program.weeks.length;
+    setProgram({
+      ...program,
+      weeks: [...program.weeks, { week: nextIndex + 1, sessions: [] }],
+    });
+    setSessionDayIndices([]);
+    setSessionTitle("");
+    setSessionNote("");
+    setSessionWeekIndex(nextIndex);
+  };
   const removeWeek = (weekIndex: number) => {
     setProgram({
       ...program,
@@ -258,18 +265,6 @@ export function CreateScreen({
     ...program,
     weeks: program.weeks.map((week, index) => index === weekIndex
       ? { ...week, sessions: week.sessions.filter((session) => session.id !== sessionId) }
-      : week),
-  });
-  const updateWeekLevel = (weekIndex: number, levelLabel: string) => setProgram({
-    ...program,
-    weeks: program.weeks.map((week, index) => index === weekIndex
-      ? { ...week, levelLabel: levelLabel || undefined }
-      : week),
-  });
-  const updateWeekDescription = (weekIndex: number, description: string) => setProgram({
-    ...program,
-    weeks: program.weeks.map((week, index) => index === weekIndex
-      ? { ...week, description: description || undefined }
       : week),
   });
   const resetSessionForm = () => {
@@ -867,24 +862,6 @@ export function CreateScreen({
                       <X size={16} className="text-muted-foreground" />
                     </button>
                   </div>
-                  <input
-                    value={week.levelLabel ?? ""}
-                    onChange={(event) => updateWeekLevel(weekIndex, event.target.value)}
-                    onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }}
-                    onBlur={() => setFieldFocused(false)}
-                    placeholder="Заголовок недели"
-                    className="mt-3 h-11 w-full rounded-xl bg-muted px-3.5 text-[14px] outline-none placeholder:text-muted-foreground"
-                  />
-                  <textarea
-                    value={week.description ?? ""}
-                    onChange={(event) => updateWeekDescription(weekIndex, event.target.value)}
-                    onFocus={(event) => { setFieldFocused(true); scrollFocusedFieldIntoView(event.currentTarget); }}
-                    onBlur={() => setFieldFocused(false)}
-                    placeholder="Описание недели (необязательно)"
-                    rows={2}
-                    className="mt-2 w-full resize-none rounded-xl bg-muted px-3.5 py-2.5 text-[14px] outline-none placeholder:text-muted-foreground"
-                  />
-
                   {week.sessions.length > 0 && (
                     <div className="mt-3 space-y-2">
                       {week.sessions.map((session) => (
