@@ -864,7 +864,7 @@ export function CreateScreen({
                   </div>
                   {week.sessions.length > 0 && (
                     <div className="mt-3 space-y-2">
-                      {week.sessions.map((session) => (
+                      {[...week.sessions].sort((a, b) => (a.weekday ?? 99) - (b.weekday ?? 99)).map((session) => (
                         <div key={session.id} className="flex items-center gap-3 rounded-xl bg-muted px-3 py-3">
                           <div className="min-w-0 flex-1">
                             <p className="text-[14px] font-semibold text-foreground">{session.dayLabel} · {session.title}</p>

@@ -351,6 +351,7 @@ export function EventDetailScreen({
   const [sheet, setSheet] = useState<"participants" | "profile" | "share" | "photos" | "unfollow" | null>(null);
   const [subscribed, setSubscribed] = useState(isAuthorFollowedByMe);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [programExpanded, setProgramExpanded] = useState(false);
   const [locationExpanded, setLocationExpanded] = useState(false);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [visiblePhotoIndex, setVisiblePhotoIndex] = useState(0);
@@ -1017,6 +1018,9 @@ export function EventDetailScreen({
               const total = allSessions.length;
               const doneCount = allSessions.filter((session) => checkedItemKeys.includes(sessionKey(session.id))).length;
               const pct = total ? Math.round((doneCount / total) * 100) : 0;
+              const WEEKS_PREVIEW = 2;
+              const visibleWeeks = programExpanded ? trainingProgram.weeks : trainingProgram.weeks.slice(0, WEEKS_PREVIEW);
+              const hasMoreWeeks = trainingProgram.weeks.length > WEEKS_PREVIEW;
 
               return <>
                 <SectionTitle>Программа</SectionTitle>
@@ -1030,14 +1034,14 @@ export function EventDetailScreen({
                   </div>
                 </div>
                 <div className="mt-4 flex flex-col gap-4">
-                  {trainingProgram.weeks.map((week) => <div key={week.week}>
+                  {visibleWeeks.map((week) => <div key={week.week}>
                     <div className="mb-2 flex items-baseline justify-between">
                       <span className="text-[13px] font-medium">Неделя {week.week}</span>
                       {week.levelLabel && <span className="rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ color: PLAN_DARK.accent, background: "rgba(47,191,175,0.16)" }}>{week.levelLabel}</span>}
                     </div>
                     {week.description && <p className="mb-2 mt-1 text-[13px]" style={{ color: PLAN_DARK.textSecondary }}>{week.description}</p>}
                     <div className="flex flex-col gap-2">
-                      {week.sessions.map((session) => {
+                      {[...week.sessions].sort((a, b) => (a.weekday ?? 99) - (b.weekday ?? 99)).map((session) => {
                         const key = sessionKey(session.id);
                         const done = checkedItemKeys.includes(key);
                         return <button key={session.id} type="button" onClick={() => onToggleCheck?.(key)} className="flex w-full items-center gap-3 rounded-xl p-3.5 text-left active:opacity-85" style={{ background: PLAN_DARK.card }}>
@@ -1052,6 +1056,15 @@ export function EventDetailScreen({
                       })}
                     </div>
                   </div>)}
+                  {hasMoreWeeks && (
+                    <button
+                      onClick={() => setProgramExpanded((value) => !value)}
+                      className="mt-1 self-start text-[14px] font-medium"
+                      style={{ color: PLAN_DARK.accent }}
+                    >
+                      {programExpanded ? "Свернуть" : `Подробнее · ещё ${trainingProgram.weeks.length - WEEKS_PREVIEW} нед.`}
+                    </button>
+                  )}
                 </div>
               </>;
             })()}
