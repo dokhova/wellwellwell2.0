@@ -172,8 +172,9 @@ export function CreateScreen({
 
   const updatePlan = (next: Partial<PlanDraft>) => setDraft((item) => ({ ...item, ...next }));
   const updateSchedule = (next: Partial<Schedule>) => updatePlan({ schedule: { ...currentSchedule, ...next } });
+  const todayIso = () => new Date().toISOString().slice(0, 10);
   const writeSchedule = (patch: { date?: string; time?: string; repeating?: boolean; weekdays?: number[] }) => {
-    const date = patch.date ?? scheduleDate;
+    const date = (patch.date ?? scheduleDate) || todayIso();
     const time = patch.time ?? scheduleTime;
     const repeating = patch.repeating ?? isRepeating;
     const weekdays = patch.weekdays ?? currentSchedule.weekdays ?? [];
