@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import confetti from "canvas-confetti";
-import { Calendar, Camera, Check, Eye, Image as ImageIcon, Lock, MapPin, Plus, Search, SlidersHorizontal, Users, X } from "lucide-react";
-import type { HomeFeedPlan, Schedule, Screen, Visibility } from "@/app/types";
-import { GREEN, PART_OF_DAY_RANGES } from "@/app/data/constants";
-import { DEFAULT_PLAN_AUTHOR } from "@/app/data/plans";
+import { Camera, Check, ChevronDown, Eye, Image as ImageIcon, Lock, MapPin, Maximize2, Plus, Search, Users, X } from "lucide-react";
+import type { HomeFeedPlan, PlanTag, Schedule, Screen, Visibility } from "@/app/types";
+import { ALL_DAYS, GREEN, PART_OF_DAY_RANGES, PLAN_DARK, WEEKDAY_VALUES } from "@/app/data/constants";
+import { DEFAULT_PLAN_AUTHOR, PLAN_TAG_LABELS, PLAN_TAGS } from "@/app/data/plans";
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
 import { fetchRecentProfiles, searchProfiles } from "@/app/lib/api/profiles";
 import { getNearestWeekdayDate, getRepeatUntil, normalizeSchedule, toIsoDate, toLocalIsoDate } from "@/app/lib/schedule";
 import { formatWeekdayRanges } from "@/app/lib/weekdayRanges";
 
-type Sheet = null | "background" | "datetime" | "place" | "description" | "details";
+type Sheet = null | "background" | "date" | "time" | "place" | "description" | "details" | "tag";
 type PlanDraft = { title: string; description: string; coverImage: string | null; photos: string[]; schedule: Schedule; gradient?: string };
 type Person = { id: string; name: string; avatarUrl: string | null };
 const TITLE_LIMIT = 80;
@@ -56,17 +56,6 @@ export type CreatedPlanResult = {
   participants: string[];
   location: { address: string } | "online" | null;
   videoMeeting: { enabled: boolean; link: string };
-};
-
-const getLocalDateTime = () => {
-  const date = new Date();
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-  return date.toISOString().slice(0, 16);
-};
-
-const splitDateTime = (value: string) => {
-  const [date = "", time = ""] = value.split("T");
-  return { date, time };
 };
 
 const defaultSchedule = (): Schedule => ({
@@ -116,7 +105,6 @@ export function CreateScreen({
   currentAuthor?: HomeFeedPlan["author"];
   editingPlan?: HomeFeedPlan | null;
 }) {
-  const initialDateTime = useMemo(() => getLocalDateTime(), []);
   const isEditing = Boolean(editingPlan);
   const [people, setPeople] = useState<Person[]>([]);
 
@@ -133,6 +121,7 @@ export function CreateScreen({
   const [scheduleError, setScheduleError] = useState("");
   const [maxParticipantsError, setMaxParticipantsError] = useState("");
   const [visibility, setVisibility] = useState<Visibility>(editingPlan?.visibility ?? "all");
+  const [selectedTag, setSelectedTag] = useState<PlanTag>(editingPlan?.tag ?? "other");
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [maxParticipants, setMaxParticipants] = useState<string>(() => editingPlan?.maxParticipants ? String(editingPlan.maxParticipants) : "");
   const [selectedPeople, setSelectedPeople] = useState<Person[]>([]);
@@ -144,15 +133,11 @@ export function CreateScreen({
   const [galleryToast, setGalleryToast] = useState("");
   const [locationMode, setLocationMode] = useState<"online" | "offline">(editingPlan?.format ?? "online");
   const [locationAddress, setLocationAddress] = useState(editingPlan?.address ?? "");
-  const [locationApartment, setLocationApartment] = useState("");
-  const [locationVenueName, setLocationVenueName] = useState("");
-  const [allDay, setAllDay] = useState(false);
   const planType = "simple" as const;
   const currentSchedule = draft.schedule;
-  const exactStart = currentSchedule.start ?? initialDateTime;
-  const exactEnd = typeof currentSchedule.end === "string" ? currentSchedule.end : exactStart;
-  const startParts = splitDateTime(exactStart);
-  const endParts = splitDateTime(exactEnd);
+  const scheduleDate = currentSchedule.start ? currentSchedule.start.slice(0, 10) : "";
+  const scheduleTime = currentSchedule.time || "00:00";
+  const isRepeating = currentSchedule.repeat?.type === "weekly";
   const selectedParticipantItems = selectedPeople.filter((person) => selectedParticipants.includes(person.id));
   const filteredPeople = people;
 
@@ -187,20 +172,21 @@ export function CreateScreen({
 
   const updatePlan = (next: Partial<PlanDraft>) => setDraft((item) => ({ ...item, ...next }));
   const updateSchedule = (next: Partial<Schedule>) => updatePlan({ schedule: { ...currentSchedule, ...next } });
-  const writeExact = (patch: { startDate?: string; startTime?: string; endDate?: string | null; endTime?: string; allDay?: boolean }) => {
-    const isAllDay = patch.allDay ?? allDay;
-    const startDate = (patch.startDate ?? startParts.date) || toLocalIsoDate(new Date());
-    const startTime = isAllDay ? "00:00" : (patch.startTime ?? startParts.time) || "18:00";
-    const start = `${startDate}T${startTime}`;
-    let end: string | undefined = typeof currentSchedule.end === "string" ? currentSchedule.end : undefined;
-    if (patch.endDate === null) {
-      end = undefined;
-    } else if (patch.endDate || patch.endTime || patch.allDay !== undefined) {
-      const endDate = (patch.endDate ?? endParts.date) || startDate;
-      const endTime = isAllDay ? "23:59" : (patch.endTime ?? endParts.time) || "21:00";
-      end = `${endDate}T${endTime}`;
-    }
-    updateSchedule({ mode: "exact", timeMode: "exact", start, end, weekdays: [], repeat: { type: "none" } });
+  const writeSchedule = (patch: { date?: string; time?: string; repeating?: boolean; weekdays?: number[] }) => {
+    const date = patch.date ?? scheduleDate;
+    const time = patch.time ?? scheduleTime;
+    const repeating = patch.repeating ?? isRepeating;
+    const weekdays = patch.weekdays ?? currentSchedule.weekdays ?? [];
+    updateSchedule({
+      mode: "exact",
+      timeMode: "exact",
+      start: date ? `${date}T${time}` : undefined,
+      time,
+      partOfDay: null,
+      weekdays: repeating ? weekdays : [],
+      repeat: repeating ? { type: "weekly" } : { type: "none" },
+      end: undefined,
+    });
     setScheduleError("");
   };
   const updateTitle = (value: string) => {
@@ -293,8 +279,6 @@ export function CreateScreen({
       : partLabel;
   };
 
-  const composedAddress = [locationVenueName.trim(), locationAddress.trim(), locationApartment.trim()].filter(Boolean).join(", ");
-
   const handleCreate = () => {
     if (!draft.title.trim()) {
       setTitleError("Введите название");
@@ -305,12 +289,11 @@ export function CreateScreen({
     const invalidSchedule = validateSchedule(baseSchedule);
     if (invalidSchedule) {
       setScheduleError(invalidSchedule);
-      setActiveSheet("datetime");
+      setActiveSheet("date");
       return;
     }
 
     const finalizedSchedule = finalizeSchedule(baseSchedule);
-    void planType;
     const trainingProgram = undefined;
     const finalizedDraft = { ...draft, schedule: finalizedSchedule, trainingProgram };
     const maxParticipantsValue = maxParticipants.trim();
@@ -329,6 +312,7 @@ export function CreateScreen({
       const updatedPlan: HomeFeedPlan = {
         ...editingPlan,
         visibility,
+        tag: selectedTag,
         format: locationMode,
         level: editingPlan.level,
         distanceLabel: editingPlan.distanceLabel,
@@ -343,13 +327,13 @@ export function CreateScreen({
         trainingProgram,
         maxParticipants: parsedMaxParticipants,
         timeDate: getTimeDate(finalizedSchedule),
-        address: locationMode === "offline" && composedAddress ? composedAddress : undefined,
+        address: locationMode === "offline" && locationAddress.trim() ? locationAddress.trim() : undefined,
       };
       const result: CreatedPlanResult = {
         plan: { ...finalizedDraft, title: draft.title.trim(), description: draft.description.trim() },
         visibility,
         participants: selectedParticipants,
-        location: locationMode === "online" ? "online" : composedAddress ? { address: composedAddress } : null,
+        location: locationMode === "online" ? "online" : locationAddress.trim() ? { address: locationAddress.trim() } : null,
         videoMeeting: { enabled: false, link: "" },
       };
       onUpdatePlan?.(updatedPlan, result);
@@ -362,7 +346,7 @@ export function CreateScreen({
       id,
       kind: "plan",
       visibility,
-      tag: "other",
+      tag: selectedTag,
       format: locationMode,
       level: undefined,
       distanceLabel: undefined,
@@ -379,14 +363,14 @@ export function CreateScreen({
       participantsLabel: "1 чел.",
       maxParticipants: parsedMaxParticipants,
       timeDate: getTimeDate(finalizedSchedule),
-      address: locationMode === "offline" && composedAddress ? composedAddress : undefined,
+      address: locationMode === "offline" && locationAddress.trim() ? locationAddress.trim() : undefined,
       author: currentAuthor,
     };
     const result: CreatedPlanResult = {
       plan: { ...finalizedDraft, title: draft.title.trim(), description: draft.description.trim() },
       visibility,
       participants: selectedParticipants,
-      location: locationMode === "online" ? "online" : composedAddress ? { address: composedAddress } : null,
+      location: locationMode === "online" ? "online" : locationAddress.trim() ? { address: locationAddress.trim() } : null,
       videoMeeting: { enabled: false, link: "" },
     };
 
@@ -412,174 +396,135 @@ export function CreateScreen({
     }
   };
 
-  const renderGalleryPhotos = () => (
-    <section className="relative mt-7">
-      <h3 className="text-[16px] font-semibold">Фото для галереи</h3>
-      <p className="mt-1 text-[14px] text-muted-foreground">Покажи, как проходит активность</p>
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        {draft.photos.map((photo, index) => (
-          <div key={`${photo}-${index}`} className="relative aspect-square overflow-hidden rounded-xl">
-            <img loading="lazy" decoding="async" src={photo} alt="" className="h-full w-full object-cover" />
-            <button
-              type="button"
-              disabled={uploadProgress !== null}
-              aria-label={`Удалить фото ${index + 1}`}
-              onClick={() => setDraft((item) => ({ ...item, photos: item.photos.filter((_, photoIndex) => photoIndex !== index) }))}
-              className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white disabled:opacity-50"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        ))}
-        {draft.photos.length < 10 && (
-          <label className={`flex aspect-square items-center justify-center rounded-xl border-2 border-dashed border-border bg-card ${uploadProgress === null ? "active:opacity-80" : "cursor-not-allowed opacity-50"}`}>
-            <Plus size={28} color={GREEN} />
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              disabled={uploadProgress !== null}
-              className="hidden"
-              onChange={(event) => {
-                const files = Array.from(event.target.files ?? []);
-                event.target.value = "";
-                void uploadGalleryPhotos(files);
-              }}
-            />
-          </label>
-        )}
-      </div>
-      {uploadProgress !== null && galleryUploadProgress && (
-        <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60">
-          <span className="text-center text-[18px] font-semibold text-white">
-            {galleryUploadProgress.current} из {galleryUploadProgress.total}
-            <span className="mt-1 block text-[14px]">{uploadProgress}%</span>
-          </span>
-        </div>
-      )}
-    </section>
-  );
-
   const cardBackground = draft.coverImage ? null : draft.gradient ?? DEFAULT_BG;
-  const hasSchedule = Boolean(currentSchedule.start)
-    || Boolean(currentSchedule.partOfDay && currentSchedule.weekdays.length > 0);
-  const dateSummary = hasSchedule ? getTimeDate(currentSchedule) : "";
   const confirmDate = () => {
     const error = validateSchedule(currentSchedule);
     setScheduleError(error);
     if (!error) setActiveSheet(null);
   };
 
+  const dateSummary = isRepeating
+    ? currentSchedule.weekdays.length ? formatWeekdayRanges(currentSchedule.weekdays) : "Дни недели"
+    : scheduleDate && currentSchedule.start
+      ? new Date(currentSchedule.start).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })
+      : "Добавить";
+
   return (
-    <div className="relative h-full overflow-hidden bg-black">
-      {draft.coverImage
-        ? <img src={draft.coverImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
-        : <div className="absolute inset-0" style={{ background: cardBackground ?? DEFAULT_BG }} />}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.30) 100%)" }}
-      />
+    <div className="relative h-full overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden">
+        {draft.coverImage
+          ? <img src={draft.coverImage} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ filter: "blur(34px)", transform: "scale(1.2)" }} />
+          : <div className="absolute inset-0" style={{ background: cardBackground ?? DEFAULT_BG, filter: "blur(34px)", transform: "scale(1.2)" }} />}
+        <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.42)" }} />
+      </div>
 
       <div className="relative z-10 flex h-full flex-col overflow-y-auto">
-        <div className="flex items-center justify-between px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 12px)" }}>
-          <button
-            type="button"
-            onClick={() => onNavigate(backTo)}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-white backdrop-blur-md"
-            style={{ background: "rgba(0,0,0,0.30)" }}
-            aria-label="Закрыть"
+        <div className="relative aspect-[4/5] w-full">
+          <div
+            className="absolute inset-0"
+            style={{
+              WebkitMaskImage: "linear-gradient(to bottom, black 78%, transparent 100%)",
+              maskImage: "linear-gradient(to bottom, black 78%, transparent 100%)",
+            }}
           >
-            <X size={20} />
-          </button>
-          <button
-            type="button"
-            onClick={handleCreate}
-            className="rounded-full px-4 py-2 text-[15px] font-semibold text-white backdrop-blur-md"
-            style={{ background: "rgba(0,168,157,0.55)" }}
-          >
-            {isEditing ? "Сохранить" : "Создать"}
-          </button>
-        </div>
+            {draft.coverImage
+              ? <img src={draft.coverImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              : <div className="absolute inset-0" style={{ background: cardBackground ?? DEFAULT_BG }} />}
+            <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, transparent 45%, rgba(0,0,0,0.45) 88%)" }} />
+          </div>
 
-        <div className="flex min-h-[110px] flex-1 flex-col items-center justify-center px-4">
-          <button
-            type="button"
-            onClick={() => setActiveSheet("background")}
-            className="flex items-center gap-2 rounded-full px-4 py-2.5 text-[15px] font-semibold text-white backdrop-blur-md"
-            style={{ background: "rgba(0,0,0,0.30)" }}
-          >
+          <div className="absolute inset-x-0 top-0 flex items-center justify-between px-4" style={{ paddingTop: "calc(env(safe-area-inset-top) + 12px)" }}>
+            <button type="button" onClick={() => onNavigate(backTo)} className="flex h-10 w-10 items-center justify-center rounded-full text-white backdrop-blur-md" style={{ background: "rgba(0,0,0,0.30)" }} aria-label="Закрыть">
+              <X size={20} />
+            </button>
+            <button type="button" onClick={handleCreate} className="rounded-full px-4 py-2 text-[15px] font-semibold text-white backdrop-blur-md" style={{ background: "rgba(0,168,157,0.55)" }}>
+              {isEditing ? "Сохранить" : "Создать"}
+            </button>
+          </div>
+
+          <button type="button" onClick={() => setActiveSheet("background")} className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-[15px] font-semibold text-white backdrop-blur-md" style={{ background: "rgba(0,0,0,0.30)" }}>
             <ImageIcon size={18} />
             Изменить фон
           </button>
+
+          <div className="absolute inset-x-4 bottom-6 flex flex-col items-center gap-2 text-center" style={{ textShadow: "0 1px 12px rgba(0,0,0,0.45)" }}>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setActiveSheet("tag")} className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-medium text-white backdrop-blur-md" style={{ background: "rgba(255,255,255,0.18)" }}>
+                {PLAN_TAG_LABELS[selectedTag]}
+                <ChevronDown size={14} />
+              </button>
+              <button type="button" onClick={() => setVisibility((value) => value === "all" ? "onlyMe" : "all")} className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-medium text-white backdrop-blur-md" style={{ background: "rgba(255,255,255,0.18)" }}>
+                {visibility === "all" ? <><Eye size={14} />Все</> : <><Lock size={14} />Только я</>}
+              </button>
+            </div>
+            <textarea value={draft.title} maxLength={TITLE_LIMIT} onChange={(event) => updateTitle(event.target.value)} placeholder="Название плана" rows={2} className="w-full resize-none bg-transparent text-center text-[32px] font-bold leading-[1.08] text-white outline-none placeholder:text-white/45" />
+            {titleError && <p className="text-[12px] font-medium text-white/90">{titleError}</p>}
+            <div className="flex items-center gap-2">
+              {currentAuthor.avatarUrl
+                ? <img src={currentAuthor.avatarUrl} alt="" className="h-6 w-6 rounded-full object-cover" />
+                : <span className="h-6 w-6 rounded-full bg-white/25" />}
+              <span className="text-[13px] text-white/90">Организует {currentAuthor.name}</span>
+            </div>
+          </div>
         </div>
 
-        <div className="space-y-3 px-4 pb-6">
-          <div
-            className="overflow-hidden rounded-[22px]"
-            style={{ background: "rgba(0,0,0,0.22)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)" }}
-          >
-            <div className="px-4 pb-4 pt-5">
-              <textarea
-                value={draft.title}
-                maxLength={TITLE_LIMIT}
-                onChange={(event) => updateTitle(event.target.value)}
-                placeholder="Название плана"
-                rows={1}
-                className="w-full resize-none bg-transparent text-center text-[28px] font-bold leading-[1.15] text-white outline-none placeholder:text-white/45"
-              />
-              {titleError && <p className="mt-1 text-center text-[12px] font-medium text-white/90">{titleError}</p>}
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveSheet("datetime")}
-              className="flex w-full flex-col items-center gap-1 border-t py-3.5 text-white active:opacity-80"
-              style={{ borderColor: "rgba(255,255,255,0.12)" }}
-            >
-              <Calendar size={18} className="opacity-80" />
-              <span className="text-[15px]">{dateSummary || "Дата и время"}</span>
+        <div className="px-4 pb-8 pt-2 text-white">
+          <h2 className="mb-3 mt-6 text-[12px] font-medium uppercase tracking-[0.08em]" style={{ color: PLAN_DARK.textSecondary }}>Детали</h2>
+          <div className="grid grid-cols-2 gap-2.5">
+            <button type="button" onClick={() => setActiveSheet("date")} className="rounded-xl p-4 text-left backdrop-blur-md active:opacity-85" style={{ background: PLAN_DARK.card }}>
+              <span className="text-[13px]" style={{ color: PLAN_DARK.textSecondary }}>Дата</span>
+              <span className="mt-2 block text-[24px] font-bold leading-tight text-white">{dateSummary}</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveSheet("place")}
-              className="flex w-full flex-col items-center gap-1 border-t py-3.5 text-white active:opacity-80"
-              style={{ borderColor: "rgba(255,255,255,0.12)" }}
-            >
-              <MapPin size={18} className="opacity-80" />
-              <span className="text-[15px]">{locationMode === "online" ? "Онлайн" : composedAddress || "Место"}</span>
+            <button type="button" onClick={() => setActiveSheet("time")} className="rounded-xl p-4 text-left backdrop-blur-md active:opacity-85" style={{ background: PLAN_DARK.card }}>
+              <span className="text-[13px]" style={{ color: PLAN_DARK.textSecondary }}>Время</span>
+              <span className="mt-2 block text-[24px] font-bold leading-tight text-white">{scheduleTime}</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveSheet("details")}
-              className="flex w-full flex-col items-center gap-1 border-t py-3.5 text-white active:opacity-80"
-              style={{ borderColor: "rgba(255,255,255,0.12)" }}
-            >
-              <SlidersHorizontal size={18} className="opacity-80" />
-              <span className="text-[15px]">Детали</span>
-              <span className="text-[12px] text-white/55">Участники, лимит, видимость</span>
+            <button type="button" onClick={() => setActiveSheet("details")} className="min-h-[106px] rounded-xl p-4 text-left backdrop-blur-md active:opacity-85" style={{ background: PLAN_DARK.card }}>
+              <span className="text-[13px]" style={{ color: PLAN_DARK.textSecondary }}>Участники</span>
+              {selectedParticipantItems.length > 0 ? (
+                <div className="mt-3 flex -space-x-2">
+                  {selectedParticipantItems.slice(0, 5).map((person) => person.avatarUrl
+                    ? <img key={person.id} src={person.avatarUrl} alt={person.name} className="h-9 w-9 rounded-full border-2 object-cover" style={{ borderColor: PLAN_DARK.bg }} />
+                    : <span key={person.id} className="h-9 w-9 rounded-full border-2 bg-white/15" style={{ borderColor: PLAN_DARK.bg }} />)}
+                </div>
+              ) : <span className="mt-2 flex items-center gap-2 text-[18px] font-bold text-white"><Plus size={20} />Пригласить</span>}
+            </button>
+            <button type="button" onClick={() => setActiveSheet("place")} className="min-h-[106px] rounded-xl p-4 text-left backdrop-blur-md active:opacity-85" style={{ background: PLAN_DARK.card }}>
+              <span className="text-[13px]" style={{ color: PLAN_DARK.textSecondary }}>{locationMode === "online" ? "Формат" : "Где"}</span>
+              <span className="mt-2 block overflow-hidden text-[18px] font-bold leading-tight text-white" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                {locationMode === "online" ? "Онлайн" : locationAddress.trim() || "Добавить место"}
+              </span>
             </button>
           </div>
 
-          <div
-            className="overflow-hidden rounded-[22px]"
-            style={{ background: "rgba(0,0,0,0.22)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)" }}
-          >
-            <div className="flex flex-col items-center gap-2 px-4 pb-3 pt-5">
-              {currentAuthor.avatarUrl
-                ? <img src={currentAuthor.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover" />
-                : <span className="h-9 w-9 rounded-full bg-white/25" />}
-              <span className="text-[15px] font-semibold text-white">Организует {currentAuthor.name}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveSheet("description")}
-              className="w-full border-t px-4 py-3.5 text-center text-[15px] text-white/85 active:opacity-80"
-              style={{ borderColor: "rgba(255,255,255,0.12)" }}
-            >
-              {draft.description
-                ? draft.description.length > 70 ? `${draft.description.slice(0, 70)}...` : draft.description
-                : "Добавить описание"}
-            </button>
-          </div>
+          <h2 className="mb-3 mt-6 text-[12px] font-medium uppercase tracking-[0.08em]" style={{ color: PLAN_DARK.textSecondary }}>Описание</h2>
+          <button type="button" onClick={() => setActiveSheet("description")} className="w-full rounded-xl p-4 text-left backdrop-blur-md active:opacity-85" style={{ background: PLAN_DARK.card }}>
+            {draft.description
+              ? <p className="overflow-hidden whitespace-pre-line text-[15px] leading-[1.45] text-white" style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}>{draft.description}</p>
+              : <span className="text-[15px]" style={{ color: PLAN_DARK.textSecondary }}>Добавить описание</span>}
+          </button>
+
+          <h2 className="mb-3 mt-6 text-[12px] font-medium uppercase tracking-[0.08em]" style={{ color: PLAN_DARK.textSecondary }}>Фотографии</h2>
+          <label className={`relative block w-full rounded-xl p-4 text-left backdrop-blur-md ${uploadProgress === null ? "active:opacity-85" : "opacity-70"}`} style={{ background: PLAN_DARK.card }}>
+            {draft.photos.length > 0 ? (
+              <>
+                <span className="mb-3 block text-[15px] font-semibold text-white">{draft.photos.length} фото</span>
+                <span className="grid grid-cols-3 gap-2">
+                  {draft.photos.slice(0, 3).map((photo, index) => <img key={`${photo}-${index}`} src={photo} alt="" className="aspect-[4/3] w-full rounded-[10px] object-cover" />)}
+                </span>
+              </>
+            ) : <span className="text-[15px]" style={{ color: PLAN_DARK.textSecondary }}>Загрузить фотографии</span>}
+            <input type="file" accept="image/*" multiple disabled={uploadProgress !== null} className="hidden" onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+              event.target.value = "";
+              void uploadGalleryPhotos(files);
+            }} />
+            {uploadProgress !== null && galleryUploadProgress && (
+              <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/60 text-center text-[16px] font-semibold text-white">
+                {galleryUploadProgress.current} из {galleryUploadProgress.total}, {uploadProgress}%
+              </span>
+            )}
+          </label>
         </div>
       </div>
 
@@ -670,8 +615,6 @@ export function CreateScreen({
               })}
             </div>
 
-            {renderGalleryPhotos()}
-
             {uploadProgress !== null && !galleryUploadProgress && (
               <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60">
                 <span className="text-[22px] font-semibold text-white">{uploadProgress}%</span>
@@ -681,10 +624,35 @@ export function CreateScreen({
         </HomeSheet>
       )}
 
-      {activeSheet === "datetime" && (
+      {activeSheet === "tag" && (
+        <HomeSheet variant="dark" title="Тег" onClose={() => setActiveSheet(null)} onConfirm={() => setActiveSheet(null)}>
+          <div className="grid grid-cols-2 gap-2">
+            {PLAN_TAGS.map((tag) => {
+              const active = tag === selectedTag;
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTag(tag);
+                    setActiveSheet(null);
+                  }}
+                  className="relative rounded-xl border-2 bg-white/[0.06] px-4 py-3 text-left text-[14px] font-medium text-white"
+                  style={{ borderColor: active ? GREEN : "transparent" }}
+                >
+                  {PLAN_TAG_LABELS[tag]}
+                  {active && <Check size={16} className="absolute right-3 top-3" style={{ color: GREEN }} />}
+                </button>
+              );
+            })}
+          </div>
+        </HomeSheet>
+      )}
+
+      {activeSheet === "date" && (
         <HomeSheet
           variant="dark"
-          title="Дата и время"
+          title="Дата"
           onClose={() => setActiveSheet(null)}
           onConfirm={confirmDate}
           panelClassName="max-h-[85vh]"
@@ -692,84 +660,57 @@ export function CreateScreen({
         >
           <div className="overflow-hidden rounded-2xl bg-white/[0.06]">
             <div className="flex items-center justify-between px-4 py-4">
-              <span className="text-[16px] text-white">На весь день</span>
+              <span className="text-[16px] text-white">Дата начала</span>
+              <label className="relative flex-shrink-0 rounded-full bg-white/10 px-3 py-2 text-[15px] text-white">
+                {scheduleDate && currentSchedule.start
+                  ? new Date(currentSchedule.start).toLocaleDateString("ru-RU", { day: "numeric", month: "short", weekday: "short" })
+                  : "Выбрать"}
+                <input type="date" value={scheduleDate} onChange={(event) => writeSchedule({ date: event.target.value })} className="absolute inset-0 cursor-pointer opacity-0" style={{ colorScheme: "dark" }} />
+              </label>
+            </div>
+            <div className="flex items-center justify-between border-t border-white/10 px-4 py-4">
+              <span className="text-[16px] text-white">Повторять</span>
               <button
                 type="button"
                 role="switch"
-                aria-checked={allDay}
-                onClick={() => {
-                  const next = !allDay;
-                  setAllDay(next);
-                  writeExact({ allDay: next });
-                }}
+                aria-checked={isRepeating}
+                onClick={() => writeSchedule({ repeating: !isRepeating })}
                 className="relative h-7 w-12 flex-shrink-0 rounded-full transition-colors"
-                style={{ background: allDay ? GREEN : "rgba(255,255,255,0.22)" }}
+                style={{ background: isRepeating ? GREEN : "rgba(255,255,255,0.22)" }}
               >
-                <span
-                  className="absolute top-0.5 h-6 w-6 rounded-full bg-white transition-transform"
-                  style={{ left: 2, transform: allDay ? "translateX(20px)" : "translateX(0)" }}
-                />
+                <span className="absolute top-0.5 h-6 w-6 rounded-full bg-white transition-transform" style={{ left: 2, transform: isRepeating ? "translateX(20px)" : "translateX(0)" }} />
               </button>
             </div>
-
-            <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-4">
-              <span className="text-[15px] text-white">Начало</span>
-              <div className="flex min-w-0 items-center justify-end gap-2">
-                <input
-                  type="date"
-                  value={startParts.date}
-                  onChange={(event) => writeExact({ startDate: event.target.value })}
-                  className="min-w-0 flex-shrink-0 rounded-full bg-white/10 px-3 py-2 text-[15px] text-white outline-none"
-                  style={{ colorScheme: "dark" }}
-                />
-                {!allDay && (
-                  <input
-                    type="time"
-                    value={startParts.time}
-                    onChange={(event) => writeExact({ startTime: event.target.value })}
-                    className="w-[108px] flex-shrink-0 rounded-full bg-white/10 px-3 py-2 text-[15px] text-white outline-none"
-                    style={{ colorScheme: "dark" }}
-                  />
-                )}
-              </div>
-            </div>
-
-            {currentSchedule.end && (
-              <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-4">
-                <span className="text-[15px] text-white">Окончание</span>
-                <div className="flex min-w-0 items-center justify-end gap-2">
-                  <input
-                    type="date"
-                    value={endParts.date}
-                    onChange={(event) => writeExact({ endDate: event.target.value })}
-                    className="min-w-0 flex-shrink-0 rounded-full bg-white/10 px-3 py-2 text-[15px] text-white outline-none"
-                    style={{ colorScheme: "dark" }}
-                  />
-                  {!allDay && (
-                    <input
-                      type="time"
-                      value={endParts.time}
-                      onChange={(event) => writeExact({ endTime: event.target.value })}
-                      className="w-[108px] flex-shrink-0 rounded-full bg-white/10 px-3 py-2 text-[15px] text-white outline-none"
-                      style={{ colorScheme: "dark" }}
-                    />
-                  )}
+            {isRepeating && (
+              <div className="border-t border-white/10 px-3 py-4">
+                <div className="grid grid-cols-7 gap-1">
+                  {WEEKDAY_VALUES.map((weekday, index) => {
+                    const active = currentSchedule.weekdays.includes(weekday);
+                    return (
+                      <button key={weekday} type="button" onClick={() => writeSchedule({ weekdays: active ? currentSchedule.weekdays.filter((item) => item !== weekday) : [...currentSchedule.weekdays, weekday] })} className="flex aspect-square items-center justify-center rounded-full text-[12px] font-medium text-white" style={{ background: active ? GREEN : "rgba(255,255,255,0.10)" }}>
+                        {ALL_DAYS[index]}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
           </div>
-
-          <button
-            type="button"
-            onClick={() => currentSchedule.end
-              ? writeExact({ endDate: null })
-              : writeExact({ endDate: startParts.date, endTime: allDay ? "23:59" : "21:00" })}
-            className="px-4 pt-3 text-[15px] font-medium"
-            style={{ color: GREEN }}
-          >
-            {currentSchedule.end ? "Удалить время окончания" : "Добавить окончание"}
-          </button>
           {scheduleError && <p className="px-4 pt-2 text-[12px] font-medium text-red-400">{scheduleError}</p>}
+        </HomeSheet>
+      )}
+
+      {activeSheet === "time" && (
+        <HomeSheet variant="dark" title="Время" onClose={() => setActiveSheet(null)} onConfirm={() => setActiveSheet(null)}>
+          <div className="rounded-2xl bg-white/[0.06]">
+            <div className="flex items-center justify-between px-4 py-4">
+              <span className="text-[16px] text-white">Время начала</span>
+              <label className="relative flex-shrink-0 rounded-full bg-white/10 px-3 py-2 text-[15px] text-white">
+                {scheduleTime}
+                <input type="time" value={scheduleTime} onChange={(event) => writeSchedule({ time: event.target.value })} className="absolute inset-0 cursor-pointer opacity-0" style={{ colorScheme: "dark" }} />
+              </label>
+            </div>
+          </div>
         </HomeSheet>
       )}
 
@@ -794,52 +735,23 @@ export function CreateScreen({
 
           {locationMode === "offline" ? (
             <div className="mt-5">
+              {/* TODO: подключить Яндекс.Карты (Suggest + карта) — заменить заглушку */}
               <div className="flex h-11 items-center gap-2 rounded-xl bg-white/10 px-3">
                 <Search size={17} className="flex-shrink-0 text-white/60" />
                 <input
                   value={locationAddress}
                   onChange={(event) => setLocationAddress(event.target.value)}
-                  placeholder="Поиск места проведения"
+                  placeholder="Адрес места"
                   className="min-w-0 flex-1 bg-transparent text-[14px] text-white outline-none placeholder:text-white/40"
                 />
               </div>
-
-              {locationAddress.trim() && (
-                <div className="mt-5">
-                  <p className="mb-2 text-[13px] text-white/55">Место проведения события</p>
-                  <div className="flex items-center gap-3 rounded-xl bg-white/10 px-3 py-3">
-                    <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: GREEN }}>
-                      <MapPin size={16} className="text-white" />
-                    </span>
-                    <span className="min-w-0 flex-1 text-[14px] text-white">{locationAddress}</span>
-                    <button type="button" onClick={() => setLocationAddress("")} className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/10" aria-label="Очистить адрес">
-                      <X size={16} className="text-white/70" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <label className="mt-5 block">
-                <span className="mb-2 block text-[13px] text-white/55">Квартира, офис или этаж</span>
-                <input
-                  value={locationApartment}
-                  onChange={(event) => setLocationApartment(event.target.value)}
-                  placeholder="Пример: квартира 102"
-                  className="h-11 w-full rounded-xl bg-white/10 px-3 text-[14px] text-white outline-none placeholder:text-white/40"
-                />
-                <span className="mt-1 block text-[12px] text-white/40">Необязательно. Отображается в плане.</span>
-              </label>
-
-              <label className="mt-5 block">
-                <span className="mb-2 block text-[13px] text-white/55">Название места</span>
-                <input
-                  value={locationVenueName}
-                  onChange={(event) => setLocationVenueName(event.target.value)}
-                  placeholder="Пример: дом Данила"
-                  className="h-11 w-full rounded-xl bg-white/10 px-3 text-[14px] text-white outline-none placeholder:text-white/40"
-                />
-                <span className="mt-1 block text-[12px] text-white/40">Необязательно. Отображается в плане.</span>
-              </label>
+              <div className="relative mt-3 flex h-28 w-full flex-col items-center justify-center gap-1 rounded-xl bg-white/[0.06]">
+                <button type="button" className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/10" aria-label="Развернуть карту">
+                  <Maximize2 size={15} className="text-white/60" />
+                </button>
+                <MapPin size={20} className="text-white/40" />
+                <span className="text-[12px] text-white/40">место встречи</span>
+              </div>
             </div>
           ) : (
             <p className="mt-5 text-[14px] text-white/70">Онлайн-встреча</p>
@@ -848,49 +760,23 @@ export function CreateScreen({
       )}
 
       {activeSheet === "description" && (
-        <HomeSheet title="Описание" onClose={() => setActiveSheet(null)}>
+        <HomeSheet variant="dark" title="Описание" onClose={() => setActiveSheet(null)} onConfirm={() => setActiveSheet(null)}>
           <textarea
             value={draft.description}
             maxLength={DESCRIPTION_LIMIT}
             onChange={(event) => updateDescription(event.target.value)}
             placeholder="Что будешь делать, и с какой целью"
-            rows={5}
-            className="min-h-[150px] w-full resize-none rounded-xl bg-card px-3.5 py-3.5 text-[14px] leading-5 outline-none"
+            rows={6}
+            className="w-full resize-none rounded-2xl bg-white/[0.06] px-4 py-3.5 text-[15px] leading-5 text-white outline-none placeholder:text-white/40"
           />
-          {descriptionLeft < DESCRIPTION_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-muted-foreground">{descriptionLeft}</p>}
-          <button type="button" onClick={() => setActiveSheet(null)} className="mt-4 h-12 w-full rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
-            Готово
-          </button>
+          {descriptionLeft < DESCRIPTION_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-white/40">{descriptionLeft}</p>}
         </HomeSheet>
       )}
 
       {activeSheet === "details" && (
         <HomeSheet variant="dark" title="Детали" onClose={() => setActiveSheet(null)} onConfirm={() => setActiveSheet(null)} panelClassName="max-h-[85vh]" bodyClassName="overflow-y-auto">
           <div className="overflow-hidden rounded-2xl bg-white/[0.06]">
-            <div className="flex items-center justify-between gap-3 px-4 py-4">
-              <div className="flex items-center gap-2 text-white">
-                {visibility === "all" ? <Eye size={18} /> : <Lock size={18} />}
-                <span className="text-[15px] font-medium">Видимость</span>
-              </div>
-              <div className="grid w-[168px] grid-cols-2 gap-1 rounded-xl bg-white/10 p-1">
-                {([["all", "Все"], ["onlyMe", "Только я"]] as const).map(([value, label]) => {
-                  const active = visibility === value;
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setVisibility(value)}
-                      className={`h-9 rounded-lg text-[13px] font-semibold ${active ? "text-white" : "text-white/80"}`}
-                      style={active ? { background: GREEN } : undefined}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <button type="button" onClick={() => setParticipantsOpen(true)} className="flex w-full items-center gap-3 border-t border-white/10 px-4 py-4 text-left">
+            <button type="button" onClick={() => setParticipantsOpen(true)} className="flex w-full items-center gap-3 px-4 py-4 text-left">
               <Users size={19} className="flex-shrink-0 text-white" />
               <div className="min-w-0 flex-1">
                 <p className="text-[15px] font-medium text-white">Участники</p>
