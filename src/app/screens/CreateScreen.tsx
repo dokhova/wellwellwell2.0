@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import confetti from "canvas-confetti";
-import { Camera, Check, ChevronDown, Eye, Image as ImageIcon, Lock, MapPin, Maximize2, Plus, Search, Users, X } from "lucide-react";
+import { Check, ChevronDown, Eye, Image as ImageIcon, Lock, MapPin, Maximize2, Plus, Search, Users, X } from "lucide-react";
 import type { HomeFeedPlan, PlanTag, Schedule, Screen, Visibility } from "@/app/types";
 import { ALL_DAYS, GREEN, PART_OF_DAY_RANGES, PLAN_DARK, WEEKDAY_VALUES } from "@/app/data/constants";
 import { DEFAULT_PLAN_AUTHOR, PLAN_TAG_LABELS, PLAN_TAGS } from "@/app/data/plans";
@@ -10,7 +10,7 @@ import { fetchRecentProfiles, searchProfiles } from "@/app/lib/api/profiles";
 import { getNearestWeekdayDate, getRepeatUntil, normalizeSchedule, toIsoDate, toLocalIsoDate } from "@/app/lib/schedule";
 import { formatWeekdayRanges } from "@/app/lib/weekdayRanges";
 
-type Sheet = null | "background" | "date" | "time" | "place" | "description" | "details" | "tag";
+type Sheet = null | "background" | "date" | "place" | "details" | "tag";
 type PlanDraft = { title: string; description: string; coverImage: string | null; photos: string[]; schedule: Schedule; gradient?: string };
 type Person = { id: string; name: string; avatarUrl: string | null };
 const TITLE_LIMIT = 80;
@@ -380,8 +380,6 @@ export function CreateScreen({
     window.setTimeout(() => onNavigate("plans"), 750);
   };
 
-  const descriptionLeft = DESCRIPTION_LIMIT - draft.description.length;
-
   const uploadCoverImage = async (file: File) => {
     setUploadProgress(0);
     try {
@@ -455,17 +453,11 @@ export function CreateScreen({
                 <ChevronDown size={14} />
               </button>
               <button type="button" onClick={() => setVisibility((value) => value === "all" ? "onlyMe" : "all")} className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-medium text-white backdrop-blur-md" style={{ background: "rgba(255,255,255,0.18)" }}>
-                {visibility === "all" ? <><Eye size={14} />Все</> : <><Lock size={14} />Только я</>}
+                {visibility === "all" ? <><Eye size={14} />Открытый</> : <><Lock size={14} />Закрытый</>}
               </button>
             </div>
             <textarea value={draft.title} maxLength={TITLE_LIMIT} onChange={(event) => updateTitle(event.target.value)} placeholder="Название плана" rows={2} className="w-full resize-none bg-transparent text-center text-[32px] font-bold leading-[1.08] text-white outline-none placeholder:text-white/45" />
             {titleError && <p className="text-[12px] font-medium text-white/90">{titleError}</p>}
-            <div className="flex items-center gap-2">
-              {currentAuthor.avatarUrl
-                ? <img src={currentAuthor.avatarUrl} alt="" className="h-6 w-6 rounded-full object-cover" />
-                : <span className="h-6 w-6 rounded-full bg-white/25" />}
-              <span className="text-[13px] text-white/90">Организует {currentAuthor.name}</span>
-            </div>
           </div>
         </div>
 
@@ -476,10 +468,11 @@ export function CreateScreen({
               <span className="text-[13px]" style={{ color: PLAN_DARK.textSecondary }}>Дата</span>
               <span className="mt-2 block text-[24px] font-bold leading-tight text-white">{dateSummary}</span>
             </button>
-            <button type="button" onClick={() => setActiveSheet("time")} className="rounded-xl p-4 text-left backdrop-blur-md active:opacity-85" style={{ background: PLAN_DARK.card }}>
+            <label className="relative rounded-xl p-4 text-left backdrop-blur-md active:opacity-85" style={{ background: PLAN_DARK.card }}>
               <span className="text-[13px]" style={{ color: PLAN_DARK.textSecondary }}>Время</span>
               <span className="mt-2 block text-[24px] font-bold leading-tight text-white">{scheduleTime}</span>
-            </button>
+              <input type="time" value={scheduleTime} onChange={(event) => writeSchedule({ time: event.target.value })} className="absolute inset-0 cursor-pointer opacity-0" style={{ colorScheme: "dark" }} />
+            </label>
             <button type="button" onClick={() => setActiveSheet("details")} className="min-h-[106px] rounded-xl p-4 text-left backdrop-blur-md active:opacity-85" style={{ background: PLAN_DARK.card }}>
               <span className="text-[13px]" style={{ color: PLAN_DARK.textSecondary }}>Участники</span>
               {selectedParticipantItems.length > 0 ? (
@@ -499,72 +492,49 @@ export function CreateScreen({
           </div>
 
           <h2 className="mb-3 mt-6 text-[12px] font-medium uppercase tracking-[0.08em]" style={{ color: PLAN_DARK.textSecondary }}>Описание</h2>
-          <button type="button" onClick={() => setActiveSheet("description")} className="w-full rounded-xl p-4 text-left backdrop-blur-md active:opacity-85" style={{ background: PLAN_DARK.card }}>
-            {draft.description
-              ? <p className="overflow-hidden whitespace-pre-line text-[15px] leading-[1.45] text-white" style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}>{draft.description}</p>
-              : <span className="text-[15px]" style={{ color: PLAN_DARK.textSecondary }}>Добавить описание</span>}
-          </button>
+          <div className="rounded-xl p-4 backdrop-blur-md" style={{ background: PLAN_DARK.card }}>
+            <textarea value={draft.description} onChange={(event) => updateDescription(event.target.value)} maxLength={DESCRIPTION_LIMIT} placeholder="Добавить описание" rows={3} className="w-full resize-none bg-transparent text-[15px] leading-[1.45] text-white outline-none placeholder:text-white/40" />
+          </div>
 
           <h2 className="mb-3 mt-6 text-[12px] font-medium uppercase tracking-[0.08em]" style={{ color: PLAN_DARK.textSecondary }}>Фотографии</h2>
-          <label className={`relative block w-full rounded-xl p-4 text-left backdrop-blur-md ${uploadProgress === null ? "active:opacity-85" : "opacity-70"}`} style={{ background: PLAN_DARK.card }}>
-            {draft.photos.length > 0 ? (
-              <>
-                <span className="mb-3 block text-[15px] font-semibold text-white">{draft.photos.length} фото</span>
-                <span className="grid grid-cols-3 gap-2">
-                  {draft.photos.slice(0, 3).map((photo, index) => <img key={`${photo}-${index}`} src={photo} alt="" className="aspect-[4/3] w-full rounded-[10px] object-cover" />)}
+          <label className={`relative grid w-full grid-cols-3 gap-2 ${uploadProgress === null ? "cursor-pointer" : "opacity-70"}`}>
+            {draft.photos.map((photo, index) => <img key={`${photo}-${index}`} src={photo} alt="" className="aspect-[4/3] w-full rounded-[10px] object-cover" />)}
+            <span className="relative flex aspect-[4/3] items-center justify-center gap-1 rounded-[10px] border border-dashed border-white/25 text-[12px] text-white/40">
+              {uploadProgress !== null && galleryUploadProgress ? (
+                <span className="text-center text-[12px] font-medium text-white">
+                  {galleryUploadProgress.current} из {galleryUploadProgress.total}<br />{uploadProgress}%
                 </span>
-              </>
-            ) : <span className="text-[15px]" style={{ color: PLAN_DARK.textSecondary }}>Загрузить фотографии</span>}
+              ) : (
+                <><Plus size={17} />Добавить</>
+              )}
+            </span>
             <input type="file" accept="image/*" multiple disabled={uploadProgress !== null} className="hidden" onChange={(event) => {
               const files = Array.from(event.target.files ?? []);
               event.target.value = "";
               void uploadGalleryPhotos(files);
             }} />
-            {uploadProgress !== null && galleryUploadProgress && (
-              <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/60 text-center text-[16px] font-semibold text-white">
-                {galleryUploadProgress.current} из {galleryUploadProgress.total}, {uploadProgress}%
-              </span>
-            )}
           </label>
         </div>
       </div>
 
       {activeSheet === "background" && (
-        <HomeSheet title="Фон" onClose={() => setActiveSheet(null)} panelClassName="max-h-[85vh]" bodyClassName="overflow-y-auto">
+        <HomeSheet title="Фон" onClose={() => setActiveSheet(null)} fixedHeight="85vh">
           <div className="relative">
-            <div className="grid grid-cols-2 gap-2">
-              <label className="flex h-12 items-center justify-center gap-2 rounded-xl bg-card text-[14px] font-semibold active:opacity-80">
-                <ImageIcon size={18} color={GREEN} />
-                Фото
-                <input
-                  type="file"
-                  accept="image/*"
-                  disabled={uploadProgress !== null}
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    event.target.value = "";
-                    if (file) void uploadCoverImage(file);
-                  }}
-                />
-              </label>
-              <label className="flex h-12 items-center justify-center gap-2 rounded-xl bg-card text-[14px] font-semibold active:opacity-80">
-                <Camera size={18} color={GREEN} />
-                Камера
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  disabled={uploadProgress !== null}
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    event.target.value = "";
-                    if (file) void uploadCoverImage(file);
-                  }}
-                />
-              </label>
-            </div>
+            <label className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-card text-[14px] font-semibold active:opacity-80">
+              <ImageIcon size={18} color={GREEN} />
+              Фото
+              <input
+                type="file"
+                accept="image/*"
+                disabled={uploadProgress !== null}
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void uploadCoverImage(file);
+                }}
+              />
+            </label>
 
             {draft.coverImage && (
               <button type="button" onClick={() => updatePlan({ coverImage: null })} className="mt-3 h-11 w-full rounded-xl bg-card text-[14px] font-semibold" style={{ color: GREEN }}>
@@ -701,20 +671,6 @@ export function CreateScreen({
         </HomeSheet>
       )}
 
-      {activeSheet === "time" && (
-        <HomeSheet variant="dark" title="Время" onClose={() => setActiveSheet(null)} onConfirm={() => setActiveSheet(null)}>
-          <div className="rounded-2xl bg-white/[0.06]">
-            <div className="flex items-center justify-between px-4 py-4">
-              <span className="text-[16px] text-white">Время начала</span>
-              <label className="relative flex-shrink-0 rounded-full bg-white/10 px-3 py-2 text-[15px] text-white">
-                {scheduleTime}
-                <input type="time" value={scheduleTime} onChange={(event) => writeSchedule({ time: event.target.value })} className="absolute inset-0 cursor-pointer opacity-0" style={{ colorScheme: "dark" }} />
-              </label>
-            </div>
-          </div>
-        </HomeSheet>
-      )}
-
       {activeSheet === "place" && (
         <HomeSheet variant="dark" title="Место" onClose={() => setActiveSheet(null)} onConfirm={() => setActiveSheet(null)} panelClassName="max-h-[85vh]" bodyClassName="overflow-y-auto">
           <div className="grid grid-cols-2 gap-1 rounded-xl bg-white/10 p-1">
@@ -757,20 +713,6 @@ export function CreateScreen({
           ) : (
             <p className="mt-5 text-[14px] text-white/70">Онлайн-встреча</p>
           )}
-        </HomeSheet>
-      )}
-
-      {activeSheet === "description" && (
-        <HomeSheet variant="dark" title="Описание" onClose={() => setActiveSheet(null)} onConfirm={() => setActiveSheet(null)}>
-          <textarea
-            value={draft.description}
-            maxLength={DESCRIPTION_LIMIT}
-            onChange={(event) => updateDescription(event.target.value)}
-            placeholder="Что будешь делать, и с какой целью"
-            rows={6}
-            className="w-full resize-none rounded-2xl bg-white/[0.06] px-4 py-3.5 text-[15px] leading-5 text-white outline-none placeholder:text-white/40"
-          />
-          {descriptionLeft < DESCRIPTION_LIMIT * 0.2 && <p className="mt-2 text-right text-[12px] text-white/40">{descriptionLeft}</p>}
         </HomeSheet>
       )}
 
@@ -824,6 +766,8 @@ export function CreateScreen({
           <div className="mb-3 flex h-11 flex-shrink-0 items-center gap-2 rounded-xl bg-white/10 px-3">
             <Search size={17} strokeWidth={1.9} className="text-white/60" />
             <input
+              type="text"
+              inputMode="text"
               value={participantQuery}
               onChange={(event) => setParticipantQuery(event.target.value)}
               placeholder="Поиск по имени"
