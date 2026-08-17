@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, Edit3, MessageCircle } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Coins, Edit3, MessageCircle } from "lucide-react";
 import type { Article, ChatPeer, HomeFeedPlan, PlanId, Screen } from "@/app/types";
 import { formatNearestDate, getNextOccurrence, weekDateMonths } from "@/app/data/calendar";
 import { GREEN, GREEN_LIGHT, PLAN_DARK } from "@/app/data/constants";
 import { DEFAULT_COVER_URLS, profileFollowers, profileFollowing, resolveCoverUrl, type ExpertConnection, type ExpertProfile } from "@/app/data/profile";
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { isSchedulePastRepeatEnd } from "@/app/lib/schedule";
+import { useCoinBalance } from "@/app/lib/coins";
 
 export type ConnectionType = "followers" | "following";
 
@@ -188,6 +189,7 @@ export function ProfileScreen(props: {
   onPlanOpen: (id: PlanId) => void;
   onConnectionsOpen: (type: ConnectionType) => void;
   onEdit: () => void;
+  onOpenRewards?: () => void;
   onBack?: () => void;
   onAddPlan: () => void;
   onRemovePlan: (id: PlanId) => void;
@@ -207,6 +209,7 @@ export function ProfileScreen(props: {
   const [isBioExpanded, setIsBioExpanded] = useState(false);
   const [isBioClamped, setIsBioClamped] = useState(false);
   const [showAllPlans, setShowAllPlans] = useState(false);
+  const coinBalance = useCoinBalance(props.profile.id);
   const bioRef = useRef<HTMLParagraphElement | null>(null);
   const visiblePlans = showAllPlans ? props.plans : props.plans.slice(0, 3);
   const nearestPlans = props.plans
@@ -388,6 +391,24 @@ export function ProfileScreen(props: {
                 <span className="mt-0.5 text-[12px] text-white/60">Планы</span>
               </div>
             </div>
+
+            {props.isMe && (
+              <button
+                type="button"
+                onClick={props.onOpenRewards}
+                className="mt-5 flex w-full items-center rounded-2xl px-4 py-4 text-left shadow-lg active:opacity-90"
+                style={{ background: "linear-gradient(135deg, #00A89D 0%, #2FBFAF 100%)" }}
+              >
+                <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-white/20 text-white">
+                  <Coins size={24} strokeWidth={2} />
+                </span>
+                <span className="ml-3 min-w-0 flex-1">
+                  <span className="block text-[28px] font-bold leading-8 text-white">{coinBalance}</span>
+                  <span className="block text-[13px] text-white/80">монеток</span>
+                </span>
+                <ChevronRight size={23} strokeWidth={2} className="text-white/85" />
+              </button>
+            )}
 
             {props.profile.bio && (
               <div className="mt-5 rounded-2xl p-4 text-left" style={{ background: "rgba(255,255,255,0.10)", border: "0.5px solid rgba(255,255,255,0.15)" }}>

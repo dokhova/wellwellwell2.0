@@ -19,6 +19,7 @@ import { applyTelegramChrome, buildPlanStartAppUrl, getTelegramAuthDate, getTele
 import { checkBackendHealth } from "@/app/lib/health";
 import { supabase } from "@/app/lib/supabase";
 import { identifyUser, track, type PlanViewSource } from "@/app/lib/analytics";
+import { awardCoins, useCoinBalance } from "@/app/lib/coins";
 import { HomeScreen } from "@/app/screens/HomeScreen";
 import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
 import { CreateScreen, type CreatedPlanResult } from "@/app/screens/CreateScreen";
@@ -31,6 +32,7 @@ import { EventDetailScreen } from "@/app/screens/EventDetailScreen";
 import { ChatScreen, ChatsScreen } from "@/app/screens/ChatScreen";
 import { WorkInProgress } from "@/app/components/WorkInProgress";
 import { WelcomeScreen } from "@/app/screens/WelcomeScreen";
+import { RewardsScreen } from "@/app/screens/RewardsScreen";
 import appLogo from "@/imports/avatar-brand.png";
 import { pluralizeFollowers } from "@/app/lib/pluralize";
 
@@ -549,11 +551,13 @@ export default function App() {
   const localPeerByIdRef = useRef<Map<string, ChatPeer>>(new Map());
   const syncedDemoFollowingUserIdsRef = useRef(new Set<string>());
   const currentUserId = editableProfile.id;
+  const coinBalance = useCoinBalance(currentUserId);
   const isModerator = MODERATOR_IDS.includes(currentUserId);
   const currentAuthor = {
     id: currentUserId,
     name: editableProfile.name,
     avatarUrl: editableProfile.photoUrl,
+    isDemo: editableProfile.isDemo,
   };
   const currentRootTab: Screen = screen === "profile" && viewingOwnProfile
     ? "profile"
@@ -1916,6 +1920,7 @@ export default function App() {
     const wasJoined = myParticipantIds.some((item) => participantKey(item) === key);
     const isAuthorJoiningOwnPlan = plan?.author.id === currentUserId;
     if (!wasJoined) track("plan_join", { plan_id: idKey, source });
+    if (!wasJoined && editableProfile.isDemo !== true) awardCoins(currentUserId, "plan_joined", idKey);
     updateMyParticipantIdsFromUserAction((ids) => ids.some((item) => participantKey(item) === key) ? ids : [ref, ...ids]);
     setJoinedParticipantPeers((items) => ({
       ...items,
@@ -2135,6 +2140,7 @@ export default function App() {
     sanitizedPlans.forEach((plan) => {
       void createPlanRemote(plan).then((remotePlan) => {
         track("plan_created", { plan_id: planKey(remotePlan?.id ?? plan.id) });
+        if (editableProfile.isDemo !== true) awardCoins(currentUserId, "plan_created", planKey(remotePlan?.id ?? plan.id));
         if (!remotePlan) return;
         setCreatedPlans((items) => items.map((item) => planKey(item.id) === planKey(plan.id) ? remotePlan : item));
         setHighlightedPlanId(remotePlan.id);
@@ -2219,6 +2225,7 @@ export default function App() {
       const wasFollowed = (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === profile.id);
       if (wasFollowed === nextFollowed) return;
       if (nextFollowed) track("follow", { target_id: profile.id, target_is_demo: false });
+      if (nextFollowed && editableProfile.isDemo !== true) awardCoins(currentUserId, "user_followed", profile.id);
       setOptimisticFollowState(profile, nextFollowed);
       setDbFollowing((items) => nextFollowed
         ? items.some((item) => item.id === profile.id) ? items : [connection, ...items]
@@ -2249,6 +2256,7 @@ export default function App() {
     if (wasDemoFollowed === nextFollowed) return;
     const connection = { id: profile.id, name: profile.name, avatarUrl: profile.photoUrl, isFollowedByMe: true };
     if (nextFollowed) track("follow", { target_id: profile.id, target_is_demo: true });
+    if (nextFollowed && editableProfile.isDemo !== true) awardCoins(currentUserId, "user_followed", profile.id);
     setMyFollowing((items) => {
       if (!nextFollowed) return items.filter((item) => item.id !== profile.id);
       if (items.some((item) => item.id === profile.id)) return items;
@@ -2275,6 +2283,8 @@ export default function App() {
           <HomeScreen
             plans={publicPlans}
             pinnedPlanIds={PINNED_PLAN_ID_SET}
+            currentUserId={currentUserId}
+            currentUserIsDemo={editableProfile.isDemo}
             onNavigate={navigate}
             onPlanOpen={(id) => openPlanEvent(id, "home")}
             onAuthorOpen={openExpertProfile}
@@ -2408,6 +2418,11 @@ export default function App() {
             onPlanOpen={id => { openPlanEvent(id, "profile"); }}
             onConnectionsOpen={(type) => openProfileConnections(type, isCurrentUserProfile, viewedProfile.id)}
             onEdit={() => setScreen("editProfile")}
+            onOpenRewards={() => {
+              track("rewards_opened", {});
+              setPreviousScreen("profile");
+              setScreen("rewards");
+            }}
             onBack={() => goBackInStack(previousScreen)}
             onAddPlan={() => {
               setPreviousScreen("profile");
@@ -2424,6 +2439,8 @@ export default function App() {
             connectionsLoading={!isDemoProfile(viewedProfile) && !loadedViewedConnectionSets}
           />
         );
+      case "rewards":
+        return <RewardsScreen balance={coinBalance} onBack={() => setScreen("profile")} />;
       case "editProfile":
         return (
           <EditProfileScreen

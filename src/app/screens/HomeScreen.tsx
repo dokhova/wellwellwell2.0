@@ -6,6 +6,7 @@ import { GREEN, GREEN_LIGHT, PART_OF_DAY_RANGES } from "@/app/data/constants";
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { buildPlanStartAppUrl, openExternalUrl } from "@/app/lib/telegram";
 import { track } from "@/app/lib/analytics";
+import { awardCoins } from "@/app/lib/coins";
 import { formatWeekdayRanges } from "@/app/lib/weekdayRanges";
 
 const planKey = (id: PlanId) => String(id);
@@ -201,6 +202,8 @@ export function HomeScreen({
   onScrollTopChange,
   plans,
   pinnedPlanIds,
+  currentUserId,
+  currentUserIsDemo,
 }: {
   onNavigate: (s: Screen, from?: Screen) => void;
   onPlanOpen: (id: PlanId, from?: Screen) => void;
@@ -213,6 +216,8 @@ export function HomeScreen({
   onScrollTopChange?: (scrollTop: number) => void;
   plans: HomeFeedPlan[];
   pinnedPlanIds: ReadonlySet<string>;
+  currentUserId: string;
+  currentUserIsDemo?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const initialScrollTopRef = useRef(initialScrollTop);
@@ -240,6 +245,7 @@ export function HomeScreen({
     if (!activePlan) return;
     await navigator.clipboard?.writeText(buildPlanStartAppUrl(planKey(activePlan.id)));
     track("plan_link_copied", { plan_id: planKey(activePlan.id), screen: "feed" });
+    if (currentUserIsDemo !== true) awardCoins(currentUserId, "plan_shared", `share:${planKey(activePlan.id)}`);
     setCopied(true);
   };
 

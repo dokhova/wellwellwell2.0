@@ -24,6 +24,8 @@ type AnalyticsEventProps = {
   support_contact_clicked: { target: "support" | "community" };
   plan_created: { plan_id: string };
   plan_description_format_applied: { format: "bold" | "italic" | "link" };
+  rewards_opened: Record<string, never>;
+  coins_awarded: { action: string; amount: number };
 };
 
 export type AnalyticsEvent = keyof AnalyticsEventProps;

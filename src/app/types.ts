@@ -1,4 +1,4 @@
-export type Screen = "home" | "plans" | "create" | "chats" | "chat" | "detail" | "article" | "search" | "planEvent" | "profile" | "profileConnections" | "editProfile" | "addPlan";
+export type Screen = "home" | "plans" | "create" | "chats" | "chat" | "detail" | "article" | "search" | "planEvent" | "profile" | "profileConnections" | "editProfile" | "addPlan" | "rewards";
 
 export interface Article {
   id: number;
@@ -193,6 +193,7 @@ export interface EventDetailProps {
     id: string;
     name: string;
     avatarUrl: string | null;
+    isDemo?: boolean;
   };
   canDelete?: boolean;
   onDelete?: () => void;
