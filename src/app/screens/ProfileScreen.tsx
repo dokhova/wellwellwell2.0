@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, ChevronRight, Coins, Edit3, MessageCircle } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Edit3, MessageCircle } from "lucide-react";
 import type { Article, ChatPeer, HomeFeedPlan, PlanId, Screen } from "@/app/types";
 import { formatNearestDate, getNextOccurrence, weekDateMonths } from "@/app/data/calendar";
 import { GREEN, GREEN_LIGHT, PLAN_DARK } from "@/app/data/constants";
@@ -7,6 +7,7 @@ import { DEFAULT_COVER_URLS, profileFollowers, profileFollowing, resolveCoverUrl
 import { HomeSheet } from "@/app/components/HomeSheet";
 import { isSchedulePastRepeatEnd } from "@/app/lib/schedule";
 import { useCoinBalance } from "@/app/lib/coins";
+import { CoinIcon } from "@/app/components/CoinIcon";
 
 export type ConnectionType = "followers" | "following";
 
@@ -399,8 +400,8 @@ export function ProfileScreen(props: {
                 className="mt-5 flex w-full items-center rounded-2xl px-4 py-4 text-left shadow-lg active:opacity-90"
                 style={{ background: "linear-gradient(135deg, #00A89D 0%, #2FBFAF 100%)" }}
               >
-                <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-white/20 text-white">
-                  <Coins size={24} strokeWidth={2} />
+                <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-white/25 text-white">
+                  <CoinIcon size={26} />
                 </span>
                 <span className="ml-3 min-w-0 flex-1">
                   <span className="block text-[28px] font-bold leading-8 text-white">{coinBalance}</span>
