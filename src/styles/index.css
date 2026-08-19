@@ -13,3 +13,8 @@
   25% { opacity: 1; }
   100% { transform: translateY(-26px); opacity: 0; }
 }
+
+@keyframes bonus-notice-in {
+  from { transform: translateY(-70px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}

@@ -14,12 +14,12 @@ const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number;
 const KIND_LINE = { code: "Промокод, покажи при оплате", booking: "Место забронировано, покажи на входе", pickup: "Забери на ближайшей пробежке" } as const;
 const KIND_TAG = { code: "промокод", booking: "бронь", pickup: "к выдаче" } as const;
 const EARN_ACTIONS = Object.keys(COIN_REWARDS) as CoinAction[];
-const REWARD_PHOTO_TAGS: Record<string, string> = {
-  shu: "running-fashion",
-  slot: "city-race",
-  tee: "sportswear",
-  bottle: "running-water",
-  marathon: "marathon-finish",
+const REWARD_PHOTOS: Record<string, { tags: string; lock: number }> = {
+  shu: { tags: "running,shoes", lock: 21 },
+  slot: { tags: "marathon,runners", lock: 22 },
+  tee: { tags: "running,tshirt", lock: 23 },
+  bottle: { tags: "sport,waterbottle", lock: 24 },
+  marathon: { tags: "marathon,race", lock: 25 },
 };
 const format = (value: number) => value.toLocaleString("ru-RU");
 const pluralGifts = (count: number) => {
@@ -45,18 +45,16 @@ function BottomSheet({ children, onClose }: { children: ReactNode; onClose: () =
 
 function RewardCard({ reward, balance, received, onOpen }: { reward: Reward; balance: number; received: boolean; onOpen: (reward: Reward) => void }) {
   const [imageVisible, setImageVisible] = useState(true);
-  const photoUrl = useMemo(() => {
-    const tag = REWARD_PHOTO_TAGS[reward.id] ?? reward.id;
-    const variant = Math.floor(Math.random() * 12);
-    return `https://picsum.photos/seed/www-${tag}-${variant}/320/440`;
-  }, [reward.id]);
+  const photo = REWARD_PHOTOS[reward.id] ?? { tags: reward.id, lock: 99 };
+  const photoUrl = `https://loremflickr.com/320/440/${photo.tags}?lock=${photo.lock}`;
   const Icon = ICONS[reward.id] ?? Gift;
   const available = reward.cost <= balance;
 
   return (
     <button type="button" onClick={() => onOpen(reward)} disabled={received} className="relative flex min-h-[214px] w-[158px] shrink-0 snap-start flex-col overflow-hidden rounded-[24px] border p-3.5 text-left transition active:scale-[0.98]" style={{ borderColor: BORDER, background: `linear-gradient(155deg, ${reward.gradient[0]}, ${reward.gradient[1]})` }}>
       {imageVisible && <img src={photoUrl} alt="" onError={() => setImageVisible(false)} className="absolute inset-0 h-full w-full object-cover" />}
-      <span className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,.25)_0%,rgba(0,0,0,0)_32%,rgba(0,0,0,.82)_100%)]" />
+      <span className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,120,110,.32),rgba(4,48,44,.55))] mix-blend-multiply" />
+      <span className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,.15)_0%,rgba(0,0,0,0)_34%,rgba(0,0,0,.82)_100%)]" />
       <span className="relative z-10 flex h-[46px] w-[46px] items-center justify-center rounded-[14px] bg-white/15 backdrop-blur-sm"><Icon size={23} strokeWidth={2} /></span>
       <span className="relative z-10 mt-auto block w-full">
         <span className="block text-[15px] font-bold leading-[1.2]">{reward.title}</span>

@@ -33,6 +33,19 @@ export const awardCoinsRemote = async (userId: string, action: string, dedupeKey
   return typeof data === "number" ? data : Number(data);
 };
 
+export const hasCoinAwardRemote = async (userId: string, action: string, dedupeKey: string) => {
+  if (!supabase) return false;
+  const { data, error } = await supabase
+    .from("coin_transactions")
+    .select("dedupe_key")
+    .eq("user_id", userId)
+    .eq("action", action)
+    .eq("dedupe_key", dedupeKey)
+    .maybeSingle<{ dedupe_key: string }>();
+  if (error) throw error;
+  return Boolean(data);
+};
+
 export const redeemRewardRemote = async ({ userId, rewardId, code }: {
   userId: string;
   rewardId: string;

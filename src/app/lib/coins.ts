@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { awardCoinsRemote, fetchCoinStateRemote, redeemRewardRemote } from "@/app/lib/api/coins";
+import { awardCoinsRemote, fetchCoinStateRemote, hasCoinAwardRemote, redeemRewardRemote } from "@/app/lib/api/coins";
 import { track } from "@/app/lib/analytics";
 
 export type CoinAction = "plan_created" | "friend_invited" | "plan_joined" | "comment_added" | "message_sent";
@@ -25,6 +25,16 @@ export const COIN_ACTION_LABELS: Record<CoinAction, string> = {
   message_sent: "Отправить сообщение",
 };
 
+export const COIN_ACTION_REASONS: Record<CoinAction, string> = {
+  plan_created: "создание плана",
+  friend_invited: "приглашение друга",
+  plan_joined: "запись на план",
+  comment_added: "комментарий",
+  message_sent: "сообщение",
+};
+
+export type CoinAwardNotice = { id: string; action: CoinAction; amount: number; reason: string };
+
 export const REWARDS: Reward[] = [
   { id: "shu", title: "Скидка 15% SHU", sub: "Промокод участника", cost: 500, kind: "code", gradient: ["#33383E", "#0E1114"] },
   { id: "slot", title: "Слот на забег", sub: "Бесплатное участие", cost: 800, kind: "booking", gradient: ["#0E7A6F", "#053B38"] },
@@ -42,8 +52,10 @@ const WELCOME_GIFTS: Omit<ClaimedReward, "claimedAt">[] = [
 ];
 const stateByUser = new Map<string, CoinState>();
 const listeners = new Set<() => void>();
+const awardNoticeListeners = new Set<(notice: CoinAwardNotice) => void>();
 const hydratingUsers = new Set<string>();
 const redeeming = new Set<string>();
+const awarding = new Set<string>();
 const EMPTY_STATE: CoinState = { balance: 0, ledger: [], claimed: [] };
 
 const withWelcomeGifts = (userId: string, source: CoinState): CoinState => {
@@ -117,7 +129,12 @@ const hydrate = async (userId: string) => {
   finally { hydratingUsers.delete(userId); }
 };
 
-export const subscribe = (cb: () => void) => { listeners.add(cb); return () => listeners.delete(cb); };
+export const subscribe = (cb: () => void) => { listeners.add(cb); return () => { listeners.delete(cb); }; };
+export const subscribeToCoinAwardNotices = (cb: (notice: CoinAwardNotice) => void) => { awardNoticeListeners.add(cb); return () => { awardNoticeListeners.delete(cb); }; };
+const emitAwardNotice = (action: CoinAction, amount: number, dedupeKey: string) => {
+  const notice = { id: `${action}:${dedupeKey}`, action, amount, reason: COIN_ACTION_REASONS[action] };
+  awardNoticeListeners.forEach((listener) => listener(notice));
+};
 export const getBalance = (userId: string) => getState(userId).balance;
 export const getCoinState = (userId: string) => getState(userId);
 
@@ -125,26 +142,40 @@ export const awardCoins = async (userId: string, action: CoinAction, dedupeKey: 
   if (!userId || !dedupeKey) return getBalance(userId);
   const state = getState(userId);
   if (state.ledger.some((entry) => entry.action === action && entry.dedupeKey === dedupeKey)) return state.balance;
-  const amount = COIN_REWARDS[action];
-  if (COINS_TEST_MODE) {
-    setState(userId, { ...state, balance: state.balance + amount, ledger: [...state.ledger, { action, amount, dedupeKey, createdAt: Date.now() }] });
-    track("coins_awarded", { action, amount });
-    return state.balance + amount;
-  }
+  const awardKey = `${userId}:${action}:${dedupeKey}`;
+  if (awarding.has(awardKey)) return state.balance;
+  awarding.add(awardKey);
   try {
-    const remoteBalance = await awardCoinsRemote(userId, action, dedupeKey);
-    if (remoteBalance !== null) {
-      setState(userId, { ...state, balance: remoteBalance, ledger: [...state.ledger, { action, amount, dedupeKey, createdAt: Date.now() }] });
-      await hydrate(userId);
+    const amount = COIN_REWARDS[action];
+    if (COINS_TEST_MODE) {
+      setState(userId, { ...state, balance: state.balance + amount, ledger: [...state.ledger, { action, amount, dedupeKey, createdAt: Date.now() }] });
       track("coins_awarded", { action, amount });
-      return remoteBalance;
+      emitAwardNotice(action, amount, dedupeKey);
+      return state.balance + amount;
     }
-  } catch (error) { console.warn("Supabase coin award failed; caching pending award", error); }
-  const latest = getState(userId);
-  if (latest.ledger.some((entry) => entry.action === action && entry.dedupeKey === dedupeKey)) return latest.balance;
-  setState(userId, { ...latest, balance: latest.balance + amount, ledger: [...latest.ledger, { action, amount, dedupeKey, createdAt: Date.now(), pending: true }] });
-  track("coins_awarded", { action, amount });
-  return latest.balance + amount;
+    try {
+      if (await hasCoinAwardRemote(userId, action, dedupeKey)) {
+        await hydrate(userId);
+        return getBalance(userId);
+      }
+      const remoteBalance = await awardCoinsRemote(userId, action, dedupeKey);
+      if (remoteBalance !== null) {
+        setState(userId, { ...state, balance: remoteBalance, ledger: [...state.ledger, { action, amount, dedupeKey, createdAt: Date.now() }] });
+        await hydrate(userId);
+        track("coins_awarded", { action, amount });
+        emitAwardNotice(action, amount, dedupeKey);
+        return remoteBalance;
+      }
+    } catch (error) { console.warn("Supabase coin award failed; caching pending award", error); }
+    const latest = getState(userId);
+    if (latest.ledger.some((entry) => entry.action === action && entry.dedupeKey === dedupeKey)) return latest.balance;
+    setState(userId, { ...latest, balance: latest.balance + amount, ledger: [...latest.ledger, { action, amount, dedupeKey, createdAt: Date.now(), pending: true }] });
+    track("coins_awarded", { action, amount });
+    emitAwardNotice(action, amount, dedupeKey);
+    return latest.balance + amount;
+  } finally {
+    awarding.delete(awardKey);
+  }
 };
 
 const makeVoucherCode = () => {
@@ -186,6 +217,7 @@ export const collectTestCoins = (userId: string): number => {
   const amount = 100;
   const dedupeKey = `test_collect:${crypto.randomUUID()}`;
   setState(userId, { ...state, balance: state.balance + amount, ledger: [...state.ledger, { action: "test_collect", amount, dedupeKey, createdAt: Date.now() }] });
+  emitAwardNotice("plan_created", amount, dedupeKey);
   return state.balance + amount;
 };
 

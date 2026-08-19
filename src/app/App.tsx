@@ -1,4 +1,4 @@
-import { ArrowLeft, Calendar, CheckCircle2, Home, MessageCircle, Plus, User } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2, Gift, Home, MessageCircle, Plus, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Article, ChatMessage, ChatPeer, ChatThread, HomeFeedPlan, ParticipantPlanRef, PlanId, PlanTag, Screen } from "@/app/types";
 import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN, PLAN_DARK } from "@/app/data/constants";
@@ -19,7 +19,7 @@ import { applyTelegramChrome, buildPlanStartAppUrl, getTelegramAuthDate, getTele
 import { checkBackendHealth } from "@/app/lib/health";
 import { supabase } from "@/app/lib/supabase";
 import { identifyUser, track, type PlanViewSource } from "@/app/lib/analytics";
-import { awardCoins } from "@/app/lib/coins";
+import { awardCoins, subscribeToCoinAwardNotices, type CoinAwardNotice } from "@/app/lib/coins";
 import { HomeScreen } from "@/app/screens/HomeScreen";
 import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
 import { CreateScreen, type CreatedPlanResult } from "@/app/screens/CreateScreen";
@@ -494,6 +494,7 @@ export default function App() {
   const [startParamHandled, setStartParamHandled] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(() => readJson(termsAcceptedStorageKey, false));
   const [appToast, setAppToast] = useState("");
+  const [coinAwardNotice, setCoinAwardNotice] = useState<CoinAwardNotice | null>(null);
   const [moderatorHiddenPlanIds, setModeratorHiddenPlanIds] = useState<PlanId[]>([]);
   const [remoteProfiles, setRemoteProfiles] = useState<Record<string, ExpertProfile>>({});
   const [editableProfile, setEditableProfile] = useState<ExpertProfile>(() =>
@@ -1014,6 +1015,14 @@ export default function App() {
       ...(initialStart?.campaign ? { campaign: initialStart.campaign } : {}),
     });
   }, [initialStart, telegramUser]);
+
+  useEffect(() => subscribeToCoinAwardNotices(setCoinAwardNotice), []);
+
+  useEffect(() => {
+    if (!coinAwardNotice) return;
+    const timeout = window.setTimeout(() => setCoinAwardNotice((current) => current?.id === coinAwardNotice.id ? null : current), 2800);
+    return () => window.clearTimeout(timeout);
+  }, [coinAwardNotice]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2613,7 +2622,13 @@ export default function App() {
       className="relative flex h-screen w-full flex-col overflow-hidden bg-white"
       style={{ fontFamily: "var(--font-sans)", height: "100dvh" }}
     >
-      {appToast && (
+      {coinAwardNotice && (
+        <div key={coinAwardNotice.id} className="fixed left-3 right-3 z-[60] mx-auto flex max-w-[420px] animate-[bonus-notice-in_.35s_ease] items-center gap-3 rounded-[18px] border border-white/10 bg-[#101E20]/95 px-4 py-3 text-white shadow-[0_12px_32px_rgba(0,0,0,.45)] backdrop-blur-xl" style={{ top: "calc(env(safe-area-inset-top) + 12px)" }}>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#00A89D] text-[#04302C]"><Gift size={18} /></span>
+          <span className="leading-tight"><strong className="block text-[15px] font-extrabold">+{coinAwardNotice.amount.toLocaleString("ru-RU")} монет</strong><span className="mt-0.5 block text-[13px] text-white/60">за {coinAwardNotice.reason}</span></span>
+        </div>
+      )}
+      {appToast && !coinAwardNotice && (
         <div
           className="fixed left-1/2 z-50 -translate-x-1/2 rounded-full px-4 py-2 text-[14px] font-medium text-white shadow-lg"
           style={{ top: "calc(env(safe-area-inset-top) + 14px)", backgroundColor: GREEN }}
