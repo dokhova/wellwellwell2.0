@@ -19,7 +19,7 @@ import { applyTelegramChrome, buildPlanStartAppUrl, getTelegramAuthDate, getTele
 import { checkBackendHealth } from "@/app/lib/health";
 import { supabase } from "@/app/lib/supabase";
 import { identifyUser, track, type PlanViewSource } from "@/app/lib/analytics";
-import { awardCoins, useCoinBalance } from "@/app/lib/coins";
+import { awardCoins } from "@/app/lib/coins";
 import { HomeScreen } from "@/app/screens/HomeScreen";
 import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
 import { CreateScreen, type CreatedPlanResult } from "@/app/screens/CreateScreen";
@@ -551,7 +551,6 @@ export default function App() {
   const localPeerByIdRef = useRef<Map<string, ChatPeer>>(new Map());
   const syncedDemoFollowingUserIdsRef = useRef(new Set<string>());
   const currentUserId = editableProfile.id;
-  const coinBalance = useCoinBalance(currentUserId);
   const isModerator = MODERATOR_IDS.includes(currentUserId);
   const currentAuthor = {
     id: currentUserId,
@@ -1920,14 +1919,15 @@ export default function App() {
     const wasJoined = myParticipantIds.some((item) => participantKey(item) === key);
     const isAuthorJoiningOwnPlan = plan?.author.id === currentUserId;
     if (!wasJoined) track("plan_join", { plan_id: idKey, source });
-    if (!wasJoined && editableProfile.isDemo !== true) awardCoins(currentUserId, "plan_joined", idKey);
     updateMyParticipantIdsFromUserAction((ids) => ids.some((item) => participantKey(item) === key) ? ids : [ref, ...ids]);
     setJoinedParticipantPeers((items) => ({
       ...items,
       [idKey]: items[idKey]?.some((peer) => peer.id === currentUserId) ? items[idKey] : [...(items[idKey] ?? []), currentPeer],
     }));
     if (!wasJoined && !isAuthorJoiningOwnPlan) setJoinedCounts((items) => ({ ...items, [idKey]: (items[idKey] ?? 0) + 1 }));
-    void upsertPlanParticipant(idKey, currentUserId, "joined").catch((error) => {
+    void upsertPlanParticipant(idKey, currentUserId, "joined").then(() => {
+      if (!wasJoined && editableProfile.isDemo !== true) void awardCoins(currentUserId, "plan_joined", `${idKey}:${currentUserId}`);
+    }).catch((error) => {
       console.error("Supabase plan join failed", error);
       updateMyParticipantIdsFromUserAction((ids) => ids.filter((item) => participantKey(item) !== key));
       setJoinedParticipantPeers((items) => ({ ...items, [idKey]: (items[idKey] ?? []).filter((peer) => peer.id !== currentUserId) }));
@@ -2140,8 +2140,8 @@ export default function App() {
     sanitizedPlans.forEach((plan) => {
       void createPlanRemote(plan).then((remotePlan) => {
         track("plan_created", { plan_id: planKey(remotePlan?.id ?? plan.id) });
-        if (editableProfile.isDemo !== true) awardCoins(currentUserId, "plan_created", planKey(remotePlan?.id ?? plan.id));
         if (!remotePlan) return;
+        if (editableProfile.isDemo !== true) void awardCoins(currentUserId, "plan_created", planKey(remotePlan.id));
         setCreatedPlans((items) => items.map((item) => planKey(item.id) === planKey(plan.id) ? remotePlan : item));
         setHighlightedPlanId(remotePlan.id);
         void upsertPlanParticipant(planKey(remotePlan.id), currentUserId, "joined").catch((error) => {
@@ -2162,6 +2162,8 @@ export default function App() {
             text,
             kind: "invite",
             planId: planKey(remotePlan.id),
+          }).then((message) => {
+            if (message && editableProfile.isDemo !== true) void awardCoins(currentUserId, "friend_invited", message.id);
           }).catch((error) => {
             console.error("Supabase plan invite message failed", error);
           });
@@ -2225,7 +2227,6 @@ export default function App() {
       const wasFollowed = (connectionSetsByUser[currentUserId]?.following ?? []).some((item) => item.id === profile.id);
       if (wasFollowed === nextFollowed) return;
       if (nextFollowed) track("follow", { target_id: profile.id, target_is_demo: false });
-      if (nextFollowed && editableProfile.isDemo !== true) awardCoins(currentUserId, "user_followed", profile.id);
       setOptimisticFollowState(profile, nextFollowed);
       setDbFollowing((items) => nextFollowed
         ? items.some((item) => item.id === profile.id) ? items : [connection, ...items]
@@ -2256,7 +2257,6 @@ export default function App() {
     if (wasDemoFollowed === nextFollowed) return;
     const connection = { id: profile.id, name: profile.name, avatarUrl: profile.photoUrl, isFollowedByMe: true };
     if (nextFollowed) track("follow", { target_id: profile.id, target_is_demo: true });
-    if (nextFollowed && editableProfile.isDemo !== true) awardCoins(currentUserId, "user_followed", profile.id);
     setMyFollowing((items) => {
       if (!nextFollowed) return items.filter((item) => item.id !== profile.id);
       if (items.some((item) => item.id === profile.id)) return items;
@@ -2284,7 +2284,6 @@ export default function App() {
             plans={publicPlans}
             pinnedPlanIds={PINNED_PLAN_ID_SET}
             currentUserId={currentUserId}
-            currentUserIsDemo={editableProfile.isDemo}
             onNavigate={navigate}
             onPlanOpen={(id) => openPlanEvent(id, "home")}
             onAuthorOpen={openExpertProfile}
@@ -2338,6 +2337,7 @@ export default function App() {
             peer={getCannedPeer(activeChatPeer)}
             messages={thread?.messages ?? []}
             currentUserId={currentUserId}
+            currentUserIsDemo={editableProfile.isDemo === true}
             myAvatarUrl={editableProfile.photoUrl}
             onBack={() => goBackInStack(previousScreen === "chat" ? "chats" : previousScreen)}
             onSendMessage={sendChatMessage}
@@ -2440,7 +2440,7 @@ export default function App() {
           />
         );
       case "rewards":
-        return <RewardsScreen balance={coinBalance} onBack={() => setScreen("profile")} />;
+        return <RewardsScreen userId={currentUserId} onBack={() => setScreen("profile")} />;
       case "editProfile":
         return (
           <EditProfileScreen

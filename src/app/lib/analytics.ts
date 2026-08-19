@@ -26,6 +26,11 @@ type AnalyticsEventProps = {
   plan_description_format_applied: { format: "bold" | "italic" | "link" };
   rewards_opened: Record<string, never>;
   coins_awarded: { action: string; amount: number };
+  coins_opened: { screen_name: "rewards" };
+  reward_card_tapped: { screen_name: "rewards"; reward_id: string };
+  reward_redeemed: { screen_name: "rewards"; reward_id: string; cost: number };
+  gifts_opened: { screen_name: "rewards" };
+  how_to_earn_opened: { screen_name: "rewards" };
 };
 
 export type AnalyticsEvent = keyof AnalyticsEventProps;

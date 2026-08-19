@@ -786,7 +786,6 @@ export function EventDetailScreen({
     removeCommentPhoto();
     if (planId === undefined) return;
     track("comment_sent", { plan_id: String(planId), mentions_count: mentionedUserIds.length, has_photo: Boolean(photoUrl), is_reply: Boolean(replyRootId) });
-    if (currentAuthor?.isDemo !== true) awardCoins(currentAuthor?.id ?? "", "comment_sent", localComment.id);
     void addComment({
       planId: String(planId),
       authorId: author.id,
@@ -799,6 +798,7 @@ export function EventDetailScreen({
     }).then((savedComment) => {
       if (!savedComment) return;
       setComments((items) => items.map((item) => item.id === localComment.id ? mapCommentRow(savedComment) : item));
+      if (currentAuthor?.isDemo !== true) void awardCoins(currentAuthor?.id ?? "", "comment_added", savedComment.id);
     }).catch((error) => {
       console.error("Supabase comment insert failed", error);
     });
@@ -818,7 +818,6 @@ export function EventDetailScreen({
     const liked = previous.includes(currentAuthor.id);
     likesMutationVersion.current += 1;
     if (planId !== undefined) track("comment_like_toggled", { plan_id: String(planId), comment_id: item.id, liked: !liked });
-    if (planId !== undefined && !liked && currentAuthor.isDemo !== true) awardCoins(currentAuthor.id, "comment_liked", item.id);
     setLikesByComment((items) => ({ ...items, [item.id]: liked ? previous.filter((id) => id !== currentAuthor.id) : [...previous, currentAuthor.id] }));
     void (liked ? unlikeComment(item.id, currentAuthor.id) : likeComment(item.id, currentAuthor.id)).catch((error) => {
       console.error("Supabase comment like update failed", error);
@@ -862,7 +861,6 @@ export function EventDetailScreen({
     if (!shareUrl) return;
     await copyText(shareUrl);
     if (planId !== undefined) track("plan_link_copied", { plan_id: String(planId), screen: "plan" });
-    if (planId !== undefined && currentAuthor?.isDemo !== true) awardCoins(currentAuthor?.id ?? "", "plan_shared", `share:${String(planId)}`);
     setCopied(true);
   };
 
@@ -874,7 +872,6 @@ export function EventDetailScreen({
         plan_id: String(planId),
         method: typeof navigator.share === "function" ? "native" : "fallback",
       });
-      if (currentAuthor?.isDemo !== true) awardCoins(currentAuthor?.id ?? "", "plan_shared", `share:${String(planId)}`);
     }
 
     const openShareFallback = () => {

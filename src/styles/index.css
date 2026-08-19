@@ -1,3 +1,9 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+@keyframes reward-pop {
+  0% { transform: scale(0.5); }
+  70% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}

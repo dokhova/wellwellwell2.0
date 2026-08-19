@@ -7,6 +7,7 @@ import { searchProfiles } from "@/app/lib/api/profiles";
 import { sanitizeImageUrl } from "@/app/lib/api/storage";
 import { fetchPlan, upsertPlanParticipant } from "@/app/lib/api/plans";
 import { track } from "@/app/lib/analytics";
+import { awardCoins } from "@/app/lib/coins";
 import { openExternalUrl } from "@/app/lib/telegram";
 import type { HomeFeedPlan } from "@/app/types";
 
@@ -205,6 +206,7 @@ export function ChatScreen({
   peer,
   messages,
   currentUserId,
+  currentUserIsDemo,
   myAvatarUrl,
   onBack,
   onSendMessage,
@@ -217,6 +219,7 @@ export function ChatScreen({
   peer: ChatPeer;
   messages: ChatMessage[];
   currentUserId: string;
+  currentUserIsDemo: boolean;
   myAvatarUrl: string | null;
   onBack: () => void;
   onSendMessage: (peer: ChatPeer, text: string, sender: ChatMessage["sender"], status?: ChatMessage["status"], messageId?: string) => ChatMessage | null;
@@ -292,6 +295,7 @@ export function ChatScreen({
       setSending(true);
       void sendMessage({ id: messageId, threadId, senderId: currentUserId, text: body, photoUrl: null }).then((message) => {
         if (message && localMessage) onConfirmRemoteMessage(peer, localMessage.id, mapMessageRow(message, currentUserId));
+        if (message && !currentUserIsDemo) void awardCoins(currentUserId, "message_sent", message.id);
       }).catch((error) => {
         console.error("Supabase chat send failed", error);
       }).finally(() => {
