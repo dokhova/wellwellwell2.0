@@ -14,6 +14,13 @@ const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number;
 const KIND_LINE = { code: "Промокод, покажи при оплате", booking: "Место забронировано, покажи на входе", pickup: "Забери на ближайшей пробежке" } as const;
 const KIND_TAG = { code: "промокод", booking: "бронь", pickup: "к выдаче" } as const;
 const EARN_ACTIONS = Object.keys(COIN_REWARDS) as CoinAction[];
+const REWARD_PHOTO_TAGS: Record<string, string> = {
+  shu: "running-fashion",
+  slot: "city-race",
+  tee: "sportswear",
+  bottle: "running-water",
+  marathon: "marathon-finish",
+};
 const format = (value: number) => value.toLocaleString("ru-RU");
 const pluralGifts = (count: number) => {
   const last = count % 10;
@@ -36,6 +43,33 @@ function BottomSheet({ children, onClose }: { children: ReactNode; onClose: () =
   );
 }
 
+function RewardCard({ reward, balance, received, onOpen }: { reward: Reward; balance: number; received: boolean; onOpen: (reward: Reward) => void }) {
+  const [imageVisible, setImageVisible] = useState(true);
+  const photoUrl = useMemo(() => {
+    const tag = REWARD_PHOTO_TAGS[reward.id] ?? reward.id;
+    const variant = Math.floor(Math.random() * 12);
+    return `https://picsum.photos/seed/www-${tag}-${variant}/320/440`;
+  }, [reward.id]);
+  const Icon = ICONS[reward.id] ?? Gift;
+  const available = reward.cost <= balance;
+
+  return (
+    <button type="button" onClick={() => onOpen(reward)} disabled={received} className="relative flex min-h-[214px] w-[158px] shrink-0 snap-start flex-col overflow-hidden rounded-[24px] border p-3.5 text-left transition active:scale-[0.98]" style={{ borderColor: BORDER, background: `linear-gradient(155deg, ${reward.gradient[0]}, ${reward.gradient[1]})` }}>
+      {imageVisible && <img src={photoUrl} alt="" onError={() => setImageVisible(false)} className="absolute inset-0 h-full w-full object-cover" />}
+      <span className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,.25)_0%,rgba(0,0,0,0)_32%,rgba(0,0,0,.82)_100%)]" />
+      <span className="relative z-10 flex h-[46px] w-[46px] items-center justify-center rounded-[14px] bg-white/15 backdrop-blur-sm"><Icon size={23} strokeWidth={2} /></span>
+      <span className="relative z-10 mt-auto block w-full">
+        <span className="block text-[15px] font-bold leading-[1.2]">{reward.title}</span>
+        <span className="mt-[3px] block text-[12px] leading-[1.2] text-white/80">{reward.sub}</span>
+        <span className={`mt-2.5 inline-block rounded-full px-3 py-1.5 text-[12px] font-bold ${received ? "bg-white/15 text-white" : available ? "bg-[#00A89D] text-[#04302C]" : "bg-black/45 text-white"}`}>
+          {received ? "получено" : available ? `${format(reward.cost)} W` : `не хватает ${format(reward.cost - balance)}`}
+        </span>
+      </span>
+      {received && <span className="absolute inset-0 z-20 bg-[#060F11]/55" />}
+    </button>
+  );
+}
+
 export function RewardsScreen({ userId, onBack }: { userId: string; onBack: () => void }) {
   const { balance, claimed } = useCoinState(userId);
   const [active, setActive] = useState<Reward | null>(null);
@@ -44,6 +78,7 @@ export function RewardsScreen({ userId, onBack }: { userId: string; onBack: () =
   const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [gain, setGain] = useState<number | null>(null);
+  const [giftDetail, setGiftDetail] = useState<ClaimedReward | null>(null);
   const claimedIds = useMemo(() => new Set(claimed.map((item) => item.rewardId)), [claimed]);
 
   useEffect(() => { track("coins_opened", { screen_name: "rewards" }); }, []);
@@ -68,9 +103,11 @@ export function RewardsScreen({ userId, onBack }: { userId: string; onBack: () =
   };
 
   const copyCode = async (code: string) => {
-    try { await navigator.clipboard.writeText(code); } catch (error) { console.warn("Clipboard write failed", error); }
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch (error) { console.warn("Clipboard write failed", error); }
   };
 
   const closeReward = () => { setActive(null); setResult(null); setCopied(false); };
@@ -107,23 +144,7 @@ export function RewardsScreen({ userId, onBack }: { userId: string; onBack: () =
         <section className="px-5 pb-10 pt-3">
           <h1 className="mb-3 mt-3 text-[12px] font-semibold tracking-[1.4px] text-white/45">НА ЧТО ПОТРАТИТЬ</h1>
           <div className="flex snap-x gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {REWARDS.map((reward) => {
-              const Icon = ICONS[reward.id] ?? Gift;
-              const received = claimedIds.has(reward.id);
-              const available = reward.cost <= balance;
-              return (
-                <button key={reward.id} type="button" onClick={() => openReward(reward)} disabled={received} className={`relative flex min-h-[214px] w-[158px] shrink-0 snap-start flex-col overflow-hidden rounded-[24px] border p-3.5 text-left transition active:scale-[0.98] ${received ? "opacity-45" : ""}`} style={{ borderColor: BORDER, background: `linear-gradient(155deg, ${reward.gradient[0]}, ${reward.gradient[1]})` }}>
-                  <span className="flex h-[46px] w-[46px] items-center justify-center rounded-[14px] bg-white/15 backdrop-blur-sm"><Icon size={23} strokeWidth={2} /></span>
-                  <span className="mt-auto block w-full">
-                    <span className="block text-[15px] font-bold leading-[1.2]">{reward.title}</span>
-                    <span className="mt-[3px] block text-[12px] leading-[1.2] text-white/70">{reward.sub}</span>
-                    <span className={`mt-2.5 inline-block rounded-full px-3 py-1.5 text-[12px] font-bold ${received ? "bg-white/15 text-white" : available ? "bg-[#00A89D] text-[#04302C]" : "bg-black/45 text-white"}`}>
-                      {received ? "получено" : available ? `${format(reward.cost)} W` : `не хватает ${format(reward.cost - balance)}`}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
+            {REWARDS.map((reward) => <RewardCard key={reward.id} reward={reward} balance={balance} received={claimedIds.has(reward.id)} onOpen={openReward} />)}
           </div>
           <button type="button" onClick={() => { setSheet("earn"); track("how_to_earn_opened", { screen_name: "rewards" }); }} className="mt-[22px] flex w-full items-center justify-center gap-1.5 rounded-[18px] border px-4 py-4 text-[15px] font-semibold active:opacity-70" style={{ background: CARD, borderColor: BORDER, color: DIM }}>
             Как копить монеты <ChevronRight size={18} />
@@ -176,8 +197,23 @@ export function RewardsScreen({ userId, onBack }: { userId: string; onBack: () =
       {sheet === "gifts" && (
         <BottomSheet onClose={() => setSheet(null)}>
           <div className="relative mb-4"><h2 className="text-center text-[20px] font-bold">Мои подарки</h2><button type="button" onClick={() => setSheet(null)} aria-label="Закрыть" className="absolute right-0 top-0 text-white/55"><X size={22} /></button></div>
-          {claimed.length ? <div className="flex flex-col gap-2.5">{claimed.map((reward) => { const Icon = ICONS[reward.rewardId] ?? Gift; return <div key={reward.rewardId} className="flex items-center gap-3 rounded-2xl border px-4 py-[15px]" style={{ background: CARD, borderColor: BORDER }}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10"><Icon size={20} /></span><span className="min-w-0 flex-1"><strong className="block truncate text-[15px] font-semibold">{reward.title}</strong><span className="mt-0.5 block truncate font-mono text-[13px] tracking-wide" style={{ color: DIM }}>{reward.code}</span></span><span className="shrink-0 rounded-full bg-[#00A89D]/15 px-2.5 py-1 text-[12px] font-bold text-[#22D3C2]">{KIND_TAG[reward.kind]}</span></div>; })}</div> : <div className="rounded-2xl border px-4 py-8 text-center text-[14px]" style={{ background: CARD, borderColor: BORDER, color: DIM }}>Здесь появятся полученные награды</div>}
+          {claimed.length ? <div className="flex flex-col gap-2.5">{claimed.map((reward) => { const Icon = ICONS[reward.rewardId] ?? Gift; return <button type="button" key={reward.rewardId} onClick={() => { setCopied(false); setGiftDetail(reward); }} className="flex w-full items-center gap-3 rounded-2xl border px-4 py-[15px] text-left active:opacity-75" style={{ background: CARD, borderColor: BORDER }}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10"><Icon size={20} /></span><span className="min-w-0 flex-1"><strong className="block truncate text-[15px] font-semibold">{reward.title}</strong><span className="mt-0.5 block truncate font-mono text-[13px] tracking-wide" style={{ color: DIM }}>{reward.code}</span></span><span className="shrink-0 rounded-full bg-[#00A89D]/15 px-2.5 py-1 text-[12px] font-bold text-[#22D3C2]">{KIND_TAG[reward.kind]}</span><ChevronRight size={16} className="shrink-0 text-white/55" /></button>; })}</div> : <div className="rounded-2xl border px-4 py-8 text-center text-[14px]" style={{ background: CARD, borderColor: BORDER, color: DIM }}>Здесь появятся полученные награды</div>}
           <button type="button" onClick={() => setSheet(null)} className="mt-[18px] w-full rounded-[18px] bg-[linear-gradient(90deg,#00A89D,#21C6B6)] px-4 py-[17px] text-[16px] font-extrabold text-[#04302C]">Закрыть</button>
+        </BottomSheet>
+      )}
+
+      {giftDetail && (
+        <BottomSheet onClose={() => { setGiftDetail(null); setCopied(false); }}>
+          <div className="mx-auto mb-3.5 flex h-[72px] w-[72px] items-center justify-center rounded-[20px] bg-white/10">
+            {(() => { const Icon = ICONS[giftDetail.rewardId] ?? Gift; return <Icon size={30} strokeWidth={2} />; })()}
+          </div>
+          <h2 className="text-center text-[20px] font-bold">{giftDetail.title}</h2>
+          <p className="mt-1.5 text-center text-[14px]" style={{ color: DIM }}>{KIND_LINE[giftDetail.kind]}</p>
+          <div className="mt-[18px] flex items-center justify-between gap-2 rounded-2xl border px-4 py-[15px]" style={{ background: CARD, borderColor: BORDER }}>
+            <strong className="truncate font-mono text-[14px] tracking-wide">{giftDetail.code}</strong>
+            <button type="button" onClick={() => void copyCode(giftDetail.code)} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-[#00A89D]/15 px-3 py-2 text-[13px] font-bold text-[#22D3C2]">{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? "готово" : "копировать"}</button>
+          </div>
+          <button type="button" onClick={() => { setGiftDetail(null); setCopied(false); }} className="mt-[18px] w-full rounded-[18px] bg-[linear-gradient(90deg,#00A89D,#21C6B6)] px-4 py-[17px] text-[16px] font-extrabold text-[#04302C]">Готово</button>
         </BottomSheet>
       )}
     </div>
