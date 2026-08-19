@@ -6,7 +6,7 @@ export type CoinAction = "plan_created" | "friend_invited" | "plan_joined" | "co
 export type RewardKind = "code" | "booking" | "pickup";
 export type Reward = { id: string; title: string; sub: string; cost: number; kind: RewardKind; gradient: [string, string] };
 export type ClaimedReward = { rewardId: string; title: string; code: string; kind: RewardKind; claimedAt: string; pending?: boolean };
-export type CoinLedgerEntry = { action: CoinAction | "reward_redeemed"; amount: number; dedupeKey: string; createdAt: number; pending?: boolean };
+export type CoinLedgerEntry = { action: CoinAction | "reward_redeemed" | "welcome_gifts" | "test_collect"; amount: number; dedupeKey: string; createdAt: number; pending?: boolean };
 export type CoinState = { balance: number; ledger: CoinLedgerEntry[]; claimed: ClaimedReward[] };
 
 export const COIN_REWARDS: Record<CoinAction, number> = {
@@ -33,12 +33,37 @@ export const REWARDS: Reward[] = [
   { id: "marathon", title: "Слот на марафон", sub: "Городской старт", cost: 6000, kind: "booking", gradient: ["#A0721F", "#3D2A0A"] },
 ];
 
-const STATE_STORAGE_KEY = "www_coins_state_v2";
+export const COINS_TEST_MODE = import.meta.env.VITE_COINS_TEST_MODE === "true";
+const STATE_STORAGE_KEY = COINS_TEST_MODE ? "www_coins_test_state_v1" : "www_coins_state_v2";
+const TEST_START_BALANCE = 4000;
+const WELCOME_GIFTS: Omit<ClaimedReward, "claimedAt">[] = [
+  { rewardId: "welcome-shu", title: "Приветственный подарок: скидка 10% SHU", code: "WWW-WLC-10SH", kind: "code" },
+  { rewardId: "welcome-run", title: "Приветственный слот на 5 км", code: "WWW-WLC-RUN5", kind: "booking" },
+];
 const stateByUser = new Map<string, CoinState>();
 const listeners = new Set<() => void>();
 const hydratingUsers = new Set<string>();
 const redeeming = new Set<string>();
 const EMPTY_STATE: CoinState = { balance: 0, ledger: [], claimed: [] };
+
+const withWelcomeGifts = (userId: string, source: CoinState): CoinState => {
+  const dedupeKey = `welcome_gifts:${userId}`;
+  const claimedIds = new Set(source.claimed.map((reward) => reward.rewardId));
+  const missingGifts = WELCOME_GIFTS.filter((reward) => !claimedIds.has(reward.rewardId)).map((reward) => ({ ...reward, claimedAt: new Date(0).toISOString() }));
+  const hasDedupeEntry = source.ledger.some((entry) => entry.action === "welcome_gifts" && entry.dedupeKey === dedupeKey);
+  if (missingGifts.length === 0 && hasDedupeEntry) return source;
+  return {
+    ...source,
+    claimed: [...source.claimed, ...missingGifts],
+    ledger: hasDedupeEntry ? source.ledger : [{ action: "welcome_gifts", amount: 0, dedupeKey, createdAt: 0 }, ...source.ledger],
+  };
+};
+
+const initialState = (userId: string): CoinState => withWelcomeGifts(userId, {
+  balance: COINS_TEST_MODE ? TEST_START_BALANCE : 0,
+  ledger: [],
+  claimed: [],
+});
 
 const readStoredStates = (): Record<string, CoinState> => {
   try {
@@ -52,22 +77,23 @@ const getState = (userId: string): CoinState => {
   const cached = stateByUser.get(userId);
   if (cached) return cached;
   const stored = readStoredStates()[userId];
-  const state = stored && typeof stored.balance === "number" && Array.isArray(stored.ledger) && Array.isArray(stored.claimed) ? stored : EMPTY_STATE;
+  const state = withWelcomeGifts(userId, stored && typeof stored.balance === "number" && Array.isArray(stored.ledger) && Array.isArray(stored.claimed) ? stored : initialState(userId));
   stateByUser.set(userId, state);
   return state;
 };
 
 const setState = (userId: string, state: CoinState) => {
-  stateByUser.set(userId, state);
+  const nextState = withWelcomeGifts(userId, state);
+  stateByUser.set(userId, nextState);
   try {
     const stored = readStoredStates();
-    window.localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify({ ...stored, [userId]: state }));
+    window.localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify({ ...stored, [userId]: nextState }));
   } catch (error) { console.error("Coin cache write failed", error); }
   listeners.forEach((listener) => listener());
 };
 
 const hydrate = async (userId: string) => {
-  if (!userId || hydratingUsers.has(userId)) return;
+  if (COINS_TEST_MODE || !userId || hydratingUsers.has(userId)) return;
   hydratingUsers.add(userId);
   try {
     const cached = getState(userId);
@@ -100,6 +126,11 @@ export const awardCoins = async (userId: string, action: CoinAction, dedupeKey: 
   const state = getState(userId);
   if (state.ledger.some((entry) => entry.action === action && entry.dedupeKey === dedupeKey)) return state.balance;
   const amount = COIN_REWARDS[action];
+  if (COINS_TEST_MODE) {
+    setState(userId, { ...state, balance: state.balance + amount, ledger: [...state.ledger, { action, amount, dedupeKey, createdAt: Date.now() }] });
+    track("coins_awarded", { action, amount });
+    return state.balance + amount;
+  }
   try {
     const remoteBalance = await awardCoinsRemote(userId, action, dedupeKey);
     if (remoteBalance !== null) {
@@ -132,19 +163,30 @@ export const redeem = async (userId: string, reward: Reward): Promise<ClaimedRew
   const code = makeVoucherCode();
   try {
     let remote: Awaited<ReturnType<typeof redeemRewardRemote>> = null;
-    try {
-      remote = await redeemRewardRemote({ userId, rewardId: reward.id, code });
-    } catch (error) { console.warn("Supabase reward redeem failed; caching pending reward", error); }
-    const claimed = { rewardId: reward.id, title: reward.title, code: remote?.code ?? code, kind: reward.kind, claimedAt: remote?.claimed_at ?? new Date().toISOString(), pending: remote ? undefined : true };
+    if (!COINS_TEST_MODE) {
+      try {
+        remote = await redeemRewardRemote({ userId, rewardId: reward.id, code });
+      } catch (error) { console.warn("Supabase reward redeem failed; caching pending reward", error); }
+    }
+    const claimed = { rewardId: reward.id, title: reward.title, code: remote?.code ?? code, kind: reward.kind, claimedAt: remote?.claimed_at ?? new Date().toISOString(), pending: !COINS_TEST_MODE && !remote ? true : undefined };
     const latest = getState(userId);
     setState(userId, {
       balance: remote?.balance ?? latest.balance - reward.cost,
       claimed: [claimed, ...latest.claimed.filter((item) => item.rewardId !== reward.id)],
-      ledger: [...latest.ledger.filter((entry) => !(entry.action === "reward_redeemed" && entry.dedupeKey === reward.id)), { action: "reward_redeemed", amount: -reward.cost, dedupeKey: reward.id, createdAt: Date.now(), pending: remote ? undefined : true }],
+      ledger: [...latest.ledger.filter((entry) => !(entry.action === "reward_redeemed" && entry.dedupeKey === reward.id)), { action: "reward_redeemed", amount: -reward.cost, dedupeKey: reward.id, createdAt: Date.now(), pending: !COINS_TEST_MODE && !remote ? true : undefined }],
     });
     if (remote) await hydrate(userId);
     return claimed;
   } finally { redeeming.delete(lockKey); }
+};
+
+export const collectTestCoins = (userId: string): number => {
+  const state = getState(userId);
+  if (!COINS_TEST_MODE) return state.balance;
+  const amount = 100;
+  const dedupeKey = `test_collect:${crypto.randomUUID()}`;
+  setState(userId, { ...state, balance: state.balance + amount, ledger: [...state.ledger, { action: "test_collect", amount, dedupeKey, createdAt: Date.now() }] });
+  return state.balance + amount;
 };
 
 export const useCoinState = (userId: string) => {

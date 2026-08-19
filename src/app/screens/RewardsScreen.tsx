@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { ArrowLeft, Check, ChevronRight, Copy, Gift, GlassWater, Medal, Percent, Shirt, Ticket, X } from "lucide-react";
 import { CoinIcon } from "@/app/components/CoinIcon";
-import { COIN_ACTION_LABELS, COIN_REWARDS, REWARDS, redeem, useCoinState, type ClaimedReward, type CoinAction, type Reward } from "@/app/lib/coins";
+import { COINS_TEST_MODE, COIN_ACTION_LABELS, COIN_REWARDS, REWARDS, collectTestCoins, redeem, useCoinState, type ClaimedReward, type CoinAction, type Reward } from "@/app/lib/coins";
 import { track } from "@/app/lib/analytics";
 import heroImage from "@/imports/feed-cover-1-opt.webp";
 
@@ -9,7 +9,7 @@ const DIM = "rgba(255,255,255,0.55)";
 const CARD = "rgba(255,255,255,0.07)";
 const BORDER = "rgba(255,255,255,0.10)";
 const ICONS: Record<string, ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
-  shu: Percent, slot: Ticket, tee: Shirt, bottle: GlassWater, marathon: Medal,
+  shu: Percent, slot: Ticket, tee: Shirt, bottle: GlassWater, marathon: Medal, "welcome-shu": Percent, "welcome-run": Ticket,
 };
 const KIND_LINE = { code: "Промокод, покажи при оплате", booking: "Место забронировано, покажи на входе", pickup: "Забери на ближайшей пробежке" } as const;
 const KIND_TAG = { code: "промокод", booking: "бронь", pickup: "к выдаче" } as const;
@@ -43,6 +43,7 @@ export function RewardsScreen({ userId, onBack }: { userId: string; onBack: () =
   const [sheet, setSheet] = useState<Sheet>(null);
   const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [gain, setGain] = useState<number | null>(null);
   const claimedIds = useMemo(() => new Set(claimed.map((item) => item.rewardId)), [claimed]);
 
   useEffect(() => { track("coins_opened", { screen_name: "rewards" }); }, []);
@@ -73,6 +74,12 @@ export function RewardsScreen({ userId, onBack }: { userId: string; onBack: () =
   };
 
   const closeReward = () => { setActive(null); setResult(null); setCopied(false); };
+  const collect = () => {
+    collectTestCoins(userId);
+    const marker = Date.now();
+    setGain(marker);
+    window.setTimeout(() => setGain((current) => current === marker ? null : current), 1100);
+  };
 
   return (
     <div className="relative h-full overflow-hidden bg-[#0C1618] text-white">
@@ -81,21 +88,17 @@ export function RewardsScreen({ userId, onBack }: { userId: string; onBack: () =
           <img src={heroImage} alt="Бегуны WellWellWell" className="h-full w-full object-cover object-center" />
           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,15,17,0.48)_0%,rgba(6,15,17,0)_34%,#0C1618_100%)]" />
 
-          <div className="pointer-events-none absolute left-[44%] top-[106px] h-[118px] w-[190px] -rotate-6 rounded-[50%] border-b-2 border-dashed border-[#4FF3DC]/35 blur-[0.2px]" />
-          {[{ left: "52%", top: 124 }, { left: "73%", top: 154 }, { left: "86%", top: 199 }].map((position, index) => (
-            <span key={index} className="pointer-events-none absolute flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-[#00A89D]/75 shadow-[0_0_22px_rgba(34,211,194,0.7)] backdrop-blur-sm" style={position}>
-              <Gift size={15} />
-            </span>
-          ))}
-
-          <div className="absolute inset-x-0 top-0 z-10 flex items-center gap-2.5 px-[18px] pt-[calc(12px+env(safe-area-inset-top))]">
+          <div className="absolute inset-x-0 top-0 z-10 flex items-center gap-2.5 px-5 pt-[calc(12px+env(safe-area-inset-top))]">
             <button type="button" onClick={onBack} aria-label="Назад" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/15 backdrop-blur-xl active:opacity-70"><ArrowLeft size={20} /></button>
             <button type="button" onClick={() => { setSheet("gifts"); track("gifts_opened", { screen_name: "rewards" }); }} className="flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-[15px] font-semibold backdrop-blur-xl active:opacity-70">
               <Gift size={17} /> {claimed.length} {pluralGifts(claimed.length)}
             </button>
+            <span className="flex-1" />
+            {COINS_TEST_MODE && <button type="button" onClick={collect} className="h-10 shrink-0 whitespace-nowrap rounded-full bg-[#00A89D] px-4 text-[15px] font-extrabold text-[#04302C] shadow-[0_6px_18px_rgba(0,168,157,.4)] active:opacity-80">Собрать +100</button>}
           </div>
 
           <div className="absolute bottom-6 left-5 z-10">
+            {gain && <span key={gain} className="pointer-events-none absolute left-[52px] top-[-14px] animate-[coin-gain_1.1s_ease_forwards] text-[22px] font-extrabold text-[#22D3C2]">+100</span>}
             <div className="flex items-center gap-3"><CoinIcon size={35} /><span className="text-[48px] font-extrabold leading-none tracking-[-1px]">{format(balance)}</span></div>
             <p className="ml-[47px] mt-1 text-[15px]" style={{ color: DIM }}>монет на балансе</p>
           </div>
@@ -109,12 +112,12 @@ export function RewardsScreen({ userId, onBack }: { userId: string; onBack: () =
               const received = claimedIds.has(reward.id);
               const available = reward.cost <= balance;
               return (
-                <button key={reward.id} type="button" onClick={() => openReward(reward)} disabled={received} className={`relative h-[208px] w-[158px] shrink-0 snap-start overflow-hidden rounded-[24px] border p-3.5 text-left transition active:scale-[0.98] ${received ? "opacity-45" : ""}`} style={{ borderColor: BORDER, background: `linear-gradient(155deg, ${reward.gradient[0]}, ${reward.gradient[1]})` }}>
+                <button key={reward.id} type="button" onClick={() => openReward(reward)} disabled={received} className={`relative flex min-h-[214px] w-[158px] shrink-0 snap-start flex-col overflow-hidden rounded-[24px] border p-3.5 text-left transition active:scale-[0.98] ${received ? "opacity-45" : ""}`} style={{ borderColor: BORDER, background: `linear-gradient(155deg, ${reward.gradient[0]}, ${reward.gradient[1]})` }}>
                   <span className="flex h-[46px] w-[46px] items-center justify-center rounded-[14px] bg-white/15 backdrop-blur-sm"><Icon size={23} strokeWidth={2} /></span>
-                  <span className="absolute inset-x-3.5 bottom-3.5">
-                    <span className="block text-[15px] font-semibold leading-5">{reward.title}</span>
-                    <span className="mt-1 block text-[12px] leading-4" style={{ color: DIM }}>{reward.sub}</span>
-                    <span className={`mt-3 inline-block rounded-full px-3 py-1.5 text-[12px] font-bold ${received ? "bg-white/15 text-white" : available ? "bg-[#00A89D] text-[#04302C]" : "bg-black/45 text-white"}`}>
+                  <span className="mt-auto block w-full">
+                    <span className="block text-[15px] font-bold leading-[1.2]">{reward.title}</span>
+                    <span className="mt-[3px] block text-[12px] leading-[1.2] text-white/70">{reward.sub}</span>
+                    <span className={`mt-2.5 inline-block rounded-full px-3 py-1.5 text-[12px] font-bold ${received ? "bg-white/15 text-white" : available ? "bg-[#00A89D] text-[#04302C]" : "bg-black/45 text-white"}`}>
                       {received ? "получено" : available ? `${format(reward.cost)} W` : `не хватает ${format(reward.cost - balance)}`}
                     </span>
                   </span>
