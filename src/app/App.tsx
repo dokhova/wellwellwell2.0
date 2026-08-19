@@ -1,4 +1,4 @@
-import { ArrowLeft, Calendar, CheckCircle2, Gift, Home, MessageCircle, Plus, User } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Gift, Home, MessageCircle, Plus, User, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Article, ChatMessage, ChatPeer, ChatThread, HomeFeedPlan, ParticipantPlanRef, PlanId, PlanTag, Screen } from "@/app/types";
 import { EVENT_PARTICIPANTS, NO_BOTTOM_NAV, GREEN, PLAN_DARK } from "@/app/data/constants";
@@ -7,7 +7,7 @@ import { experts, expertProfile, profileFollowers, profileFollowing, type Expert
 import { homeFeedPlans } from "@/app/data/plans";
 import { activeDemoClubPlans, demoClubs, getDemoClubParticipantPeers } from "@/app/data/demoClubs";
 import { demoCommunityPlanIds, demoCommunityPlans, getDemoCommunityParticipantPeers } from "@/app/data/demoCommunity";
-import { acceptProfileTerms, deleteProfile, fetchProfile, fetchProfilesByIds, upsertProfile } from "@/app/lib/api/profiles";
+import { acceptProfileTerms, deleteProfile, fetchProfile, fetchProfilesByIds, fetchRecentProfiles, upsertProfile } from "@/app/lib/api/profiles";
 import { deleteUserFollows, fetchFollowers, fetchFollowing, follow, unfollow } from "@/app/lib/api/follows";
 import { isSchedulePastRepeatEnd, normalizeSchedule } from "@/app/lib/schedule";
 import { canUploadPhotos, sanitizeImageUrl, uploadPhoto } from "@/app/lib/api/storage";
@@ -21,7 +21,8 @@ import { supabase } from "@/app/lib/supabase";
 import { identifyUser, track, type PlanViewSource } from "@/app/lib/analytics";
 import { awardCoins, subscribeToCoinAwardNotices, type CoinAwardNotice } from "@/app/lib/coins";
 import { HomeScreen } from "@/app/screens/HomeScreen";
-import { PlanListCard, PlansScreen } from "@/app/screens/PlansScreen";
+import { PlanListCard } from "@/app/screens/PlansScreen";
+import { CommunityScreen } from "@/app/screens/CommunityScreen";
 import { CreateScreen, type CreatedPlanResult } from "@/app/screens/CreateScreen";
 import { DetailScreen } from "@/app/screens/DetailScreen";
 import { ArticleScreen } from "@/app/screens/ArticleScreen";
@@ -287,7 +288,7 @@ const NAV_STACK_LIMIT = 20;
 const DEFAULT_CHROME_COLOR = "#EFEFF5";
 const WELCOME_CHROME_COLOR = "#504843";
 const getScreenChromeColor = (screen: Screen): string =>
-  screen === "planEvent" ? PLAN_DARK.bg : DEFAULT_CHROME_COLOR;
+  screen === "planEvent" || screen === "plans" ? PLAN_DARK.bg : DEFAULT_CHROME_COLOR;
 
 const isTelegramPhotoUrl = (url: string | null | undefined) => {
   if (!url) return false;
@@ -497,6 +498,8 @@ export default function App() {
   const [coinAwardNotice, setCoinAwardNotice] = useState<CoinAwardNotice | null>(null);
   const [moderatorHiddenPlanIds, setModeratorHiddenPlanIds] = useState<PlanId[]>([]);
   const [remoteProfiles, setRemoteProfiles] = useState<Record<string, ExpertProfile>>({});
+  const [communityRemoteProfiles, setCommunityRemoteProfiles] = useState<ExpertProfile[]>([]);
+  const [communityProfilesLoading, setCommunityProfilesLoading] = useState(false);
   const [editableProfile, setEditableProfile] = useState<ExpertProfile>(() =>
     normalizeProfile(readJson(profileStorageKey, buildTelegramProfile(telegramUser)))
   );
@@ -801,6 +804,17 @@ export default function App() {
   const chatSearchPeers: ChatPeer[] = useMemo(() => [], []);
   const localPeerById = useMemo(() => new Map(chatSearchPeers.map((peer) => [peer.id, peer])), [chatSearchPeers]);
   const dbFollowingIds = useMemo(() => new Set(dbFollowing.map((item) => item.id)), [dbFollowing]);
+  const communityProfiles = useMemo(() => {
+    const followedIds = new Set([
+      ...myFollowing.map((item) => item.id),
+      ...dbFollowing.map((item) => item.id),
+      ...(connectionSetsByUser[currentUserId]?.following ?? []).map((item) => item.id),
+    ]);
+    const demoRunners = experts.filter((profile) => profile.isDemo === true && !profile.id.startsWith("demo-club-"));
+    return Array.from(new Map([...communityRemoteProfiles, ...demoRunners]
+      .filter((profile) => profile.id !== currentUserId)
+      .map((profile) => [profile.id, { ...profile, isFollowedByMe: followedIds.has(profile.id) }])).values());
+  }, [communityRemoteProfiles, connectionSetsByUser, currentUserId, dbFollowing, myFollowing]);
   screenRef.current = screen;
   activeChatPeerRef.current = activeChatPeer;
   remoteProfilesRef.current = remoteProfiles;
@@ -1017,6 +1031,31 @@ export default function App() {
   }, [initialStart, telegramUser]);
 
   useEffect(() => subscribeToCoinAwardNotices(setCoinAwardNotice), []);
+
+  useEffect(() => {
+    if (screen !== "plans") return;
+    let cancelled = false;
+    setCommunityProfilesLoading(true);
+    void fetchRecentProfiles()
+      .then((profiles) => {
+        if (cancelled) return;
+        const normalizedProfiles = profiles.map(normalizeProfile);
+        setCommunityRemoteProfiles(normalizedProfiles);
+        setRemoteProfiles((items) => ({
+          ...items,
+          ...Object.fromEntries(normalizedProfiles.map((profile) => [profile.id, profile])),
+        }));
+      })
+      .catch((error) => {
+        console.error("Supabase community profiles fetch failed", error);
+      })
+      .finally(() => {
+        if (!cancelled) setCommunityProfilesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshTick, screen]);
 
   useEffect(() => {
     if (!coinAwardNotice) return;
@@ -2308,18 +2347,11 @@ export default function App() {
         );
       case "plans":
         return (
-          <PlansScreen
-            onNavigate={navigate}
-            onPlanOpen={(id) => openPlanEvent(id, "plans")}
-            participantPlans={myPlans}
-            savedPlans={savedPlans}
-            checkedItemKeys={checkedItemKeys}
-            onToggleCheck={toggleCheckedItem}
-            onRemoveParticipant={removePlanFromMine}
-            onDeletePlan={deletePlan}
-            currentUserId={currentUserId}
-            highlightedPlanId={highlightedPlanId}
-            plansLoading={participantSyncCompletedForUser !== currentUserId}
+          <CommunityScreen
+            profiles={communityProfiles}
+            loading={communityProfilesLoading}
+            onProfileOpen={openSearchProfile}
+            onConnect={(profile) => toggleFollowing(profile, true)}
           />
         );
       case "create":
@@ -2647,7 +2679,7 @@ export default function App() {
           <div className="pointer-events-auto flex items-center gap-1 rounded-full p-1.5 shadow-lg" style={{ background: "#00A89D" }}>
             {([
               { id: "home" as Screen, label: "Главная", Icon: Home },
-              { id: "plans" as Screen, label: "Планы", Icon: Calendar },
+              { id: "plans" as Screen, label: "Сообщество", Icon: Users },
               { id: "chats" as Screen, label: "Чаты", Icon: MessageCircle },
             ]).map(({ id, label, Icon }) => {
               const isActive = screen === id
