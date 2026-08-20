@@ -1,4 +1,4 @@
-import { Activity, Footprints, MapPin, RotateCcw, Timer, UserRound, X } from "lucide-react";
+import { Activity, Check, Footprints, MapPin, RotateCcw, Target, Timer, UserRound, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { ExpertProfile } from "@/app/data/profile";
 
@@ -11,6 +11,47 @@ const SWIPE_DURATION_MS = 280;
 type SwipeDirection = "left" | "right";
 
 const firstName = (name: string) => name.trim().split(/\s+/)[0] || "Участник";
+
+type CommunityMeta = {
+  age?: number;
+  area?: string;
+  pace?: string;
+  weeklyKm?: number;
+  goal?: string;
+};
+
+const DEMO_AREAS = ["Хамовники", "Сокольники", "Парк Горького", "Крылатское", "Измайлово", "ВДНХ"];
+const DEMO_PACES = ["5:30", "4:45", "6:10", "5:00", "5:45", "4:30"];
+const DEMO_WEEKLY_KM = [30, 50, 20, 40, 25, 60];
+
+const getCommunityMeta = (profile: ExpertProfile): CommunityMeta => {
+  const tags = profile.tags?.filter(Boolean) ?? [];
+  const ageTag = tags.find((tag) => /^возраст\s*:?\s*\d+/i.test(tag));
+  const areaTag = tags.find((tag) => /^район\s*:/i.test(tag));
+  const paceTag = tags.find((tag) => /(?:темп|\d:\d{2}\s*\/км)/i.test(tag));
+  const weeklyTag = tags.find((tag) => /км\s*\/\s*нед/i.test(tag));
+  const goal = tags.find((tag) => ![ageTag, areaTag, paceTag, weeklyTag].includes(tag));
+
+  if (profile.isDemo !== true) {
+    return {
+      age: ageTag ? Number.parseInt(ageTag.match(/\d+/)?.[0] ?? "", 10) || undefined : undefined,
+      area: areaTag?.replace(/^район\s*:\s*/i, ""),
+      pace: paceTag?.replace(/^темп\s*:\s*/i, "").replace(/\s*\/км$/i, ""),
+      weeklyKm: weeklyTag ? Number.parseInt(weeklyTag.match(/\d+/)?.[0] ?? "", 10) || undefined : undefined,
+      goal,
+    };
+  }
+
+  const seed = [...profile.id].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const index = seed % DEMO_AREAS.length;
+  return {
+    age: 24 + (seed % 11),
+    area: DEMO_AREAS[index],
+    pace: DEMO_PACES[index],
+    weeklyKm: DEMO_WEEKLY_KM[index],
+    goal: goal ?? "Бег",
+  };
+};
 
 function ProfilePhoto({ profile }: { profile: ExpertProfile }) {
   const [failed, setFailed] = useState(false);
@@ -34,16 +75,12 @@ function ProfilePhoto({ profile }: { profile: ExpertProfile }) {
           {firstName(profile.name).slice(0, 1).toUpperCase()}
         </div>
       )}
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,120,110,.28),rgba(4,48,44,.42))] mix-blend-multiply" />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,.18)_0%,rgba(0,0,0,0)_38%,rgba(0,0,0,.88)_100%)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0)_42%,rgba(0,0,0,.88)_100%)]" />
     </>
   );
 }
 
-function ProfileTag({ children }: { children: string }) {
-  const normalized = children.toLocaleLowerCase("ru-RU");
-  const Icon = normalized.includes("км") ? Activity : normalized.includes("темп") ? Timer : normalized.includes("район") ? MapPin : Footprints;
-
+function ProfileTag({ icon: Icon, children }: { icon: typeof Timer; children: ReactNode }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1.5 text-[12px] font-semibold text-white backdrop-blur-md">
       <Icon size={13} color={TEAL_TEXT} />
@@ -53,7 +90,7 @@ function ProfileTag({ children }: { children: string }) {
 }
 
 function RunnerCard({ profile, dragX }: { profile: ExpertProfile; dragX?: number }) {
-  const tags = profile.tags?.filter(Boolean).slice(0, 3) ?? [];
+  const meta = getCommunityMeta(profile);
   const rightOpacity = Math.max(0, Math.min(1, (dragX ?? 0) / 105));
   const leftOpacity = Math.max(0, Math.min(1, -(dragX ?? 0) / 105));
 
@@ -73,13 +110,25 @@ function RunnerCard({ profile, dragX }: { profile: ExpertProfile; dragX?: number
         ПРОПУСК
       </div>
       <div className="absolute inset-x-5 bottom-5">
-        <h2 className="text-[28px] font-extrabold leading-8 text-white">{firstName(profile.name)}</h2>
-        {tags.length > 0 && (
-          <div className="mt-2.5 flex flex-wrap gap-2">
-            {tags.map((tag) => <ProfileTag key={tag}>{tag}</ProfileTag>)}
+        {meta.area && (
+          <div className="mb-1.5 flex items-center gap-1.5 text-[13px] font-medium text-white/85">
+            <MapPin size={14} color={TEAL_TEXT} />
+            <span>{meta.area}</span>
           </div>
         )}
-        {profile.bio && <p className="mt-2.5 line-clamp-3 text-[14px] leading-[1.4] text-white/80">{profile.bio}</p>}
+        <div className="flex items-center gap-2">
+          <h2 className="text-[28px] font-extrabold leading-8 text-white">
+            {firstName(profile.name)}{meta.age ? `, ${meta.age}` : ""}
+          </h2>
+          <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[#00A89D]" aria-label="Профиль подтверждён">
+            <Check size={13} strokeWidth={3} color="#fff" />
+          </span>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {meta.pace && <ProfileTag icon={Timer}>{meta.pace} /км</ProfileTag>}
+          {meta.weeklyKm && <ProfileTag icon={Activity}>{meta.weeklyKm} км/нед</ProfileTag>}
+          {meta.goal && <ProfileTag icon={Target}>{meta.goal}</ProfileTag>}
+        </div>
       </div>
     </div>
   );
@@ -99,21 +148,18 @@ function ActionButton({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 flex-col items-center gap-1.5">
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={onClick}
-        className="flex h-[58px] w-[58px] items-center justify-center rounded-full border border-white/10 active:scale-95 disabled:opacity-30"
-        style={filled
-          ? { background: TEAL, boxShadow: "0 8px 24px rgba(0,168,157,.38)" }
-          : { background: "#1A2A2C" }}
-        aria-label={label}
-      >
-        {children}
-      </button>
-      <span className="max-w-[92px] text-center text-[11px] font-semibold leading-4 text-white/60">{label}</span>
-    </div>
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="flex h-[54px] min-w-0 flex-1 items-center justify-center rounded-2xl border-0 bg-white/5 active:scale-95 disabled:opacity-30"
+      style={filled
+        ? { background: TEAL, boxShadow: "0 6px 18px rgba(0,168,157,.4)" }
+        : undefined}
+      aria-label={label}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -276,7 +322,7 @@ export function CommunityScreen({
       </div>
 
       {topProfile && (
-        <div className="flex flex-shrink-0 items-start justify-center gap-6 px-3 pb-[90px] pt-4">
+        <div className="mx-[18px] mb-[90px] mt-3 flex flex-shrink-0 gap-2 rounded-[22px] border border-white/10 bg-white/[.06] p-2 backdrop-blur-xl">
           <ActionButton label="Вернуть" disabled={!skippedIds.length} onClick={rewind}>
             <RotateCcw size={23} color={AMBER} />
           </ActionButton>
